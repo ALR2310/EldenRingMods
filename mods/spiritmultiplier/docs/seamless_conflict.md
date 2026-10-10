@@ -24,3 +24,21 @@ Seamless 2.0.1 (`ersc.dll` nạp): game không còn bị huỷ, mọi dòng cài
 ## Seamless còn gây
 
 Spirit mất màu ma khi chơi Seamless (hook `sub_1403F0C20`): [open_issues.md](open_issues.md).
+
+## Không triệu hồi lại được với Seamless (Nexus, 2026-10-10)
+
+**Status 2026-10-10: không tái hiện được, không phải lỗi của mod (đã kiểm tra). Dừng điều tra; nếu có thêm báo cáo cùng lỗi thì xem "Hướng tiếp".**
+
+Người dùng (TechnoMonkeyDJ) báo không triệu hồi lại được sau khi đuổi spirit về / spirit chết, với mọi nhân vật; chỉ xảy ra khi bật Seamless, và theo họ Seamless một mình cũng chặn (nên họ quay lại mod cũ "Resummon Spirit Ashes For Seamless Co-op"). Ở máy tác giả, kể cả dùng ME3 và ERSS (DLSS frame generation) như họ, triệu hồi lại luôn được. Log của họ không có lỗi nào từ mod.
+
+Manh mối bên ngoài: tác giả Seamless trả lời các mod spirit rằng "SpEffect `2147300000`" là cách sửa; mod đổi animation chuông phải gộp nó vào `c0000` (TAE); mod tham chiếu `zibinha_infinite_summoning` (giải ngược trong `D:\tmp\zibinha_infinite_summon`) sửa dòng `503045` thành `2147300000` trong bảng param nội bộ của `ersc.dll`; người dùng báo ép `2147300000` bằng Cheat Engine ~1 giây sau khi đuổi spirit thì triệu hồi lại được.
+
+Đã kiểm tra bằng log chẩn đoán (`SlotProbe=true`: các SpEffect của người chơi mỗi lần đổi, và dòng param của `503045`, `2147300000`), có và không có Seamless:
+
+- `SpEffectParam 2147300000`: **không có dòng** (cả khi có Seamless) → không phải hiệu ứng thật của game, là mã hiệu Seamless tự xử lý trong code.
+- `503045`: hiệu ứng vanilla trống, thời gian vô hạn; xuất hiện ~1 s sau khi vào game (cả khi **không** có Seamless), mất khi nạp lại map. Không đổi khi triệu hồi / đuổi về / spirit chết → không phải marker của Seamless.
+- Quanh lần triệu hồi chỉ có `232000` (SpEffect của Ash) và `6518201`, `9540`.
+
+Nên cơ chế chặn nằm trong code của Seamless, không thấy được từ SpEffect; áp `2147300000` bằng `apply_speffect` rất có thể không có tác dụng (không có dòng param). Không giải mã `ersc.dll` (packer/VM): tốn công, và lỗi không tái hiện được nên không kiểm chứng được bản sửa.
+
+**Hướng tiếp (nếu có thêm báo cáo):** tra trong `dumps/seamless-diff/.../seamless_only_ida.txt` các vá nằm trên đường triệu hồi (DoSummon, `sub_1404B92B0`, `sub_1404BAEA0`, kiểm tra stone/`stateInfo`), rồi dùng breakpoint phần cứng/log xem Seamless đọc cờ nào lúc bấm triệu hồi lại, thay vì đọc mã của nó.
