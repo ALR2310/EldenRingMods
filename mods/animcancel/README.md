@@ -1,6 +1,6 @@
 # AnimCancel
 
-> **nội bộ, chưa đăng Nexus** (chưa có mod ID) · đã test trong game: đòn đánh, weapon skill và phép
+> **Nexus mod ID 11328** (chưa phát hành bản đầu) · đã test trong game: đòn đánh, weapon art và phép
 
 Mod DLL cho Elden Ring cho phép **cắt animation đang chạy** bằng một hành động
 khác mà không phải đợi anim chạy hết: guard cancel, dodge cancel, đổi vũ khí
@@ -11,7 +11,7 @@ giữa đòn đánh. Yêu cầu từ người dùng Nexus (DAM127, 2026-10-12).
 Cấu hình trong `AnimCancel.toml` cạnh DLL (tự tạo nếu thiếu). Có thể chỉnh:
 
 - hành động nào được cắt animation: guard, lăn/lùi, đổi vũ khí;
-- animation nào bị cắt: đòn đánh thường, weapon skill, phép;
+- animation nào bị cắt: đòn đánh thường, weapon art, phép, dùng item (uống flask...; mặc định tắt);
 - phím reload config trong game và banner báo reload;
 - ghi log để chẩn đoán, và hai probe nghiên cứu (log cửa sổ cancel, log cờ anim; mặc định tắt).
 
@@ -37,4 +37,5 @@ vì sao phải ghi đúng chỗ đó và kết quả các lần test:
 
 Code: [src/cancel.rs](src/cancel.rs) (logic), [src/config.rs](src/config.rs),
 [src/lib.rs](src/lib.rs). Phân loại anim: `common::anim`. Lịch sử:
-[HISTORY.md](HISTORY.md).
+[HISTORY.md](HISTORY.md). Ghi chú phát hành: [CHANGELOG.md](CHANGELOG.md); trang Nexus:
+[nexus_page.bbcode](nexus_page.bbcode).

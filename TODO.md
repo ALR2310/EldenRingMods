@@ -38,7 +38,6 @@ Chi tiết: `mods/spiritmultiplier/docs/open_issues.md`, `docs/warp_research.md`
 
 - [ ] Trả lời DAM127 (Nexus, 2026-10-12): đã có bản chạy (đòn đánh, skill, phép huỷ bằng guard/lăn/đổi vũ khí); hỏi muốn cancel gì thêm `[chờ phản hồi]`
 - [ ] Kiểm tra tác dụng phụ (i-frame, hitbox, FP khi cắt phép) và Seamless Co-op; xem `mods/animcancel/docs/animation_cancel.md`
-- [ ] Quyết định đăng Nexus: `nexus_page.bbcode`, CHANGELOG, logo, version `1.0.0`
 
 ## Chung
 
