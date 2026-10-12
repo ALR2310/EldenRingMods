@@ -8,7 +8,7 @@ ReloadKey = "F5"
 
 # Show banner at the top of the screen after a reload.
 # Errors always show.
-ReloadBanner = true
+ReloadBanner = false
 
 
 [Cancel]
@@ -27,11 +27,10 @@ Cast = true         # casting sorceries and incantations
 
 [Logging]
 # Write a log file next to the DLL, for troubleshooting.
-LogFile = false
+LogFile = true
 
-# Research probes, off by default. They only write to the log file, so they
-# need LogFile = true, and they log a lot.
 # Log the cancel windows of the animation you are playing, each time they change.
 CancelProbe = false
+
 # Log every change of the animation-event flags (CSChrActionFlagModule).
 FlagProbe = false

@@ -118,7 +118,8 @@ mod tests {
         assert_eq!(config.general.config_version, 1);
         assert!(config.cancel.guard && config.cancel.dodge && config.cancel.weapon_swap);
         assert!(config.animations.attack && config.animations.skill && config.animations.cast);
-        assert!(!config.logging.log_file);
+        // Like the other mods: the log is on, the (verbose) probes are off.
+        assert!(config.logging.log_file);
         assert!(!config.logging.cancel_probe && !config.logging.flag_probe);
     }
 
