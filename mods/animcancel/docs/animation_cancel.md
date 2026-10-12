@@ -1,12 +1,12 @@
 # Animation cancel (guard / dodge / đổi vũ khí cắt animation): nghiên cứu khả thi
 
-**Status 2026-10-12: KHẢ THI, đã chứng minh trong game bằng probe `mods/animcancel`:
-guard, lăn và đổi vũ khí huỷ được đòn đánh (người dùng xác nhận).** Cách làm: ghi
-quyền cancel vào `cancel_entries` của hàng đợi của `CSChrActionRequestModule`
-(người chơi luôn ở queue mode), xem mục "Cơ chế đúng". Nguồn yêu cầu: tin nhắn
-Nexus của DAM127 (2026-10-12). Người dùng đã hỏi lại họ muốn cancel animation nào,
-lúc nào; chưa có trả lời. Chưa làm: mod thật (cấu hình theo nhóm, hot reload),
-kiểm tra Seamless Co-op.
+**Status 2026-10-12: ĐÃ LÀM, test trong game: guard, lăn và đổi vũ khí huỷ được
+đòn đánh, weapon skill và phép (người dùng xác nhận bằng mod thật: cấu hình TOML,
+lọc theo loại anim, hot reload).** Cách làm: ghi quyền cancel vào `cancel_entries`
+của hàng đợi của `CSChrActionRequestModule` (người chơi luôn ở queue mode), xem
+mục "Cơ chế đúng". Nguồn yêu cầu: tin nhắn Nexus của DAM127 (2026-10-12). Người
+dùng đã hỏi lại họ muốn cancel animation nào, lúc nào; chưa có trả lời. Probe
+(log `WINDOW`/`FLAG`) vẫn còn trong mod làm tuỳ chọn (`CancelProbe`, `FlagProbe`).
 
 ## Cơ chế của game (đã xác nhận một phần)
 
@@ -81,8 +81,8 @@ và `_` (vd. `a020_032000` = 20032000). HKS đọc **theo entry của id hiện 
 - `queued = new_presses AND possible_action_inputs`; `new_presses` bỏ các bit trong
   `disabled_action_inputs` (+0x40) trước (`sub_140408190`).
 
-Cách ép đã chạy (`mods/animcancel/src/probe.rs`, `force()`): mỗi frame, ở
-`ChrIns_PreBehaviorSafe` và `ChrIns_BehaviorSafe`: OR mask vào `possible_action_inputs`
+Cách ép đã chạy (probe `1b4e3e8`, nay là `src/cancel.rs`, `open_windows()`): mỗi
+frame, ở `ChrIns_PreBehaviorSafe` và `ChrIns_BehaviorSafe`: OR mask vào `possible_action_inputs`
 và `possible_action_cancels`, OR vào `cancel_entries[id]` (**tạo entry nếu thiếu**),
 xoá các bit đó khỏi `disabled_action_inputs`, OR cờ `tae_cancels` 0x218 và xoá
 `cancel_disable`. Mask: Guard = bit 24 + L1 (2), Dodge = bit 5, 16, 17, 18, 25,
@@ -106,13 +106,31 @@ Cửa sổ vanilla của đòn đánh (`a020_032000`, 1,87 s): lăn mở ở t�
 Cờ `CSChrActionFlagModule` (log `FLAG`) đổi theo anim nhưng không có cờ nào chặn
 cancel: giả thuyết đó đã loại.
 
-## Còn lại để làm mod thật
+## Mod thật (khác với probe)
 
-1. Cấu hình theo nhóm (Guard, Dodge, Weapon, ...) và theo loại anim nguồn (đòn đánh,
-   cast, item...); hiện ép trong mọi anim.
-2. Hot reload, log gọn (hiện log mọi thay đổi), bỏ phím F7 hoặc đổi thành tuỳ chọn.
-3. Tác dụng phụ: hitbox/i-frame của anim bị cắt, stamina, quay camera; cancel
-   guard/lăn trong anim đang không thể bị cắt (đang bị đánh, lên ngựa...).
-4. Seamless Co-op (anim id đồng bộ qua mạng, người khác có thể thấy giật hình);
+- Cấu hình `AnimCancel.toml`: `[Cancel]` (Guard, Dodge, WeaponSwap) và
+  `[Animations]` (Attack, Skill, Cast), mặc định bật hết. Hot reload qua
+  `common::reload` (F5).
+- Anim nào đang chạy do **id hàng đợi** quyết định (`group_for_cancel(queue_id)`),
+  không phải anim đọc từ `anim_queue`: khi niệm phép lúc đang đi, `anim_queue` hiện
+  lớp chân `a000_020010` (nhóm Other) một lúc dù id hàng đợi vẫn là của phép, nên
+  dùng anim id thì phép không huỷ được trong lúc đó (log 2026-10-12, `grp=Other
+  qgrp=Cast`). Id trễ vài frame lúc vào anim mới: chỉ có nghĩa là anim trước vẫn
+  đang được cắt.
+- `group_for_cancel` = `group_of` (`common::anim`) trừ việc mọi anim TAE a400-a599
+  là Cast: `group_of` xếp tia của Placidusax's Ruin (`a451_045110`, ~9 s) vào Other
+  vì SpeedMultiplier không được tăng tốc anim mà tia gắn theo, còn với cancel thì
+  không có lý do loại. Đòn chí mạng không thuộc Attack nên không bị cắt.
+- Nhóm Dodge/Guard/Weapon chỉ ép cờ `tae_cancels` cần cho nó (`action_general`,
+  thêm `slot_switch` cho Weapon); probe ép thêm `rh_attack` (bit 4), mod bỏ vì đó
+  là cancel đòn đánh sang đòn đánh. Test xong, không thấy thiếu gì.
+- Probe còn lại làm tuỳ chọn trong `[Logging]`; không còn phím F7.
+
+## Chưa làm
+
+1. Tác dụng phụ: i-frame/hitbox của anim bị cắt, stamina, hướng nhân vật, FP bị
+   trừ khi cắt phép (chưa kiểm tra kỹ).
+2. Seamless Co-op (anim id đồng bộ qua mạng, người khác có thể thấy giật hình);
    `cancel_entries.push_back` dùng bộ cấp phát của game (chưa thấy lỗi trong test).
-5. Chờ DAM127 nói rõ muốn cancel gì.
+3. Chờ DAM127 nói rõ muốn cancel gì (có thể thêm Item, Jump, cancel từ lăn...).
+4. Trang Nexus (`nexus_page.bbcode`), CHANGELOG, logo khi quyết định đăng.
