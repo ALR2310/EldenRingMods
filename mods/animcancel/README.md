@@ -11,7 +11,7 @@ giữa đòn đánh. Yêu cầu từ người dùng Nexus (DAM127, 2026-10-12).
 Cấu hình trong `AnimCancel.toml` cạnh DLL (tự tạo nếu thiếu). Có thể chỉnh:
 
 - hành động nào được cắt animation: guard, lăn/lùi, đổi vũ khí;
-- animation nào bị cắt: đòn đánh thường, weapon art, phép, dùng item (uống flask...; mặc định tắt);
+- animation nào bị cắt: đòn đánh thường, weapon art, phép, dùng item (uống flask...);
 - phím reload config trong game và banner báo reload;
 - ghi log để chẩn đoán, và hai probe nghiên cứu (log cửa sổ cancel, log cờ anim; mặc định tắt).
 
