@@ -303,5 +303,18 @@
         "commit": "318ba42b1d682fb758cff52454aa71ef0adeb4c0"
       }
     ]
+  },
+  {
+    "id": "11328",
+    "internalId": "18610093304896",
+    "name": "Anim Cancel",
+    "crate": "animcancel",
+    "modFileId": "8141178",
+    "deploys": [
+      {
+        "version": "1.0.0",
+        "commit": "1e3d1bf333793345ca7eb2957afbad487372f6f1"
+      }
+    ]
   }
 ]
