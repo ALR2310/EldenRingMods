@@ -118,9 +118,7 @@ mod tests {
         let config = template();
         assert_eq!(config.general.config_version, 1);
         assert!(config.cancel.guard && config.cancel.dodge && config.cancel.weapon_swap);
-        assert!(config.animations.attack && config.animations.skill && config.animations.cast);
-        // Off until the early-cancel of a flask is known to be safe for the player.
-        assert!(!config.animations.item);
+        assert!(config.animations.attack && config.animations.skill && config.animations.cast && config.animations.item);
         // Like the other mods: the log is on, the (verbose) probes are off.
         assert!(config.logging.log_file);
         assert!(!config.logging.cancel_probe && !config.logging.flag_probe);
