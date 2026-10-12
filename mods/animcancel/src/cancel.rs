@@ -104,13 +104,16 @@ pub fn group_for_cancel(id: i32) -> Group {
     group_of(id)
 }
 
-/// Whether an animation of this group may be cancelled. Critical hits (the
+/// Whether an animation of this group may be cancelled. Item is every use of an
+/// item (flasks, throwables, consumables), except the whistle, see `group_of`.
+/// Critical hits (the
 /// attacker's half of a throw) are never in `Attack`, see `group_of`.
 pub fn source_allowed(group: Group, animations: &Animations) -> bool {
     match group {
         Group::Attack => animations.attack,
         Group::Skill => animations.skill,
         Group::Cast => animations.cast,
+        Group::Item => animations.item,
         _ => false,
     }
 }
@@ -257,13 +260,16 @@ mod tests {
 
     #[test]
     fn only_enabled_animation_groups_are_cancelled() {
-        let animations = Animations { attack: true, skill: false, cast: false };
+        let animations = Animations { attack: true, skill: false, cast: false, item: false };
         assert!(source_allowed(Group::Attack, &animations));
         assert!(!source_allowed(Group::Skill, &animations));
         assert!(!source_allowed(Group::Cast, &animations));
-        // Never: a critical hit, rolls, walking, items.
-        for group in [Group::Critical, Group::Roll, Group::Walk, Group::Run, Group::Item, Group::Other] {
-            let all = Animations { attack: true, skill: true, cast: true };
+        assert!(!source_allowed(Group::Item, &animations));
+        let items = Animations { item: true, ..animations };
+        assert!(source_allowed(Group::Item, &items));
+        // Never: a critical hit, rolls, walking.
+        for group in [Group::Critical, Group::Roll, Group::Walk, Group::Run, Group::Other] {
+            let all = Animations { attack: true, skill: true, cast: true, item: true };
             assert!(!source_allowed(group, &all), "{group:?}");
         }
     }

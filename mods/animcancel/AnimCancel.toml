@@ -21,8 +21,9 @@ WeaponSwap = true   # switching weapons
 [Animations]
 # Which animations the actions above can cancel.
 Attack = true       # normal attacks
-Skill = true        # weapon skills (Ashes of War)
+Skill = true        # weapon arts (Ashes of War)
 Cast = true         # casting sorceries and incantations
+Item = true         # using items (flasks...)
 
 
 [Logging]

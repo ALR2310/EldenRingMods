@@ -14,4 +14,5 @@ link sang `docs/`.
 | 2026-10-12 | Thêm lại probe làm tuỳ chọn (`CancelProbe`, `FlagProbe` trong `[Logging]`, mặc định tắt) để chẩn đoán phép | [docs](docs/animation_cancel.md) |
 | 2026-10-12 | Phép không huỷ được: dùng id hàng đợi thay vì anim đang đọc (lúc niệm phép khi đi, `anim_queue` hiện lớp chân `a000_020010`) và coi mọi anim prefix 400-599 là Cast (tia Placidusax's Ruin bị `group_of` xếp vào Other); đã test trong game | [docs](docs/animation_cancel.md) |
 | 2026-10-12 | Weapon skill và phép test ổn, `Skill` và `Cast` bật mặc định | |
-
+| 2026-10-12 | Thêm `nexus_page.bbcode` và `CHANGELOG.md` (chuẩn bị đăng, chưa đăng) | |
+| 2026-10-12 | Thêm `Item` (huỷ khi uống flask và dùng item, mặc định tắt) và ảnh minh hoạ trên trang Nexus; có mod ID 11328 | |
