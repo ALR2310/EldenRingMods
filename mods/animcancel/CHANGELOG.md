@@ -6,4 +6,6 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-12
+
 - Initial release.
