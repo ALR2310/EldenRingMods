@@ -1,0 +1,24 @@
+[package]
+name = "animcancel"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "AnimCancel"
+crate-type = ["cdylib"]
+
+[dependencies]
+common = { path = "../../shared" }
+eldenring.workspace = true
+fromsoftware-shared.workspace = true
+
+[build-dependencies]
+winresource = "0.1"
+
+# Windows version resource (DLL Properties), see build.rs
+[package.metadata.winresource]
+ProductName = "Anim Cancel"
+FileDescription = "Anim Cancel - Elden Ring mod"
+InternalName = "AnimCancel"
+OriginalFilename = "AnimCancel.dll"

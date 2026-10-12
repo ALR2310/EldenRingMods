@@ -223,6 +223,23 @@
             "problemMatcher": "$rustc"
         },
         {
+            "label": "Cargo: Build AnimCancel (Release)",
+            "detail": "Builds AnimCancel (release), then copies AnimCancel.dll + AnimCancel.ini into builds/<crate>/",
+            "type": "process",
+            "command": "powershell.exe",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
+                "-Mod", "AnimCancel"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": "$rustc"
+        },
+        {
             "label": "Cargo: Build All (Release)",
             "detail": "Runs every per-mod build task - builds/<crate>/ holds each mod's .dll + .ini",
             "dependsOrder": "sequence",
@@ -239,7 +256,8 @@
                 "Cargo: Build FasterRevival (Release)",
                 "Cargo: Build SpeedMultiplier (Release)",
                 "Cargo: Build SpiritMultiplier (Release)",
-                "Cargo: Build WindowResize (Release)"
+                "Cargo: Build WindowResize (Release)",
+                "Cargo: Build AnimCancel (Release)"
             ],
             "group": "build",
             "problemMatcher": []
