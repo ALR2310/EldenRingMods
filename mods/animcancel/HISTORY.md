@@ -5,7 +5,13 @@ link sang `docs/`.
 
 | Ngày | Thay đổi | Chi tiết |
 |---|---|---|
-| 2026-10-12 | Nghiên cứu tĩnh: cancel do TAE bật qua `CSChrActionRequestModule`, hướng đi là nới `possible_action_inputs/cancels`; chưa biết HKS có chuyển state | [docs](../../docs/animation_cancel.md) |
-| 2026-10-12 | Tạo crate `animcancel` (probe): log cửa sổ cancel theo anim và phím F7 ép các hành động chọn được; chưa test trong game | [docs](../../docs/animation_cancel.md) |
-| 2026-10-12 | Test 1-3: ép bitmask không đủ (HKS đọc queue theo id TAE); ghi vào `input_entries` làm lệnh giả | [docs](../../docs/animation_cancel.md) |
-| 2026-10-12 | Ép vào `cancel_entries[id]` (tạo entry nếu thiếu), gỡ `disabled_action_inputs`, bit 37 cho đổi vũ khí: guard, lăn, đổi vũ khí huỷ được đòn đánh, đã test trong game | [docs](../../docs/animation_cancel.md) |
+| 2026-10-12 | Nghiên cứu tĩnh: cancel do TAE bật qua `CSChrActionRequestModule`, hướng đi là nới `possible_action_inputs/cancels`; chưa biết HKS có chuyển state | [docs](docs/animation_cancel.md) |
+| 2026-10-12 | Tạo crate `animcancel` (probe): log cửa sổ cancel theo anim và phím F7 ép các hành động chọn được; chưa test trong game | [docs](docs/animation_cancel.md) |
+| 2026-10-12 | Test 1-3: ép bitmask không đủ (HKS đọc queue theo id TAE); ghi vào `input_entries` làm lệnh giả | [docs](docs/animation_cancel.md) |
+| 2026-10-12 | Ép vào `cancel_entries[id]` (tạo entry nếu thiếu), gỡ `disabled_action_inputs`, bit 37 cho đổi vũ khí: guard, lăn, đổi vũ khí huỷ được đòn đánh, đã test trong game | [docs](docs/animation_cancel.md) |
+| 2026-10-12 | Từ probe thành mod thật: gỡ log `WINDOW`/`FLAG` và phím F7, cấu hình `AnimCancel.toml` (`[Cancel]`, `[Animations]`, hot reload), chỉ ép khi anim thuộc nhóm bật và hàng đợi đã theo anim; chưa test trong game | [docs](docs/animation_cancel.md) |
+| 2026-10-12 | Tách `Group`/`group_of`/`current_anim_id` từ SpeedMultiplier sang `common::anim` để dùng chung | |
+| 2026-10-12 | Thêm lại probe làm tuỳ chọn (`CancelProbe`, `FlagProbe` trong `[Logging]`, mặc định tắt) để chẩn đoán phép | [docs](docs/animation_cancel.md) |
+| 2026-10-12 | Phép không huỷ được: dùng id hàng đợi thay vì anim đang đọc (lúc niệm phép khi đi, `anim_queue` hiện lớp chân `a000_020010`) và coi mọi anim prefix 400-599 là Cast (tia Placidusax's Ruin bị `group_of` xếp vào Other); đã test trong game | [docs](docs/animation_cancel.md) |
+| 2026-10-12 | Weapon skill và phép test ổn, `Skill` và `Cast` bật mặc định | |
+

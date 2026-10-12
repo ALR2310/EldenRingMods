@@ -28,6 +28,8 @@
 //! - `player`: the "is the player actually in the game world yet" gate that
 //!   `GameDataMan`/`SoloParamRepository`-touching features need before their
 //!   data is safe to read.
+//! - `anim`: classifies the anim id a character is playing into an action
+//!   group (walk, attack, skill...), shared by `speedmultiplier` and `animcancel`.
 //! - `reload`: watches a `ReloadKey` ini hotkey and reloads config,
 //!   independent of any feature module.
 //! - `diag`: logs the game exe's version and every non-system DLL loaded
@@ -44,6 +46,7 @@
 //!   lists/tables an ini can't hold; the ini `config` stays for the rest.
 
 pub mod alloc_hook;
+pub mod anim;
 pub mod announce;
 pub mod codepatch;
 pub mod config;

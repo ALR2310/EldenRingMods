@@ -1,7 +1,8 @@
 # SpeedMultiplier: phân nhóm hành động
 
 **Status 2026-10-06: ĐANG PHÁT HÀNH (1.2.0), mọi nhóm đã test trong game.** Code:
-`speed::group_of` trong `mods/speedmultiplier/src/speed.rs` (có test cho từng dải).
+`group_of` trong `shared/src/anim.rs` (`common::anim`, từ 2026-10-12; trước đó ở
+`mods/speedmultiplier/src/speed.rs`; có test cho từng dải).
 Anim id đang chạy lấy từ `CSChrTimeActModule.anim_queue`, dạng `aXXX_YYYYYY`; tài liệu
 tra prefix `XXX`: `tae-ids.md`.
 

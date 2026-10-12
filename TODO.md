@@ -34,9 +34,14 @@ Chi tiết: `mods/spiritmultiplier/docs/open_issues.md`, `docs/warp_research.md`
 - [ ] Test trong game reload qua `common::reload` + banner (2026-10-07), rồi phát hành bullet ở `[Unreleased]`
 - [ ] Nghiên cứu hệ số rune riêng theo nguồn (giết địch / bán đồ...; julianpratt, 2026-08-31)
 
+## AnimCancel
+
+- [ ] Trả lời DAM127 (Nexus, 2026-10-12): đã có bản chạy (đòn đánh, skill, phép huỷ bằng guard/lăn/đổi vũ khí); hỏi muốn cancel gì thêm `[chờ phản hồi]`
+- [ ] Kiểm tra tác dụng phụ (i-frame, hitbox, FP khi cắt phép) và Seamless Co-op; xem `mods/animcancel/docs/animation_cancel.md`
+- [ ] Quyết định đăng Nexus: `nexus_page.bbcode`, CHANGELOG, logo, version `1.0.0`
+
 ## Chung
 
-- [ ] AnimCancel: probe chạy được (guard/lăn/đổi vũ khí huỷ đòn đánh); còn tách thành mod thật, lọc theo anim, Seamless `[chờ phản hồi DAM127]`, xem `docs/animation_cancel.md`
 - [ ] `ReloadKey` lọt sang instance game khác: `common::reload` và autoregen nên dùng `common::input::is_key_pressed` (xem `mods/soulsteleport/docs/position_exchange.md`)
 - [ ] `risearcher` (`weapon.rs`, `bullet.rs`), `infiniteailment` (`status_effect.rs`): chuyển sang `common::params::for_each_row_mut` (xem `mods/dropmultiplier/docs/convergence_panic.md`)
 - [ ] `ReloadBanner` cho `weightmultiplier` - cần quyết định (phải bỏ thiết kế không dùng task game)

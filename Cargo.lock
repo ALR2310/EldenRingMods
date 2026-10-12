@@ -27,6 +27,8 @@ dependencies = [
  "common",
  "eldenring",
  "fromsoftware-shared",
+ "serde",
+ "toml 0.8.23",
  "winresource",
 ]
 

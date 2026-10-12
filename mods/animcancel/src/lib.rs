@@ -1,12 +1,10 @@
 #![allow(non_snake_case)] // crate name is "AnimCancel" to control the output DLL's filename
 
+mod cancel;
+mod config;
 mod probe;
 
-use common::{config, dll_dir, logger};
-
-// AnimCancel.ini is embedded verbatim into the binary at compile time via
-// include_str! - the single source of truth for the default config.
-const DEFAULT_INI: &str = include_str!("../AnimCancel.ini");
+use common::{dll_dir, logger};
 
 /// # Safety
 /// This is exposed this way so the library loader can call it. Do not call it
@@ -20,20 +18,58 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
 
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
-        let ini_path = format!("{dir}\\AnimCancel.ini");
-        let migrated = config::load_or_create_default(&ini_path, DEFAULT_INI);
+        let report = config::init(&format!("{dir}\\AnimCancel.toml"));
 
+        // [Logging] LogFile gates the log file entirely - see common::logger.
+        logger::set_enabled(config::get().logging.log_file);
         logger::init(&dir, "AnimCancel.log");
         logger::install_panic_hook();
         logger::log("Activating AnimCancel...");
-        if migrated > 0 {
+        if report.created {
+            logger::log("AnimCancel.toml created with the default settings.");
+        }
+        if report.added_keys > 0 {
             logger::log(&format!(
-                "AnimCancel.ini updated: added {migrated} new key(s) from a newer default template."
+                "AnimCancel.toml updated: added {} new key(s) from a newer default template.",
+                report.added_keys
+            ));
+        }
+        if let Some((from, to)) = report.migrated {
+            logger::log(&format!("AnimCancel.toml updated from format version {from} to {to}."));
+        }
+        if let Some((file, current)) = report.newer {
+            logger::warn(&format!(
+                "AnimCancel.toml is from a newer version of the mod (format {file}, this one knows {current}) - left as it is."
+            ));
+        }
+        if !report.unknown.is_empty() {
+            logger::warn(&format!(
+                "AnimCancel.toml: {} key(s) this version doesn't use were moved to comments at the end of the file:\n  {}",
+                report.unknown.len(),
+                report.unknown.join("\n  ")
+            ));
+        }
+        if let Some(err) = report.error {
+            logger::error(&format!(
+                "AnimCancel.toml has an error, running on the default settings:\n{err}"
             ));
         }
 
+        std::thread::spawn(|| {
+            common::reload::run_with(
+                || config::get().general.reload_key.clone(),
+                || config::get().general.reload_banner,
+                || {
+                    config::reload()?;
+                    logger::set_enabled(config::get().logging.log_file);
+                    Ok(())
+                },
+            )
+        });
+
         common::diag::log_environment_when_game_ready();
-        probe::run();
+        probe::start();
+        cancel::run();
     });
 
     true

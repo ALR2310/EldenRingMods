@@ -31,7 +31,9 @@ use common::logger;
 
 use crate::config;
 
-use crate::speed::{current_anim_id, group_of, throw_state, torrent, torrent_group_of};
+use common::anim::{current_anim_id, group_of};
+
+use crate::speed::{throw_state, torrent, torrent_group_of};
 
 fn fmt_anim(id: i32) -> String {
     if id < 0 {

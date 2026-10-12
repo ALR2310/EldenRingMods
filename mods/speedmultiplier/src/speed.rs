@@ -21,47 +21,28 @@ use std::time::Duration;
 use eldenring::cs::{CSTaskGroupIndex, CSThrowNode, ChrIns, ChrLoadStatus, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
+use common::anim::{current_anim_id, group_of, Group};
 use common::logger;
 
 use crate::config::{self, Player, Torrent};
 
 const TORRENT_NPC_PARAM_ID: i32 = 80020000;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Group {
-    Walk,
-    Run,
-    Sneak,
-    Jump,
-    Roll,
-    /// Everything on a ladder (`PlayerLadder`), see [group_of].
-    Ladder,
-    Attack,
-    /// Backstabs and ripostes (`PlayerCritical`), see [group_of].
-    Critical,
-    Skill,
-    Cast,
-    Item,
-    Other,
-}
-
-impl Group {
-    /// This group's multiplier in `[Player]`.
-    fn speed(self, player: &Player) -> f32 {
-        match self {
-            Group::Walk => player.walk,
-            Group::Run => player.run,
-            Group::Sneak => player.sneak,
-            Group::Jump => player.jump,
-            Group::Roll => player.roll,
-            Group::Ladder => player.ladder,
-            Group::Attack => player.attack,
-            Group::Critical => player.critical,
-            Group::Skill => player.skill,
-            Group::Cast => player.cast,
-            Group::Item => player.item,
-            Group::Other => player.other,
-        }
+/// A group's multiplier in `[Player]`.
+fn group_speed(group: Group, player: &Player) -> f32 {
+    match group {
+        Group::Walk => player.walk,
+        Group::Run => player.run,
+        Group::Sneak => player.sneak,
+        Group::Jump => player.jump,
+        Group::Roll => player.roll,
+        Group::Ladder => player.ladder,
+        Group::Attack => player.attack,
+        Group::Critical => player.critical,
+        Group::Skill => player.skill,
+        Group::Cast => player.cast,
+        Group::Item => player.item,
+        Group::Other => player.other,
     }
 }
 
@@ -98,79 +79,6 @@ pub fn torrent_group_of(anim_id: i32) -> TorrentGroup {
         6_100..=6_199 | 7_400..=7_499 => TorrentGroup::Jump,
         _ => TorrentGroup::Other,
     }
-}
-
-/// Special-weapon movesets whose TAE number falls inside the Sword Arts
-/// range (Axe of Godfrey, Starscourge Greatsword, Ghiza's Wheel, Ornamental
-/// Straight Sword, Repeating Crossbow, Rakshasa's Great Katana).
-const WEAPON_TAES_IN_SKILL_RANGE: [i32; 6] = [831, 832, 839, 852, 935, 953];
-
-/// Classifies a player anim id: by TAE prefix for spells/Sword Arts, by
-/// action suffix for everything else.
-pub fn group_of(anim_id: i32) -> Group {
-    if anim_id < 0 {
-        return Group::Other;
-    }
-    let prefix = anim_id / 1_000_000;
-    // Placidusax's Ruin (a451, only that spell - TAE list): the beam phase
-    // 045110 spawns a laser on the game's own clock, so a sped-up anim
-    // desyncs from it (Nexus, bloodaxis, 2026-10-04; probe 2026-10-06:
-    // 045100 -> 045110, ~6 s). Out of Cast, into Other (1 by default); the
-    // wind-up 045100 stays Cast. Tested in game 2026-10-06: no more desync.
-    if prefix == 451 && (45_110..=45_119).contains(&(anim_id % 1_000_000)) {
-        return Group::Other;
-    }
-    if (400..600).contains(&prefix) {
-        return Group::Cast;
-    }
-    if (600..1000).contains(&prefix) && !WEAPON_TAES_IN_SKILL_RANGE.contains(&prefix) {
-        return Group::Skill;
-    }
-    match anim_id % 1_000_000 {
-        // Walk / run / sneak (probe, 2026-10-02 - the 3rd suffix digit is
-        // the gait, the same standing or sneaking): walk 0201xx (stop
-        // 0221xx), run - holding the dash key - 0202xx (stop 0222xx),
-        // sneaking 3xxxxx (idle 300000, sneak walk 3201xx, sneak run
-        // 3202xx, going into the sneak stance 390000). The rest of the old Movement range
-        // (standing 000000, 0200xx = the legs while using an item on the
-        // move, jumps...) is Other since `PlayerMovement` was split.
-        20_100..=20_199 | 22_100..=22_199 => Group::Walk,
-        20_200..=20_299 | 22_200..=22_299 => Group::Run,
-        300_000..=399_999 => Group::Sneak,
-        // Jumps (probe, 2026-10-02): taking off 2020xx (202000 standing,
-        // 202020 walking, 202030/202040 running), landing 2021xx (202100,
-        // 202115, 202126). Only the range seen - other 20xxxx anims were
-        // noted around Torrent before.
-        202_000..=202_199 => Group::Jump,
-        27_000..=27_999 => Group::Roll,
-        // Ladders (probe, 2026-10-06), one range for all of it: grabbing
-        // 028999, idle on the ladder 028030, climbing up 0280 1x (+ 028100
-        // from the bottom), down 0280 2x, sliding down 028000-028002, attack
-        // / kick 028040, 028045, 028036 (transition).
-        28_000..=28_999 => Group::Ladder,
-        // Critical hits (riposte 031700, backstab 031719 -> 031710 - probe,
-        // 2026-10-02) are paired with the victim's anim, which this mod
-        // doesn't speed up: a faster player pulled the blade out while the
-        // enemy was still falling (user test). Own key `PlayerCritical`,
-        // default 1 (vanilla) - first fixed at 1, made a key the same day
-        // at the user's request.
-        31_700..=31_799 => Group::Critical,
-        30_000..=39_999 => Group::Attack,
-        40_000..=49_999 => Group::Skill,
-        // Torrent's whistle is an item, but in game it's the first part of
-        // mounting (050190 -> 101004 mount -> 100000 riding), so it stays
-        // with the other riding anims.
-        50_190 => Group::Other,
-        50_000..=59_999 => Group::Item,
-        _ => Group::Other,
-    }
-}
-
-/// The anim id currently playing, off `CSChrTimeActModule.anim_queue`.
-pub fn current_anim_id(chr: &ChrIns) -> i32 {
-    let time_act = &chr.modules.time_act;
-    let idx = (time_act.read_idx as usize) % time_act.anim_queue.len();
-    time_act.anim_queue[idx].anim_id
 }
 
 /// Torrent's `ChrIns`: the active `summon_buddy_chr_set` entry with its
@@ -361,7 +269,7 @@ fn apply(
         let value = if (master - 1.0).abs() > 0.0001 {
             master
         } else {
-            clamped(group.speed(&speeds.player))
+            clamped(group_speed(group, &speeds.player))
         };
         set_animation_speed(chr, value);
     }
@@ -420,37 +328,6 @@ mod tests {
     }
 
     #[test]
-    fn jumps_are_their_own_group() {
-        assert_eq!(group_of(202_000), Group::Jump); // standing jump
-        assert_eq!(group_of(202_020), Group::Jump); // walking jump
-        assert_eq!(group_of(202_040), Group::Jump); // running jump
-        assert_eq!(group_of(202_100), Group::Jump); // landing
-        assert_eq!(group_of(202_126), Group::Jump); // running landing
-        assert_eq!(group_of(202_200), Group::Other);
-    }
-
-    #[test]
-    fn gaits_are_split() {
-        assert_eq!(group_of(20_110), Group::Walk);
-        assert_eq!(group_of(22_100), Group::Walk); // walk stop
-        assert_eq!(group_of(20_210), Group::Run);
-        assert_eq!(group_of(22_200), Group::Run); // run stop
-        assert_eq!(group_of(300_000), Group::Sneak); // sneak idle
-        assert_eq!(group_of(320_110), Group::Sneak); // sneak walk
-        assert_eq!(group_of(320_210), Group::Sneak); // sneak run
-        assert_eq!(group_of(390_000), Group::Sneak); // going into the sneak stance
-        assert_eq!(group_of(0), Group::Other); // standing
-        assert_eq!(group_of(20_010), Group::Other); // legs while using an item
-    }
-
-    #[test]
-    fn placidusax_ruin_beam_is_not_cast() {
-        assert_eq!(group_of(451_045_100), Group::Cast); // wind-up
-        assert_eq!(group_of(451_045_110), Group::Other); // beam
-        assert_eq!(group_of(435_045_110), Group::Cast); // other incantations
-    }
-
-    #[test]
     fn ladder_anims_are_their_own_group() {
         for tail in [28_999, 28_100, 28_030, 28_011, 28_012, 28_013, 28_020, 28_023, 28_000, 28_002, 28_036, 28_040, 28_045] {
             assert_eq!(group_of(tail), Group::Ladder, "{tail}");
@@ -458,7 +335,7 @@ mod tests {
         assert_eq!(group_of(27_999), Group::Roll);
         assert_eq!(group_of(29_000), Group::Other);
         let player = Player { ladder: 1.5, ..crate::config::template().player };
-        assert_eq!(Group::Ladder.speed(&player), 1.5);
+        assert_eq!(group_speed(Group::Ladder, &player), 1.5);
     }
 
     #[test]
@@ -475,9 +352,9 @@ mod tests {
     fn critical_hits_use_their_own_key() {
         let defaults = crate::config::template().player;
         let player = Player { attack: 3.0, ..defaults.clone() };
-        assert_eq!(Group::Critical.speed(&player), defaults.critical);
+        assert_eq!(group_speed(Group::Critical, &player), defaults.critical);
         let player = Player { critical: 1.5, ..crate::config::template().player };
-        assert_eq!(Group::Critical.speed(&player), 1.5);
-        assert_eq!(Group::Attack.speed(&player), defaults.attack);
+        assert_eq!(group_speed(Group::Critical, &player), 1.5);
+        assert_eq!(group_speed(Group::Attack, &player), defaults.attack);
     }
 }
