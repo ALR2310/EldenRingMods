@@ -36,6 +36,7 @@ Chi tiết: `mods/spiritmultiplier/docs/open_issues.md`, `docs/warp_research.md`
 
 ## Chung
 
+- [ ] AnimCancel: probe chạy được (guard/lăn/đổi vũ khí huỷ đòn đánh); còn tách thành mod thật, lọc theo anim, Seamless `[chờ phản hồi DAM127]`, xem `docs/animation_cancel.md`
 - [ ] `ReloadKey` lọt sang instance game khác: `common::reload` và autoregen nên dùng `common::input::is_key_pressed` (xem `mods/soulsteleport/docs/position_exchange.md`)
 - [ ] `risearcher` (`weapon.rs`, `bullet.rs`), `infiniteailment` (`status_effect.rs`): chuyển sang `common::params::for_each_row_mut` (xem `mods/dropmultiplier/docs/convergence_panic.md`)
 - [ ] `ReloadBanner` cho `weightmultiplier` - cần quyết định (phải bỏ thiết kế không dùng task game)
