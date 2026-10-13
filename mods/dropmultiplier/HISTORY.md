@@ -17,3 +17,4 @@ lịch sử git của `README.md`.
 | 2026-10-05 | Version thật trong thuộc tính file DLL (`build.rs` + `winresource`); thêm key `ReloadBanner` | |
 | 2026-10-07 | Đổi thư mục `crates/` thành `mods/`; tách README thành README + HISTORY + docs/ | |
 | 2026-10-07 | Thêm `CHANGELOG.md` (gộp từ khối changelog của trang Nexus) và gỡ khối đó khỏi `nexus_page.bbcode` (đổi tên từ `DESCRIPTION.bbcode`) | [CHANGELOG](CHANGELOG.md) |
+| 2026-10-13 | Mặc định `ReloadBanner` đổi thành `false`: nhiều mod cùng bật thì mỗi mod hiện một banner vài giây khi bấm reload | |
