@@ -1,6 +1,7 @@
 #![allow(non_snake_case)] // crate name is "RuneMultiplier" to control the output DLL's filename
 
 mod hook;
+mod menu;
 
 use common::{config, dll_dir, logger};
 
@@ -36,7 +37,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
             ));
         }
 
-        hook::run(ini_path);
+        hook::run(ini_path, hmodule);
     });
 
     true
