@@ -72,9 +72,14 @@ static FIXED_Q20: AtomicI64 = AtomicI64::new(1 << 20);
 
 fn init_multiplier() {
     let multiplier = config::get_double("Multiplier", 1.0);
+    set_multiplier(multiplier);
+    logger::log(&format!("Multiplier={multiplier:.3}"));
+}
+
+/// Applies a multiplier live (also called from the in-game menu slider).
+pub fn set_multiplier(multiplier: f64) {
     let fixed = (multiplier * (1i64 << 20) as f64 + 0.5) as i64;
     FIXED_Q20.store(fixed, Ordering::Relaxed);
-    logger::log(&format!("Multiplier={multiplier:.3}"));
 }
 
 /// Reads a 5-byte "E8 rel32" CALL instruction at `call_site` and returns its
@@ -224,8 +229,10 @@ fn install(debug_log: bool) -> bool {
 /// [`common::reload`] reloads the ini (it owns the `ReloadKey` watcher and the
 /// "Config reloaded" banner). Meant to run on its own worker thread spawned
 /// from `DllMain`; never returns (except early, if the hook fails to install).
-pub fn run(ini_path: String) {
+pub fn run(ini_path: String, hmodule: u64) {
     init_multiplier();
+    // Right away: ERNativeUI only accepts registrations during its startup window.
+    crate::menu::start(hmodule, ini_path.clone());
 
     let debug_log = config::get_bool("LogFile", false);
     if !install(debug_log) {
@@ -255,6 +262,7 @@ pub fn run(ini_path: String) {
             if generation != last_seen_generation {
                 last_seen_generation = generation;
                 init_multiplier();
+                crate::menu::sync_from_config();
             }
         },
     );

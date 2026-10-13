@@ -17,7 +17,16 @@ Cấu hình trong `RuneMultiplier.ini` cạnh DLL (tự tạo nếu thiếu). C�
 
 Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong [`RuneMultiplier.ini`](RuneMultiplier.ini); file mẫu này được nhúng vào DLL nên là nguồn sự thật duy nhất, README không lặp lại để khỏi lệch.
 
-Đổi ini rồi bấm phím reload là có hiệu lực ngay, kể cả đổi chính phím reload, vì phím được đọc lại mỗi frame. Sau khi reload, mod hiện banner "Config reloaded" (tắt được trong ini) và ghi dòng log tương ứng. Phím và banner do `common::reload` lo, giống các mod khác.
+Đổi ini rồi bấm phím reload là có hiệu lực ngay, kể cả đổi chính phím reload, vì phím được đọc lại mỗi frame. Sau khi reload, mod ghi dòng log tương ứng và, nếu bật trong ini (mặc định tắt), hiện banner "Config reloaded". Phím và banner do `common::reload` lo, giống các mod khác.
+
+## Menu trong game (tùy chọn)
+
+Nếu `ERNativeUI.dll` (host menu dùng chung, https://github.com/Flammrock/ERNativeUI) đã được nạp trước mod, System >
+Game Options có thêm hàng **Rune Multiplier**: mở ra trang chỉnh hệ số (slider số nguyên 0-10) và bật/tắt log.
+Đổi trong menu áp ngay và được ghi lại vào ini; bấm phím reload thì menu cập nhật theo ini. Không có host thì mod
+chạy hoàn toàn bằng ini như trước. Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0; chưa cần file GFX nào (có thì nhãn đẹp
+hơn). Client: `common::erui` ([shared/src/erui.rs](../../shared/src/erui.rs)), mod: [src/menu.rs](src/menu.rs),
+ghi chú dùng chung: [docs/ingame_menu.md](../../docs/ingame_menu.md).
 
 ## Cách hoạt động
 
@@ -40,13 +49,14 @@ Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong [`R
 - Chi tiết kỹ thuật, các hướng đã thử và bỏ, cách kiểm tra tương thích:
   [docs/addsoul_hook.md](docs/addsoul_hook.md).
 
-Code: [src/hook.rs](src/hook.rs) (toàn bộ logic), [src/lib.rs](src/lib.rs) (entry point).
+Code: [src/hook.rs](src/hook.rs) (hook), [src/menu.rs](src/menu.rs) (menu tùy chọn), [src/lib.rs](src/lib.rs) (entry point).
 
 ## Giới hạn
 
 - Phụ thuộc mẫu AOB neo: game vá làm đổi bố cục thì mod tự tắt cho phiên đó.
 - Mọi nguồn rune **nhận được** đều bị nhân, không có tuỳ chọn tách riêng từng nguồn.
 - Với `Multiplier` âm, rune nhận được bị **trừ** thay vì cộng.
+- Menu trong game: slider chỉ số nguyên 0-10 (muốn số lẻ hoặc cao hơn thì sửa ini); chỉ có khi có ERNativeUI.
 - Chỉ dùng ở chế độ offline, tắt EAC.
 
 ## Tài liệu liên quan

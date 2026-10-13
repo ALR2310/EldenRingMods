@@ -4,6 +4,13 @@ Chỉ liệt kê việc **còn mở**, mỗi việc 1 dòng. Việc xong xoá đ
 `mods/<mod>/HISTORY.md`); lý do / chi tiết kỹ thuật ở `mods/<mod>/docs/`.
 Quy ước đầy đủ: `CLAUDE.md`, mục "Viết `TODO.md` gọn".
 
+## Menu trong game (ERNativeUI)
+
+Chi tiết: `docs/ingame_menu.md`
+
+- [ ] Đưa menu tùy chọn lên các mod khác (ứng viên chọn 2026-10-13); mỗi mod 1 hàng trang con, tên chứa tên mod
+- [ ] `common::erui`: thêm `add_inline_choice` / `add_text_input` khi mod nào cần số lẻ hoặc giá trị âm
+
 ## SpiritMultiplier
 
 Chi tiết: `mods/spiritmultiplier/docs/open_issues.md`, `docs/warp_research.md`
@@ -31,6 +38,7 @@ Chi tiết: `mods/spiritmultiplier/docs/open_issues.md`, `docs/warp_research.md`
 
 ## RuneMultiplier
 
+- [ ] Test trong game bản có menu (ERNativeUI): slider áp ngay, ini ghi lại sau khi dừng, F5 đồng bộ, công tắc Log file; rồi phát hành bullet ở `[Unreleased]` (docs/ingame_menu.md)
 - [ ] Test trong game reload qua `common::reload` + banner (2026-10-07), rồi phát hành bullet ở `[Unreleased]`
 - [ ] Nghiên cứu hệ số rune riêng theo nguồn (giết địch / bán đồ...; julianpratt, 2026-08-31)
 
