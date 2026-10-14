@@ -15,3 +15,4 @@ sử git của `README.md`.
 | 2026-10-05 | Version thật trong thuộc tính file DLL (`build.rs` + `winresource`); thêm key `ReloadBanner` | |
 | 2026-10-07 | Đổi thư mục `crates/` thành `mods/`; tách README thành README + HISTORY + docs/ | |
 | 2026-10-13 | Mặc định `ReloadBanner` đổi thành `false`: nhiều mod cùng bật thì mỗi mod hiện một banner vài giây khi bấm reload | |
+| 2026-10-13 | Thêm menu tùy chọn trong game qua ERNativeUI (`common::erui`): 2 nhóm Scarlet Rot/Poison + log, các giá trị số gõ vào ô văn bản; menu ghi ini rồi tăng `RELOAD_GENERATION`. Trình reload nay giữ yêu cầu đến khi vào thế giới (trước đó chỉ cần `SoloParamRepository` có), để menu mở ở màn hình chính không ghi param quá sớm. | [docs](../../docs/ingame_menu.md) |
