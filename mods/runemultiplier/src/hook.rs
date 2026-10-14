@@ -76,7 +76,7 @@ fn init_multiplier() {
     logger::log(&format!("Multiplier={multiplier:.3}"));
 }
 
-/// Applies a multiplier live (also called from the in-game menu slider).
+/// Applies a multiplier live (also called from the in-game menu number row).
 pub fn set_multiplier(multiplier: f64) {
     let fixed = (multiplier * (1i64 << 20) as f64 + 0.5) as i64;
     FIXED_Q20.store(fixed, Ordering::Relaxed);
