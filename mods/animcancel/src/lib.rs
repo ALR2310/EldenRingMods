@@ -2,6 +2,7 @@
 
 mod cancel;
 mod config;
+mod menu;
 mod probe;
 
 use common::{dll_dir, logger};
@@ -19,6 +20,10 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
         let report = config::init(&format!("{dir}\\AnimCancel.toml"));
+
+        // Registers the in-game menu right away: the host only accepts
+        // registrations in its first seconds. No-op without ERNativeUI.
+        menu::start(hmodule);
 
         // [Logging] LogFile gates the log file entirely - see common::logger.
         logger::set_enabled(config::get().logging.log_file);
@@ -62,6 +67,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
                 || {
                     config::reload()?;
                     logger::set_enabled(config::get().logging.log_file);
+                    menu::sync_from_config();
                     Ok(())
                 },
             )

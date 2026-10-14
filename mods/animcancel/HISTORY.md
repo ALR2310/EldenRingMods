@@ -16,3 +16,4 @@ link sang `docs/`.
 | 2026-10-12 | Weapon skill và phép test ổn, `Skill` và `Cast` bật mặc định | |
 | 2026-10-12 | Thêm `nexus_page.bbcode` và `CHANGELOG.md` (chuẩn bị đăng, chưa đăng) | |
 | 2026-10-12 | Thêm `Item` (huỷ khi uống flask và dùng item, mặc định tắt) và ảnh minh hoạ trên trang Nexus; có mod ID 11328 | |
+| 2026-10-13 | Thêm menu trong game tùy chọn (ERNativeUI, `common::erui`): 7 công tắc chia 2 trang (Cancel With / Cancel What) + Log file, ghi về TOML qua `TomlConfig::save_values`; probe vẫn chỉ ở file | [docs](../../docs/ingame_menu.md) |

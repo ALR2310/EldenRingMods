@@ -19,6 +19,16 @@ Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong
 [`AnimCancel.toml`](AnimCancel.toml) (nhúng vào DLL, nguồn sự thật duy nhất).
 Đổi file rồi bấm phím reload, không cần khởi động lại game.
 
+## Menu trong game (tùy chọn)
+
+Nếu `ERNativeUI.dll` (host menu dùng chung, https://github.com/Flammrock/ERNativeUI) đã được nạp trước mod, System >
+Game Options có thêm hàng **Anim Cancel**: mở ra trang gồm nhóm **Cancel With** (guard, lăn/lùi, đổi vũ khí), nhóm
+**Cancel What** (đòn đánh, weapon art, phép, item) và bật/tắt log. Đổi trong menu được ghi vào `AnimCancel.toml` (giữ
+nguyên comment) sau khi ngừng thao tác 1 giây; mod đọc cấu hình mỗi frame nên có hiệu lực ngay. Hai probe chỉ chỉnh trong
+file. Không có host thì mod chạy bằng file như trước. Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0. Client: `common::erui`
+([shared/src/erui.rs](../../shared/src/erui.rs)), mod: [src/menu.rs](src/menu.rs), ghi chú dùng chung:
+[docs/ingame_menu.md](../../docs/ingame_menu.md).
+
 ## Cách hoạt động
 
 Game chỉ cho cắt anim trong "cửa sổ cancel" do event của anim bật, thường là
