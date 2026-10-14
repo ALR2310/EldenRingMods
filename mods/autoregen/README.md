@@ -19,6 +19,17 @@ Cấu hình trong `AutoRegen.ini` cạnh DLL (tự tạo nếu thiếu; key mớ
 
 Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong [`AutoRegen.ini`](AutoRegen.ini); file mẫu này được nhúng vào DLL nên là nguồn sự thật duy nhất, README không lặp lại để khỏi lệch.
 
+## Menu trong game (tùy chọn)
+
+Nếu `ERNativeUI.dll` (host menu dùng chung, https://github.com/Flammrock/ERNativeUI) đã được nạp trước mod, System >
+Game Options có thêm hàng **Auto Regen**: mở ra trang gồm nhóm **Per Tick** (bật/tắt, điều kiện, chu kỳ, kiểu giá trị,
+lượng hồi HP/FP/SP, mức trần), nhóm **Per Hit** (bật/tắt, chế độ, loại đòn, bỏ qua Ash of War, lượng hồi HP/FP/SP) và
+bật/tắt log. Lượng hồi và chu kỳ là ô nhập số (gõ được số lẻ như ini; slider thì không). Danh sách gesture chỉ sửa trong ini.
+Mod đọc cấu hình mỗi frame nên đổi trong menu có tác dụng ngay khi được ghi vào ini (sau khi ngừng thao tác 1 giây).
+Không có host thì mod chạy bằng ini như trước. Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0. Client: `common::erui`
+([shared/src/erui.rs](../../shared/src/erui.rs)), mod: [src/menu.rs](src/menu.rs), ghi chú dùng chung:
+[docs/ingame_menu.md](../../docs/ingame_menu.md).
+
 ## Cách hoạt động
 
 - **Tick** (`src/regen.rs`): task đăng ký vào `CSTaskGroupIndex::FrameBegin` của game (không phải thread `Sleep` riêng), đọc/ghi `WorldChrMan` → `ChrIns` → `CSChrDataModule` qua `fromsoftware-rs`, gate bằng `common::player` (đã vào game). Việc đăng ký task và lấy allocator dùng quét AOB thay vì bảng RVA của fromsoftware-rs để chạy được trên bản game mới: [docs/task_and_startup.md](docs/task_and_startup.md).

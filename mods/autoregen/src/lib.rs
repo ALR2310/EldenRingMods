@@ -1,6 +1,7 @@
 #![allow(non_snake_case)] // crate name is "AutoRegen" to control the output DLL's filename
 
 mod hit_hook;
+mod menu;
 mod regen;
 
 use common::{config, dll_dir, logger};
@@ -32,6 +33,10 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
                 "AutoRegen.ini updated: added {migrated} new key(s) from a newer default template."
             ));
         }
+
+        // Registers right away: the host only accepts menu registrations at
+        // startup. Rows follow reloads through `regen::run`.
+        menu::start(hmodule, ini_path.clone());
 
         common::diag::log_environment_when_game_ready();
         regen::run(ini_path);

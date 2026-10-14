@@ -574,6 +574,7 @@ pub fn run(ini_path: String) {
             if input::is_key_pressed(reload_key) {
                 config::load(&ini_path);
                 logger::log("Config reloaded");
+                crate::menu::sync_from_config();
                 if config::get_bool("ReloadBanner", false) {
                     common::announce::show_announcement("config reloaded");
                 }
