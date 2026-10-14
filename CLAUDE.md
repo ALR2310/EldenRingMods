@@ -8,7 +8,7 @@ Mỗi mod có 4 loại tài liệu, mỗi loại 1 vai trò, không trộn lẫn
   ID và trạng thái (đã phát hành / nội bộ / đã bỏ), mod làm gì, cấu hình ở mức
   khái niệm, cách hoạt động, giới hạn; link tới CHANGELOG, HISTORY và docs.
   **Không** ghi bảng key, giá trị mặc định hay số phiên bản: tên key và mặc
-  định nằm ở chú thích của file `.ini` (nguồn sự thật duy nhất), phiên bản ở
+  định nằm ở chú thích của file config `.ini`/`.toml` (nguồn sự thật duy nhất), phiên bản ở
   `CHANGELOG.md` và `Cargo.toml`. Số liệu hay đổi (số dòng param, RVA, bảng
   tương thích) để ở `docs/`. Khuôn mẫu: `mods/dropmultiplier/README.md`.
 - `mods/<mod>/CHANGELOG.md` = ghi chú phát hành cho **người dùng cuối**, theo
@@ -26,7 +26,10 @@ Mỗi mod có 4 loại tài liệu, mỗi loại 1 vai trò, không trộn lẫn
   tại** (không viết kiểu nhật ký theo ngày): mở đầu bằng `**Status <ngày>:
   ...**`, rồi kết luận, bằng chứng, hướng đã thử/bỏ (kèm lý do), tham chiếu
   code. Chủ đề liên mod và tư liệu dùng chung (trang Nexus, prompt
-  logo/thumbnail, spec Nexus API) nằm ở `docs/` gốc repo. Công cụ dịch ngược
+  logo/thumbnail, spec Nexus API) nằm ở `docs/` gốc repo. Tư liệu về cách các
+  module của crate `common` hoạt động (AOB, hook, lý do thiết kế, bằng chứng
+  kiểm chứng) nằm ở `shared/docs/<chủ đề>.md`, cùng quy ước `Status` như trên;
+  doc đầu file `.rs` chỉ giữ vài dòng rồi link sang đó. Công cụ dịch ngược
   nằm ở `scripts/` (IDA: `scripts/ida/`); dữ liệu sinh ra từ dịch ngược nằm ở `dumps/` (git-ignored,
   ngoại lệ `dumps/seamless-diff/`).
 
@@ -39,16 +42,20 @@ key, sửa bug về hành vi, đổi cấu trúc code/thư mục):
    thêm 1 bullet vào `## [Unreleased]` trong `CHANGELOG.md`.
 3. **Sửa `README.md` tại chỗ** chỉ khi cách hoạt động, giới hạn hay trạng thái
    (đã phát hành / nội bộ / đã bỏ) thay đổi. Đổi key hay giá trị mặc định chỉ cần
-   sửa chú thích trong `.ini`, không đụng README (không thêm mục có ngày); sửa
+   sửa chú thích trong file config (`.ini`/`.toml`), không đụng README (không thêm mục có ngày); sửa
    đường dẫn file lỗi thời được nhắc tới.
 4. **Viết mới hoặc bổ sung `mods/<mod>/docs/<chủ đề>.md`** chỉ khi có phát hiện
    đáng giữ: nguyên nhân gốc, hướng đã thử/bỏ, số liệu, RVA/AOB. Cập nhật dòng
    `Status`, rồi link từ dòng HISTORY và từ README.
 
-Mod chưa được tách (README vẫn là nhật ký dài theo ngày) thì giữ kiểu cũ
-cho tới khi tách: thêm 1 mục có ngày vào README của mod đó. Đã tách xong: `dropmultiplier`, `windowresize`, `infiniteailment`, `fasterrevival`, `runemultiplier`, `weightmultiplier`, `risearcher`, `passiverunes`, `speedmultiplier`, `soulsteleport`, `spiritmultiplier`, `autoregen`, `sometweaks`, `animcancel`.
-`CHANGELOG.md` có cho mọi mod đăng Nexus (không có ở `sometweaks` và
-`windowresize`: không đăng) và áp dụng cho cả mod chưa tách.
+Mọi mod hiện có đều đã theo cấu trúc này; mod mới tạo thì làm theo khuôn mẫu
+`mods/dropmultiplier/`. `CHANGELOG.md` có cho mọi mod đăng Nexus (không có ở
+`sometweaks` và `windowresize`: không đăng).
+
+README gốc repo (`README.md`) có bảng liệt kê mod (tên, chức năng, Nexus ID)
+và badge số mod. Khi **thêm, xoá, đổi tên** 1 mod, hoặc mod lần đầu lên
+Nexus / đổi trạng thái, cập nhật bảng và badge đó cùng lúc. Không ghi số
+phiên bản vào README gốc.
 
 Không cần hỏi lại người dùng trước khi làm việc này - tự làm ngay sau khi
 code đã ổn định, coi đây là 1 bước không thể thiếu của việc "xong việc",
@@ -107,6 +114,8 @@ curl -sS -H "apikey: $NEXUS_API_KEY" \
 Mod ID theo từng mod trong workspace này (game domain luôn là `eldenring`):
 
 - `autoregen` → 10548
+- `dropmultiplier` → 11075
+- `infiniteailment` → 11087
 - `runemultiplier` → 10630
 - `weightmultiplier` → 10549 (Weight Multiplier)
 - `passiverunes` → 10528
