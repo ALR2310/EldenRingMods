@@ -48,19 +48,25 @@ chung + SDK C ABI (`erui.h`). Release 1.0.0 (2026-08-30), 1.1.0 (09-06), 1.1.1
 
 ## Mẫu client trong repo
 
-`shared/src/erui.rs` (`common::erui`): `connect`, `register_provider`, `add_submenu`, `add_slider`, `add_toggle`,
-`add_inline_choice`, `commit`, `set_row_value`/`get_row_value`; mod thiếu host thì ghi log và chạy bằng ini.
-Lưu về ini dùng chung: `Setting` (khoá ini + hàm đổi byte thành chữ + `apply` tuỳ chọn) làm `user_data` của hàng cùng
-callback `setting_changed`; `start_saver(ini_path, on_saved)` chạy 1 thread ngủ cho đến khi có thay đổi, gộp theo khoá,
-ghi ini + map cấu hình sau 1 s yên rồi gọi `on_saved`.
-Số thập phân: `add_text_input` + `NumberSetting` (`Provider::add_number`): gõ `1.5` (dấu phẩy cũng được), kẹp vào
-[min, max], chữ không phải số thì trả về giá trị cũ; `NumberSetting::show` đồng bộ lại sau reload. Key mod đọc bằng
-`config::get_int` phải dùng `NumberSetting::whole` (làm tròn, vì `1.5` làm `get_int` hỏng và rơi về mặc định); key TOML kiểu
-float dùng `NumberSetting::float` (ghi `2.0`); số hiển thị làm tròn 6 chữ số thập phân (số qua `f32` hiện `1.2`). Chưa kiểm trong game
-xem editor chữ của game có cho gõ `.` và `-` không (trạng thái 2026-10-13: AutoRegen là mod thử).
-Mẫu: `mods/runemultiplier/src/menu.rs` (áp ngay trong `apply`, ini lưu sau) và `mods/dropmultiplier/src/menu.rs`
-(nhiều hàng + hàng chọn Mode; `on_saved` tăng `common::reload::RELOAD_GENERATION` để mod quét lại param từ baseline
-đúng một lần). Mod gate "đã vào thế giới" phải giữ yêu cầu reload đến khi vào thế giới (xem `drop_rate.rs`).
+`shared/src/erui.rs` (`common::erui`), mod thiếu host thì ghi log một dòng và chạy bằng file cấu hình như cũ.
+
+- **Lớp thấp**: `connect`, `register_provider`, `add_submenu`, `add_slider`, `add_toggle`, `add_inline_choice`, `add_text_input`, `commit`,
+  `set_row_value`/`set_text`. `commit` thất bại thì bản nháp bị huỷ (`Drop`), vì host vẫn giữ nó.
+- **Lớp dùng cho mod** (mỗi `menu.rs` chỉ còn phần bố cục): `static MENU: OnceLock<Menu>`; `fn build(&mut MenuBuilder)` dựng hàng bằng
+  `submenu`/`toggle`/`choice`/`slider`/`number` (mỗi hàng kèm hàm `read` đọc giá trị từ cấu hình); `spawn_menu(&MENU, hmodule, id, tên, build)`
+  đăng ký trên thread riêng (gọi thật sớm trong thread khởi động của mod: host chỉ nhận đăng ký ở vài giây đầu); `Menu::sync()` đưa giá trị
+  cấu hình vừa nạp lại vào các hàng (gọi sau reload).
+- **Lưu về file**: `Setting::flag(key)` / `Setting::int(key)` (hoặc `Setting { format, apply }`) làm `user_data` của hàng cùng callback
+  `setting_changed`; `start_saver(ini_path, on_saved)` (hoặc `start_saver_with(ghi, on_saved)` cho TOML qua `TomlConfig::save_values`) chạy 1 thread ngủ cho đến
+  khi có thay đổi, gộp theo khoá, ghi file (nguyên tử: ghi tệp tạm rồi đổi tên) và map cấu hình sau 1 s yên rồi gọi `on_saved`.
+  Mod áp lại qua `RELOAD_GENERATION` dùng `on_saved = Some(erui::reload_from_menu)`: lần đồng bộ ngay sau đó của `Menu::sync` bị bỏ qua để hàng
+  người chơi đang sửa không bị đặt lại.
+- **Số**: `NumberSetting` + `MenuBuilder::number`: gõ `1.5` (dấu phẩy cũng được), kẹp vào [min, max], chữ không phải số thì trả về giá trị cũ.
+  Key mod đọc bằng `config::get_int` phải dùng `NumberSetting::whole` (làm tròn, vì `1.5` làm `get_int` hỏng và rơi về mặc định); key TOML kiểu float
+  dùng `NumberSetting::float` (ghi `2.0`); số hiển thị làm tròn 6 chữ số thập phân (số qua `f32` hiện `1.2`). Đã thử trong game (2026-10-14): gõ được `.`, `,`, `-`.
+- Mod gate "đã vào thế giới" phải giữ yêu cầu reload đến khi vào thế giới (xem `dropmultiplier/src/drop_rate.rs`).
+- Mẫu: `mods/runemultiplier/src/menu.rs` (áp ngay trong `apply`, file lưu sau), `mods/dropmultiplier/src/menu.rs` (nhóm, hàng chọn, reload).
+  Bố cục mọi mod: [ingame_menu_layouts.md](ingame_menu_layouts.md).
 
 ## Nghiên cứu nền (IDA 2.7.1.0, đối chiếu với ERNativeUI)
 

@@ -8,8 +8,9 @@ Quy ước đầy đủ: `CLAUDE.md`, mục "Viết `TODO.md` gọn".
 
 Chi tiết: `docs/ingame_menu.md`
 
-- [ ] Đưa menu tùy chọn lên các mod khác (ứng viên chọn 2026-10-13); mỗi mod 1 hàng trang con, tên chứa tên mod
-- [ ] [research] Slider số âm/thập phân: thử bản fork ERNativeUI + sửa 1 byte game (`docs/ingame_menu_slider.md`)
+- [ ] [research] Slider số âm/thập phân: hook `0x74FA20` ánh xạ `min + chỉ_số x step` (tiền lệ `mod-settings-menu.dll`), thử bản fork ERNativeUI (`docs/ingame_menu_slider.md`)
+- [ ] [research] Menu cuộn / vượt giới hạn 15 hàng của trang con (`docs/ingame_menu_scroll.md`)
+- [ ] Phát hành lần lượt các mod đã có menu (bullet có sẵn ở `[Unreleased]`); ghi trên trang Nexus rằng ERNativeUI là phụ thuộc tùy chọn (exe 2.7.0.0 / 2.7.1.0)
 
 ## InfiniteAilment
 
@@ -43,7 +44,6 @@ Chi tiết: `mods/spiritmultiplier/docs/open_issues.md`, `docs/warp_research.md`
 
 ## RuneMultiplier
 
-- [ ] Test trong game bản có menu (ERNativeUI): slider áp ngay, ini ghi lại sau khi dừng, F5 đồng bộ, công tắc Log file; rồi phát hành bullet ở `[Unreleased]` (docs/ingame_menu.md)
 - [ ] Test trong game reload qua `common::reload` + banner (2026-10-07), rồi phát hành bullet ở `[Unreleased]`
 - [ ] Nghiên cứu hệ số rune riêng theo nguồn (giết địch / bán đồ...; julianpratt, 2026-08-31)
 

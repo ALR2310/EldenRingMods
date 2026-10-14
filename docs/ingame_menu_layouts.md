@@ -16,7 +16,7 @@ ini mẫu từng mod. Nguồn: `mods/<mod>/src/menu.rs`. Quy ước chung và gi
  ℤ                    chỉ nhận số nguyên (gõ 1.5 sẽ thành 2)
  (0 = tắt)            ghi chú ngắn, không phải một phần của hàng
 
- ⚡ áp ngay       mod đọc cấu hình liên tục, đổi là có tác dụng
+ ⚡ áp sau khi lưu  mod đọc cấu hình liên tục: có tác dụng khoảng 1 giây sau khi bạn ngừng thao tác (RuneMultiplier: ngay khi xác nhận)
  ↻ áp lại        mod tính lại từ dữ liệu gốc sau khi bạn ngừng thao tác 1 giây
  ⟲ khởi động lại   chỉ có tác dụng sau khi khởi động lại game
 ```
@@ -37,7 +37,7 @@ Mọi mod đều có công tắc **Log file** ở trang đầu và hàng gốc �
   ├─ ▷ Materials
   │     Crafting      [ 2 ]   ⟨0 … 1000⟩
   │     Upgrade       [ 2 ]   ⟨0 … 1000⟩
-  │     Unique        [ 2 ]   ⟨0 … 1000⟩
+  │     Unique        [ 1 ]   ⟨0 … 1000⟩
   └─ Log file         ◄ On ►
 ```
 
@@ -118,12 +118,12 @@ Mọi mod đều có công tắc **Log file** ở trang đầu và hàng gốc �
   │     Crossbow Sell Value [ 2 ]   ⟨-1000 … 1000⟩
   │     Ballista Sell Value [ 2 ]   ⟨-1000 … 1000⟩
   ├─ ▷ Ammo & Shots
-  │     Arrow Limit         ━━━━━━━━━━━●  255   ⟨1 … 255⟩
-  │     Bolt Limit          ━━━━━━━━━━━●  255   ⟨1 … 255⟩
+  │     Arrow Limit         ━━━━━━━━━━━●  255   ⟨0 … 255⟩
+  │     Bolt Limit          ━━━━━━━━━━━●  255   ⟨0 … 255⟩
   │     Projectile Speed    [ 3.5 ]   ⟨-1000 … 1000⟩
   │     Rain Range          [ 2 ]   ⟨-1000 … 1000⟩
   │     Rain Spread         [ 2 ]   ⟨-1000 … 1000⟩
-  │     Rain Arrows         ━●━━━━━━━━━━   6   ⟨1 … 50⟩
+  │     Rain Arrows         [ 6 ]   ⟨ℤ 0 … 1000⟩
   └─ Log file               ◄ On ►
 ```
 
@@ -151,7 +151,7 @@ Mọi mod đều có công tắc **Log file** ở trang đầu và hàng gốc �
 ```
 ▶ Spirit Multiplier
   ├─ ▷ Spirit Count
-  │     Multiplier      [ 2 ]   ⟨-1000 … 1000⟩
+  │     Multiplier      [ 2 ]   ⟨0 … 1000⟩
   │     Fixed Count     [ 0 ]   ⟨ℤ 0 … 1000⟩                (0 = dùng Multiplier)
   │     Max Spirits     [ 60 ]   ⟨ℤ 60 … 1000⟩               ⟲
   ├─ ▷ Summoning
@@ -160,8 +160,8 @@ Mọi mod đều có công tắc **Log file** ở trang đầu và hàng gốc �
   │     Resummon Without Rest   ◄ On ►
   │     Summon Anywhere         ◄ On ►
   ├─ ▷ Health and Look
-  │     Regen Mode      ◄ % of missing HP ►
-  │     Regen Amount    [ 0.75 ]   ⟨-1000 … 1000⟩             (0 = không hồi)
+  │     Regen Mode      ◄ % of max HP ►
+  │     Regen Amount    [ 0.75 ]   ⟨0 … 1000⟩             (0 = không hồi)
   │     Ghostly Tint    ◄ Off ►
   ├─ ▷ Behavior
   │     Senses ◄ On ►   Aggression ◄ On ►   Follow ◄ On ►
