@@ -1,23 +1,14 @@
-//! Shows text in the game's own top-of-screen system announcement banner -
-//! the same widget used for things like "Autosaving..." - so a mod can give
-//! visual, in-game confirmation of something (e.g. "config reloaded")
-//! without the player needing to check a log file.
-//!
-//! Ported from `autoregen::regen`'s `show_announcement` (2026-09-10) once a
-//! second mod ([`dropmultiplier`](../../mods/dropmultiplier)) wanted the
-//! same confirmation on `ReloadKey` press.
+//! Shows text in the game's own top-of-screen system announcement banner (the
+//! "Autosaving..." widget), e.g. to confirm a config reload in game.
 
 use eldenring::cs::{AnnounceNotification, CSMenuManImp, MenuString};
 use eldenring::dltx::DLString;
 use fromsoftware_shared::FromStatic;
 
-/// Queues `text` onto `CSMenuMan`'s `FeSystemAnnounceViewModel`, so the
-/// game's existing fade-in/scroll/fade-out playback handles displaying and
-/// dismissing it, no timer of our own needed. No-op (silently) if
-/// `CSMenuMan` isn't resolved yet, the runtime heap allocator (see
-/// [`crate::alloc_hook`]) isn't resolved yet, or the string fails to encode
-/// - a missed banner isn't worth a log line, callers that also log to a
-/// file already have that covered.
+/// Queues `text` onto the game's announcement view model; the game handles
+/// the fade and dismissal. Silently does nothing if `CSMenuMan` or the heap
+/// allocator ([`crate::alloc_hook`]) isn't resolved yet, or the string fails
+/// to encode: callers already log to a file.
 pub fn show_announcement(text: &str) {
     let Ok(menu_man) = (unsafe { CSMenuManImp::instance_mut() }) else {
         return;

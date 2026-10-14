@@ -116,7 +116,7 @@ struct Registry {
 
 /// Whether Seamless Co-op (`ersc.dll`) is loaded.
 fn seamless_loaded() -> bool {
-    common::diag::loaded_modules().iter().any(|m| m.name.eq_ignore_ascii_case("ersc.dll"))
+    common::diag::is_module_loaded("ersc.dll")
 }
 
 /// The target of the `call` at `offset` in the first match of `pattern`.

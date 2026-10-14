@@ -1,26 +1,7 @@
-//! Watches a hotkey ini key (`ReloadKey` by convention) and reloads the
-//! shared ini config on press, independent of any feature module - so a
-//! mod's various features don't have to each poll the key themselves (and
-//! don't have to be running for reload to work at all).
-//!
-//! Exposes [RELOAD_GENERATION], an atomic counter bumped on every reload, for
-//! features that need to detect the reload *edge* specifically (e.g. to
-//! recompute from a cached original-value baseline rather than compounding)
-//! - most features don't need this at all, since `common::config` is
-//! already a live shared map and a plain per-tick `config::get_*` call picks
-//! up a reload for free.
-//!
-//! `eldenring::util::input::is_key_pressed` debounces per VK code in a
-//! single map shared by every caller (see `crates/eldenring/src/util/
-//! input.rs`: `DEBOUNCE_MAP`), not per caller - if more than one module
-//! called it for the same key, only whichever happened to run first that
-//! frame would ever see `true`. [run] must stay the ONLY caller for a given
-//! `ReloadKey` binding in a process; other modules poll [RELOAD_GENERATION]
-//! instead.
-//!
-//! Ported from `sometweaks::reload`/`risearcher::reload` (both carried an
-//! identical copy) once a third mod needed the same watcher, now built on
-//! this crate's own AOB-resilient [`crate::task`] instead of each mod's own.
+//! Watches a hotkey (`ReloadKey` by convention) and reloads the config on
+//! press, independent of any feature module. [RELOAD_GENERATION] counts
+//! reloads for features that must react to the reload edge. This must be the
+//! only poller of the reload key in a process. Details: `shared/docs/reload.md`.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -34,15 +15,14 @@ use crate::logger;
 
 const VK_F5: i32 = 0x74;
 
+/// Bumped on every successful reload.
 pub static RELOAD_GENERATION: AtomicU64 = AtomicU64::new(0);
 
-/// Watches `ReloadKey` on the game's own `FrameBegin` task group for the
-/// rest of the process's life, reloading `ini_path` into the shared config
-/// map and bumping [RELOAD_GENERATION] on every press, plus showing a
-/// generic "Config reloaded" in-game banner (see [`crate::announce`]) so
-/// the reload is visible without checking the log file (`ReloadBanner=false`
-/// turns the banner off). Meant to run on its
-/// own worker thread spawned from `DllMain`; never returns.
+/// Watches `ReloadKey` on the game's `FrameBegin` task group for the rest of
+/// the process's life: on a press it reloads `ini_path` into the shared config
+/// map, bumps [RELOAD_GENERATION] and, if `ReloadBanner` is on, shows a
+/// "Config reloaded" banner. Meant to run on its own worker thread spawned
+/// from `DllMain`; never returns.
 pub fn run(ini_path: String) {
     run_with(
         || config::get_string("ReloadKey", "F5"),
@@ -54,16 +34,12 @@ pub fn run(ini_path: String) {
     );
 }
 
-/// [run] for a config that isn't the ini map ([`crate::toml_config`]):
-/// `reload_key` returns the current key name (re-read every frame, so a
-/// reload that changes it takes effect at once), `reload` re-reads the
-/// config. An `Err` (e.g. a TOML syntax error, the old config still in use)
-/// is logged and shown as "Config error - see log" instead of "Config
-/// reloaded"; [RELOAD_GENERATION] is only bumped on success.
-/// `banner` (read after the reload, so a reload that turns it off takes
-/// effect at once) says whether to show the "Config reloaded" banner;
-/// the error banner always shows - without it a failed reload would be
-/// silent in game.
+/// [run] for a config that isn't the ini map ([`crate::toml_config`]).
+/// `reload_key` gives the current key name (re-read every frame), `reload`
+/// re-reads the config; an `Err` is logged and shown as "Config error - see
+/// log" (always, or a failed reload would be silent in game) and leaves
+/// [RELOAD_GENERATION] alone. `banner`, read after the reload, says whether
+/// to show "Config reloaded".
 pub fn run_with<K, B, R>(reload_key: K, banner: B, mut reload: R)
 where
     K: Fn() -> String + Send + 'static,
@@ -90,8 +66,7 @@ where
                     }
                 }
                 Err(err) => {
-                    logger::error(&format!("Reload: config not reloaded, the previous one stays in use:
-{err}"));
+                    logger::error(&format!("Reload: config not reloaded, the previous one stays in use:\n{err}"));
                     crate::announce::show_announcement("Config error - see log");
                 }
             }

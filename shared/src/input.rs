@@ -1,8 +1,7 @@
-//! Virtual-key name parsing shared by every mod that reads a hotkey ini key
-//! (e.g. `ReloadKey`, `HotReloadKey`), plus a raw-Win32 key-press poll for
-//! mods with no `fromsoftware-rs` dependency (which otherwise use
-//! `eldenring::util::input::is_key_pressed`, registered on the game's own
-//! per-frame task scheduler - not an option here).
+//! Hotkey helpers shared by every mod: parsing a key name from an ini
+//! (`ReloadKey`, `MenuKey`...) into a virtual-key code, and a raw-Win32
+//! key-press poll that only fires while this process owns the foreground
+//! window. Why not `eldenring::util::input::is_key_pressed`: `shared/docs/input.md`.
 
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -19,9 +18,9 @@ unsafe extern "system" {
     fn GetCurrentProcessId() -> u32;
 }
 
-// Per-VK state kept between polls (one DLL = one copy, like every other
-// static in this crate).
-const KEY_RESYNC: u8 = 0; // unknown - (re)gained focus, next poll only records
+// Per-VK state kept between polls (one DLL = one copy, like every static in
+// this crate).
+const KEY_RESYNC: u8 = 0; // unknown: (re)gained focus, the next poll only records
 const KEY_UP: u8 = 1;
 const KEY_DOWN: u8 = 2;
 static KEY_STATE: [AtomicU8; 256] = [const { AtomicU8::new(KEY_RESYNC) }; 256];
@@ -36,21 +35,17 @@ fn game_window_has_focus() -> bool {
     pid == unsafe { GetCurrentProcessId() }
 }
 
-/// Whether `vk` was pressed since the last call to this function for the
-/// same key, while this process's own window had focus. Meant to be polled
-/// periodically from a plain thread loop (e.g. every 100ms).
+/// Whether `vk` was pressed since the last call for the same key, while this
+/// process's own window had focus. Poll it periodically (a frame task, or a
+/// thread loop every ~100ms). Only one caller should poll a given key: the
+/// state is per key, not per caller.
 ///
-/// Used to be just `GetAsyncKeyState(vk) & 1` (2026-09-24 fix). That low
-/// "pressed since last call" bit is one system-wide flag, cleared by whichever
-/// process calls first - with 2 game instances on one PC (Seamless Co-op
-/// testing), the host's own poll kept consuming presses meant for the other
-/// window, and a hotkey also fired while typing in any other app. Now:
-/// - never polls at all while another process's window is focused (so it
-///   can't consume a press meant for that window either);
-/// - on (re)gaining focus, the first poll only records the key's state, so a
-///   press made in another app before alt-tabbing back doesn't fire;
-/// - fires on the low bit (catches a tap shorter than the poll interval) or
-///   on an up -> down transition seen by our own per-key state.
+/// - Never polls while another process's window is focused, so it can't
+///   consume a press meant for that window (or fire while typing elsewhere).
+/// - On (re)gaining focus the first poll only records the key's state, so a
+///   press made in another app before alt-tabbing back doesn't fire.
+/// - Fires on the "pressed since last call" bit (catches a tap shorter than
+///   the poll interval) or on an up -> down transition.
 pub fn is_key_pressed(vk: i32) -> bool {
     let Some(state) = usize::try_from(vk).ok().and_then(|i| KEY_STATE.get(i)) else {
         return false;
@@ -72,39 +67,29 @@ pub fn is_key_pressed(vk: i32) -> bool {
 
 /// Parses, in order of precedence: a raw virtual-key code in hex ("0x2D") or
 /// decimal ("112"), "F1".."F24", or a single letter/digit. Returns `fallback`
-/// for anything else (empty string, typo, unparseable, out of range).
+/// for anything else (empty, typo, out of range).
 /// https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
 pub fn parse_virtual_key(name: &str, fallback: i32) -> i32 {
     let upper = name.trim().to_ascii_uppercase();
 
-    if let Some(hex) = upper.strip_prefix("0X") {
-        if let Ok(vk) = i32::from_str_radix(hex, 16) {
-            if vk > 0 && vk <= 0xFF {
-                return vk;
-            }
-        }
+    let numeric = if let Some(hex) = upper.strip_prefix("0X") {
+        i32::from_str_radix(hex, 16).ok()
+    } else if upper.len() > 1 && upper.bytes().all(|b| b.is_ascii_digit()) {
+        upper.parse().ok()
+    } else {
+        None
+    };
+    if let Some(vk) = numeric.filter(|vk| (1..=0xFF).contains(vk)) {
+        return vk;
     }
-    if upper.len() > 1 && upper.chars().all(|c| c.is_ascii_digit()) {
-        if let Ok(vk) = upper.parse::<i32>() {
-            if vk > 0 && vk <= 0xFF {
-                return vk;
-            }
-        }
+    if let Some(n) = upper.strip_prefix('F').and_then(|n| n.parse::<i32>().ok()).filter(|n| (1..=24).contains(n)) {
+        return 0x70 + (n - 1); // VK_F1 = 0x70, VK_F2 = 0x71, ...
     }
-    if upper.len() >= 2 && upper.starts_with('F') {
-        if let Ok(n) = upper[1..].parse::<i32>() {
-            if (1..=24).contains(&n) {
-                return 0x70 + (n - 1); // VK_F1 = 0x70, VK_F2 = 0x71, ...
-            }
-        }
+    // VK codes for '0'-'9' and 'A'-'Z' match their ASCII value.
+    match upper.as_bytes() {
+        [c] if c.is_ascii_alphanumeric() => *c as i32,
+        _ => fallback,
     }
-    if upper.len() == 1 {
-        let c = upper.chars().next().unwrap();
-        if c.is_ascii_alphanumeric() {
-            return c as i32; // VK codes for '0'-'9' and 'A'-'Z' match their ASCII value.
-        }
-    }
-    fallback
 }
 
 #[cfg(test)]
@@ -134,6 +119,7 @@ mod tests {
     fn parses_single_char() {
         assert_eq!(parse_virtual_key("g", FALLBACK), 'G' as i32);
         assert_eq!(parse_virtual_key("5", FALLBACK), '5' as i32); // VK codes for '0'-'9' match ASCII
+        assert_eq!(parse_virtual_key("F", FALLBACK), 'F' as i32); // the letter, not a function key
     }
 
     #[test]
@@ -141,5 +127,9 @@ mod tests {
         assert_eq!(parse_virtual_key("", FALLBACK), FALLBACK);
         assert_eq!(parse_virtual_key("???", FALLBACK), FALLBACK);
         assert_eq!(parse_virtual_key("F99", FALLBACK), FALLBACK);
+        assert_eq!(parse_virtual_key("0x100", FALLBACK), FALLBACK); // out of range
+        assert_eq!(parse_virtual_key("0x0", FALLBACK), FALLBACK);
+        assert_eq!(parse_virtual_key("256", FALLBACK), FALLBACK);
+        assert_eq!(parse_virtual_key("0xZZ", FALLBACK), FALLBACK);
     }
 }

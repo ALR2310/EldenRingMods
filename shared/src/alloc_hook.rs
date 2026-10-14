@@ -1,50 +1,25 @@
-//! Resolves the game's global runtime heap allocator without touching
-//! `eldenring::rva::get()`'s version-gated `runtime_heap_allocator` RVA -
-//! same story as `task_hook.rs` (see its doc comment), for a different call
-//! site: anything that needs `DLAllocator::runtime_heap_allocator()` to
-//! build a `DLString` (e.g. an in-game announcement banner) hits the same
-//! panic on any game version `fromsoftware-rs` wasn't last published for,
-//! exactly like `register_task` did before `task_hook.rs` existed.
-//!
-//! Unlike `WorldChrMan`/`CSTaskImp`, this global isn't a Dantelion2-reflected
-//! singleton (no `#[shared::singleton(...)]` on `DLAllocator`), so the
-//! name-based reflection trick `task::wait_for_cs_task` uses doesn't apply -
-//! resolving it needs a byte anchor into actual game code instead. That
-//! global turns out to be read from hundreds of inlined call sites across
-//! the executable (it's DLKR's one heap allocator, used practically
-//! everywhere), but exactly one of them is a small, self-contained "read or
-//! lazily construct" wrapper function with its own prologue/epilogue -
-//! verified (2026-09-11) unique in `.text` and byte-identical (aside from
-//! its own unrelated rip-relative operands) on both a 1.16.2 exe
-//! (`eldenring` 0.14.0's RVA 0x4842d40) and a 1.17.0 exe (`fromsoftware-rs`
-//! commit `acb2a19`'s RVA 0x4846dc0).
+//! Resolves the game's global runtime heap allocator by AOB instead of
+//! `eldenring::rva::get()`, which panics on game versions `fromsoftware-rs`
+//! hasn't been updated for. See `shared/docs/alloc_hook.md`.
 
 use eldenring::dlkr::DLAllocator;
 
 use crate::logger;
 use crate::memscan::{self, CachedAddr};
 
-// Address of the global *variable* holding the allocator pointer, resolved
-// from the AOB match once per process (a caller may hit this on every
-// reload-key press). Only the variable's address is cached, not its value:
-// the code is there as soon as the pattern matches, but the game may not
-// have constructed the allocator yet, so a still-null instance must be
-// re-read next call rather than cached forever.
+// Address of the global variable holding the allocator pointer, not its
+// value: the game may not have constructed the allocator yet, so a null
+// instance must be re-read on the next call instead of cached.
 static GLOBAL_PTR_ADDR: CachedAddr = CachedAddr::new();
 
-// `sub rsp,0x28; call <ctor?>; mov rax,[rip+X] (the global we want);
-// test rax,rax; jnz +0xc; call <lazy-init>; mov [rip+Y],rax;
-// mov [rip+Z],rax; add rsp,0x28; ret` - the `mov rax,[rip+X]` load at
-// pattern offset `LOAD_INSTR_OFFSET` is what actually reads
-// `runtime_heap_allocator`; everything else just anchors the match to this
-// one specific, otherwise-unremarkable getter.
+// The one small "read or lazily construct" getter of the allocator global.
+// The `mov rax,[rip+X]` at `LOAD_INSTR_OFFSET` loads it; the rest of the
+// pattern only anchors the match to this function.
 const GETTER_PATTERN: &str = "48 83 ec 28 e8 ?? ?? ?? ?? 48 8b 05 ?? ?? ?? ?? 48 85 c0 75 0c e8 ?? ?? ?? ?? 48 89 05 ?? ?? ?? ?? 48 89 05 ?? ?? ?? ?? 48 83 c4 28 c3";
-const LOAD_INSTR_OFFSET: usize = 9; // "48 8b 05 <disp32>" (7 bytes) starts here
+const LOAD_INSTR_OFFSET: usize = 9;
 
-/// Resolves `DLAllocator::runtime_heap_allocator()`'s global via AOB
-/// instead of `rva::get()`. Returns `None` (logged) if the pattern isn't
-/// found or the global is still null - callers should treat that like any
-/// other AOB-based feature failing, not fatal.
+/// Resolves `DLAllocator::runtime_heap_allocator()` via AOB. Returns `None`
+/// (logged) if the pattern isn't found or the instance is still null.
 pub fn runtime_heap_allocator() -> Option<&'static DLAllocator> {
     let global_ptr_addr = GLOBAL_PTR_ADDR.get_or_resolve(|| {
         let Some(matched) = memscan::find_pattern_in_module(GETTER_PATTERN) else {
@@ -54,8 +29,7 @@ pub fn runtime_heap_allocator() -> Option<&'static DLAllocator> {
         logger::log("Allocator AOB found.");
         unsafe {
             let load_instr = matched.add(LOAD_INSTR_OFFSET);
-            // "48 8b 05" is 3 bytes, disp32 follows - the whole instruction
-            // is 7 bytes, rip-relative from the byte right after it.
+            // 3-byte opcode, disp32, rip-relative from the end of the 7-byte instruction.
             let disp32 = i32::from_le_bytes(*(load_instr.add(3) as *const [u8; 4]));
             Some(load_instr.add(7).offset(disp32 as isize) as usize)
         }

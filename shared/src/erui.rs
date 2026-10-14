@@ -1,21 +1,17 @@
 //! Client for ERNativeUI (https://github.com/Flammrock/ERNativeUI, MIT), the
-//! shared native in-game settings menu host. Mirrors only the part of its C
-//! ABI (`erui.h`, API 1.1) that mods here need: connect, register a provider,
-//! add rows, commit, and read/write a row's value afterwards. The host
-//! (`ERNativeUI.dll`) is an optional dependency: [`connect`] fails cleanly
-//! when it is not loaded and the mod keeps working from its config file.
+//! shared native in-game settings menu host. Mirrors the part of its C ABI
+//! (`erui.h`, API 1.1) that mods here need. The host is an optional
+//! dependency: [`connect`] fails cleanly when it is not loaded and the mod
+//! keeps working from its config file.
 //!
-//! Rules from the host's docs that shape this module:
-//! - Connect and register from a worker thread after `DllMain` returned, and
-//!   do it early: the host closes registration ~750 ms after the last
-//!   provider activity (5 s absolute cap), later clients fail cleanly.
-//! - Row values are bytes (`u8`); a slider's `minimum`/`maximum`/`step` are
-//!   integers. Decimals, negatives and anything wider than a byte are typed
-//!   into a text row instead ([`NumberSetting`]).
-//! - Value-changed callbacks run on the host's worker thread, button
-//!   callbacks on the UI thread. Keep them short; never panic across the ABI.
-//! - The host supports Elden Ring 2.7.0.0 and 2.7.1.0 only (matched by PE
-//!   timestamp + image size); on any other exe it reports not-ready.
+//! Host rules that shape this module (registration window, byte-only values,
+//! callback threads, supported game versions): `docs/ingame_menu.md`. In
+//! short: register early from a worker thread, keep callbacks short, never
+//! panic across the ABI, and type decimals or negatives into a text row
+//! ([`NumberSetting`]).
+//!
+//! A mod normally needs only [`spawn_menu`] + [`MenuBuilder`], with
+//! [`Setting`] / [`NumberSetting`] rows and [`start_saver`] to persist them.
 
 use std::ffi::c_void;
 use std::sync::OnceLock;
@@ -25,7 +21,8 @@ use std::time::{Duration, Instant};
 
 use crate::{config, logger};
 
-type Result_ = u32;
+/// `ERUI_Result`.
+type Status = u32;
 const ERUI_OK: u32 = 0;
 const ERUI_HOST_NOT_READY: u32 = 2;
 const ERUI_HOST_FAILED: u32 = 3;
@@ -177,17 +174,17 @@ struct Api {
     api_version: u32,
     capabilities: u64,
     register_provider: Option<
-        unsafe extern "C" fn(*const ProviderDesc, *mut ProviderHandle, *mut PageHandle) -> Result_,
+        unsafe extern "C" fn(*const ProviderDesc, *mut ProviderHandle, *mut PageHandle) -> Status,
     >,
     add_button: Unused,
     add_toggle: Option<
-        unsafe extern "C" fn(ProviderHandle, PageHandle, *const ToggleDesc, *mut RowHandle) -> Result_,
+        unsafe extern "C" fn(ProviderHandle, PageHandle, *const ToggleDesc, *mut RowHandle) -> Status,
     >,
     add_slider: Option<
-        unsafe extern "C" fn(ProviderHandle, PageHandle, *const SliderDesc, *mut RowHandle) -> Result_,
+        unsafe extern "C" fn(ProviderHandle, PageHandle, *const SliderDesc, *mut RowHandle) -> Status,
     >,
     add_inline_choice: Option<
-        unsafe extern "C" fn(ProviderHandle, PageHandle, *const ChoiceDesc, *mut RowHandle) -> Result_,
+        unsafe extern "C" fn(ProviderHandle, PageHandle, *const ChoiceDesc, *mut RowHandle) -> Status,
     >,
     add_popup_choice: Unused,
     add_submenu: Option<
@@ -197,19 +194,19 @@ struct Api {
             *const SubmenuDesc,
             *mut PageHandle,
             *mut RowHandle,
-        ) -> Result_,
+        ) -> Status,
     >,
     set_page_presentation: Unused,
-    commit_provider: Option<unsafe extern "C" fn(ProviderHandle) -> Result_>,
-    abort_provider: Option<unsafe extern "C" fn(ProviderHandle) -> Result_>,
-    set_row_value: Option<unsafe extern "C" fn(ProviderHandle, RowHandle, u8) -> Result_>,
-    get_row_value: Option<unsafe extern "C" fn(ProviderHandle, RowHandle, *mut u8) -> Result_>,
+    commit_provider: Option<unsafe extern "C" fn(ProviderHandle) -> Status>,
+    abort_provider: Option<unsafe extern "C" fn(ProviderHandle) -> Status>,
+    set_row_value: Option<unsafe extern "C" fn(ProviderHandle, RowHandle, u8) -> Status>,
+    get_row_value: Option<unsafe extern "C" fn(ProviderHandle, RowHandle, *mut u8) -> Status>,
     enqueue_alert: Unused,
     get_game_language: Unused,
     add_text_input: Option<
-        unsafe extern "C" fn(ProviderHandle, PageHandle, *const TextInputDesc, *mut RowHandle) -> Result_,
+        unsafe extern "C" fn(ProviderHandle, PageHandle, *const TextInputDesc, *mut RowHandle) -> Status,
     >,
-    set_text_input_value: Option<unsafe extern "C" fn(ProviderHandle, RowHandle, *const Utf16View) -> Result_>,
+    set_text_input_value: Option<unsafe extern "C" fn(ProviderHandle, RowHandle, *const Utf16View) -> Status>,
     get_text_input_value: Unused,
     add_color_picker: Unused,
     set_color_picker_value: Unused,
@@ -237,7 +234,7 @@ struct Api {
 // ERUI_API_V1_1_SIZE: 16-byte header + 38 function pointers.
 const _: () = assert!(std::mem::size_of::<Api>() == 16 + 38 * 8);
 
-type GetApiFn = unsafe extern "C" fn(u32, *mut Api) -> Result_;
+type GetApiFn = unsafe extern "C" fn(u32, *mut Api) -> Status;
 
 unsafe extern "system" {
     fn GetModuleHandleW(name: *const u16) -> *mut c_void;
@@ -262,6 +259,35 @@ fn result_name(code: u32) -> String {
         13 => "not supported".into(),
         other => format!("error {other}"),
     }
+}
+
+/// `Ok` for `ERUI_OK`, else `"<what>: <reason>"`.
+fn check(status: Status, what: &str) -> Result<(), String> {
+    if status == ERUI_OK { Ok(()) } else { Err(format!("{what}: {}", result_name(status))) }
+}
+
+/// The checks the host's docs ask a strict-C client to make on the table it
+/// returned: exact version and size, the capability bits, and every function
+/// pointer this module calls (they are `unwrap`ped later).
+fn validate_api(api: &Api) -> Result<(), String> {
+    if api.api_version != API_VERSION_1_1
+        || api.size != std::mem::size_of::<Api>() as u32
+        || api.capabilities & (CAP_TOGGLE | CAP_SLIDER) != (CAP_TOGGLE | CAP_SLIDER)
+    {
+        return Err("ERNativeUI returned an incompatible API 1.1 table".into());
+    }
+    let complete = api.register_provider.is_some()
+        && api.add_slider.is_some()
+        && api.add_toggle.is_some()
+        && api.add_submenu.is_some()
+        && api.add_inline_choice.is_some()
+        && api.add_text_input.is_some()
+        && api.set_text_input_value.is_some()
+        && api.commit_provider.is_some()
+        && api.abort_provider.is_some()
+        && api.set_row_value.is_some()
+        && api.get_row_value.is_some();
+    if complete { Ok(()) } else { Err("ERNativeUI returned an incomplete API 1.1 table".into()) }
 }
 
 /// A live connection to the ERNativeUI host.
@@ -292,27 +318,7 @@ pub fn connect(timeout: Duration) -> Result<Connection, String> {
             let status = unsafe { get_api(API_VERSION_1_1, &mut api) };
             match status {
                 ERUI_OK => {
-                    // The docs ask a strict-C client to verify the exact version,
-                    // table size, capability bits and function pointers.
-                    if api.api_version != API_VERSION_1_1
-                        || api.size != std::mem::size_of::<Api>() as u32
-                        || api.capabilities & (CAP_TOGGLE | CAP_SLIDER) != (CAP_TOGGLE | CAP_SLIDER)
-                    {
-                        return Err("ERNativeUI returned an incompatible API 1.1 table".into());
-                    }
-                    if api.register_provider.is_none()
-                        || api.add_slider.is_none()
-                        || api.add_toggle.is_none()
-                        || api.add_submenu.is_none()
-                        || api.add_inline_choice.is_none()
-                        || api.add_text_input.is_none()
-                        || api.set_text_input_value.is_none()
-                        || api.commit_provider.is_none()
-                        || api.abort_provider.is_none()
-                        || api.set_row_value.is_none()
-                    {
-                        return Err("ERNativeUI returned an incomplete API 1.1 table".into());
-                    }
+                    validate_api(&api)?;
                     return Ok(Connection { api });
                 }
                 ERUI_HOST_FAILED => {
@@ -361,9 +367,7 @@ impl Connection {
         let mut provider: ProviderHandle = 0;
         let mut root: PageHandle = 0;
         let status = unsafe { (self.api.register_provider.unwrap())(&desc, &mut provider, &mut root) };
-        if status != ERUI_OK {
-            return Err(format!("register_provider: {}", result_name(status)));
-        }
+        check(status, "register_provider")?;
         Ok(Provider { api: self.api, provider, root, committed: false })
     }
 }
@@ -403,9 +407,7 @@ impl Provider {
         let mut row: RowHandle = 0;
         let status =
             unsafe { (self.api.add_submenu.unwrap())(self.provider, parent, &desc, &mut child, &mut row) };
-        if status != ERUI_OK {
-            return Err(format!("add_submenu: {}", result_name(status)));
-        }
+        check(status, "add_submenu")?;
         Ok((child, row))
     }
 
@@ -442,9 +444,7 @@ impl Provider {
         };
         let mut row: RowHandle = 0;
         let status = unsafe { (self.api.add_slider.unwrap())(self.provider, page, &desc, &mut row) };
-        if status != ERUI_OK {
-            return Err(format!("add_slider: {}", result_name(status)));
-        }
+        check(status, "add_slider")?;
         Ok(row)
     }
 
@@ -479,9 +479,7 @@ impl Provider {
         };
         let mut row: RowHandle = 0;
         let status = unsafe { (self.api.add_inline_choice.unwrap())(self.provider, page, &desc, &mut row) };
-        if status != ERUI_OK {
-            return Err(format!("add_inline_choice: {}", result_name(status)));
-        }
+        check(status, "add_inline_choice")?;
         Ok(row)
     }
 
@@ -517,9 +515,7 @@ impl Provider {
         };
         let mut row: RowHandle = 0;
         let status = unsafe { (self.api.add_text_input.unwrap())(self.provider, page, &desc, &mut row) };
-        if status != ERUI_OK {
-            return Err(format!("add_text_input: {}", result_name(status)));
-        }
+        check(status, "add_text_input")?;
         Ok(row)
     }
 
@@ -535,8 +531,7 @@ impl Provider {
         setting: &'static NumberSetting,
         initial: f64,
     ) -> Result<RowHandle, String> {
-        let initial = if setting.integer { initial.round() } else { initial };
-        let initial = initial.clamp(setting.min, setting.max);
+        let initial = setting.normalize(initial);
         setting.last.store(initial.to_bits(), Ordering::Relaxed);
         let row = self.add_text_input(
             page,
@@ -577,9 +572,7 @@ impl Provider {
         };
         let mut row: RowHandle = 0;
         let status = unsafe { (self.api.add_toggle.unwrap())(self.provider, page, &desc, &mut row) };
-        if status != ERUI_OK {
-            return Err(format!("add_toggle: {}", result_name(status)));
-        }
+        check(status, "add_toggle")?;
         Ok(row)
     }
 
@@ -588,11 +581,9 @@ impl Provider {
     /// values to rows later.
     pub fn commit(mut self) -> Result<Registration, String> {
         let status = unsafe { (self.api.commit_provider.unwrap())(self.provider) };
-        if status != ERUI_OK {
-            // A rejected commit (e.g. a callback outside this module) leaves the
-            // draft in the host; Drop aborts it so it cannot stall the host's startup.
-            return Err(format!("commit_provider: {}", result_name(status)));
-        }
+        // A rejected commit (e.g. a callback outside this module) leaves the
+        // draft in the host; Drop aborts it so it cannot stall the host's startup.
+        check(status, "commit_provider")?;
         self.committed = true;
         let registration = Registration { api: self.api, provider: self.provider };
         // Callbacks (see `NumberSetting`) need it to put text back.
@@ -625,18 +616,18 @@ impl Registration {
         let units = wide(text);
         let view = Utf16View::of(&units);
         let status = unsafe { (self.api.set_text_input_value.unwrap())(self.provider, row, &view) };
-        if status == ERUI_OK { Ok(()) } else { Err(format!("set_text_input_value: {}", result_name(status))) }
+        check(status, "set_text_input_value")
     }
 
     pub fn set_row_value(&self, row: RowHandle, value: u8) -> Result<(), String> {
         let status = unsafe { (self.api.set_row_value.unwrap())(self.provider, row, value) };
-        if status == ERUI_OK { Ok(()) } else { Err(format!("set_row_value: {}", result_name(status))) }
+        check(status, "set_row_value")
     }
 
     pub fn get_row_value(&self, row: RowHandle) -> Result<u8, String> {
         let mut value = 0u8;
         let status = unsafe { (self.api.get_row_value.unwrap())(self.provider, row, &mut value) };
-        if status == ERUI_OK { Ok(value) } else { Err(format!("get_row_value: {}", result_name(status))) }
+        check(status, "get_row_value").map(|()| value)
     }
 }
 
@@ -960,19 +951,30 @@ pub struct NumberSetting {
 }
 
 impl NumberSetting {
+    const fn make(key: &'static str, min: f64, max: f64, apply: Option<fn(f64)>, decimal_point: bool, integer: bool) -> Self {
+        NumberSetting { key, min, max, apply, row: OnceLock::new(), last: AtomicU64::new(0), decimal_point, integer }
+    }
+
     pub const fn new(key: &'static str, min: f64, max: f64, apply: Option<fn(f64)>) -> Self {
-        NumberSetting { key, min, max, apply, row: OnceLock::new(), last: AtomicU64::new(0), decimal_point: false, integer: false }
+        Self::make(key, min, max, apply, false, false)
     }
 
     /// Like [`NumberSetting::new`] for a key the mod reads as a whole number.
     pub const fn whole(key: &'static str, min: f64, max: f64, apply: Option<fn(f64)>) -> Self {
-        NumberSetting { key, min, max, apply, row: OnceLock::new(), last: AtomicU64::new(0), decimal_point: false, integer: true }
+        Self::make(key, min, max, apply, false, true)
     }
 
     /// Like [`NumberSetting::new`] for a TOML float field: `2` is shown and
     /// saved as `2.0`, so the file keeps its style.
     pub const fn float(key: &'static str, min: f64, max: f64, apply: Option<fn(f64)>) -> Self {
-        NumberSetting { key, min, max, apply, row: OnceLock::new(), last: AtomicU64::new(0), decimal_point: true, integer: false }
+        Self::make(key, min, max, apply, true, false)
+    }
+
+    /// `value` as the row accepts it: rounded for a whole-number key, then
+    /// clamped to the range.
+    fn normalize(&self, value: f64) -> f64 {
+        let value = if self.integer { value.round() } else { value };
+        value.clamp(self.min, self.max)
     }
 
     /// The text shown in the row and written to the config for `value`.
@@ -980,13 +982,10 @@ impl NumberSetting {
         let text = number_text(value);
         if self.decimal_point && !text.contains('.') { format!("{text}.0") } else { text }
     }
-}
 
-impl NumberSetting {
-    /// Shows `value` (clamped) in the row, e.g. after the config was reloaded.
+    /// Shows `value` (normalized) in the row, e.g. after the config was reloaded.
     pub fn show(&'static self, registration: &Registration, value: f64) -> Result<(), String> {
-        let value = if self.integer { value.round() } else { value };
-        let value = value.clamp(self.min, self.max);
+        let value = self.normalize(value);
         self.last.store(value.to_bits(), Ordering::Relaxed);
         match self.row.get() {
             Some(row) => registration.set_text(*row, &self.text(value)),
@@ -1016,10 +1015,7 @@ unsafe extern "C" fn number_changed(user_data: *mut c_void, change: *const TextI
         }
         let setting = unsafe { &*(user_data as *const NumberSetting) };
         let typed = unsafe { &*change }.text();
-        let accepted = parse_number(&typed).map(|v| {
-            let v = if setting.integer { v.round() } else { v };
-            v.clamp(setting.min, setting.max)
-        });
+        let accepted = parse_number(&typed).map(|v| setting.normalize(v));
         let value = match accepted {
             Some(v) => v,
             None => f64::from_bits(setting.last.load(Ordering::Relaxed)),
@@ -1058,6 +1054,23 @@ mod tests {
         assert_eq!(parse_number("abc"), None);
         assert_eq!(parse_number("inf"), None);
         assert_eq!(parse_number("NaN"), None);
+    }
+
+    #[test]
+    fn number_settings_normalize_and_format() {
+        let plain = NumberSetting::new("A", 0.0, 10.0, None);
+        assert_eq!(plain.normalize(1.5), 1.5);
+        assert_eq!(plain.normalize(99.0), 10.0);
+        assert_eq!(plain.normalize(-1.0), 0.0);
+        assert_eq!(plain.text(2.0), "2");
+
+        let whole = NumberSetting::whole("B", -5.0, 5.0, None);
+        assert_eq!(whole.normalize(1.5), 2.0); // rounded: `1.5` would not parse as an int
+        assert_eq!(whole.normalize(-9.0), -5.0);
+
+        let float = NumberSetting::float("C", 0.0, 10.0, None);
+        assert_eq!(float.text(2.0), "2.0"); // keeps a TOML float field a float
+        assert_eq!(float.text(0.5), "0.5");
     }
 
     #[test]
