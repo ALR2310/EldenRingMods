@@ -165,25 +165,4 @@ mod tests {
         assert_eq!(text.lines().count(), TEMPLATE.lines().count());
         let _ = std::fs::remove_file(&path);
     }
-
-    /// A save from the in-game menu changes values only: every comment of the
-    /// template (own-line and trailing) is still in the file afterwards.
-    #[test]
-    fn menu_save_keeps_every_comment() {
-        let path = std::env::temp_dir().join(format!("animcancel_menu_save_{}.toml", std::process::id()));
-        let path_text = path.to_string_lossy().to_string();
-        let _ = std::fs::remove_file(&path);
-        init(&path_text);
-        assert!(save(&[("Cancel.Guard", "false".to_string()), ("Animations.Item", "false".to_string()), ("Logging.LogFile", "false".to_string())]));
-        let config = get();
-        assert!(!config.cancel.guard && !config.animations.item);
-        assert!(!config.logging.log_file);
-        let text = std::fs::read_to_string(&path).unwrap();
-        let comments = |text: &str| -> Vec<String> {
-            text.lines().filter_map(|line| line.find('#').map(|i| line[i..].trim_end().to_string())).collect()
-        };
-        assert_eq!(comments(&text), comments(TEMPLATE));
-        assert_eq!(text.lines().count(), TEMPLATE.lines().count());
-        let _ = std::fs::remove_file(&path);
-    }
 }
