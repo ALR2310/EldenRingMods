@@ -1,4 +1,6 @@
-//! Minimal flat INI reader: "key=value" per line, "#" or ";" starts a comment.
+//! Minimal flat INI reader: "key=value" per line, "#" or ";" starts a comment,
+//! on its own line or after the value when preceded by whitespace
+//! (`Width=25   ; metres`).
 //! Section headers ("[Section]") are accepted but ignored - all keys share one
 //! namespace. Generic over the caller's own default template: unlike a
 //! per-mod copy of this file, this crate has no ini of its own to embed, so
@@ -11,6 +13,22 @@ use std::sync::{LazyLock, RwLock};
 
 static VALUES: LazyLock<RwLock<HashMap<String, String>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
+
+/// Cuts a trailing comment off a value: the first `;` or `#` that follows
+/// whitespace (`true    ; teleport far spirits` -> `true`). Without this the
+/// whole text counted as the value, `get_bool`/`get_double` could not parse it
+/// and the mod silently fell back to its default. A `;` or `#` glued to the
+/// value (`a;b`) is part of it.
+fn strip_inline_comment(raw: &str) -> &str {
+    let mut previous_is_space = false;
+    for (index, c) in raw.char_indices() {
+        if previous_is_space && (c == ';' || c == '#') {
+            return &raw[..index];
+        }
+        previous_is_space = c.is_whitespace();
+    }
+    raw
+}
 
 fn parse(content: &str) -> HashMap<String, String> {
     let mut values = HashMap::new();
@@ -25,7 +43,7 @@ fn parse(content: &str) -> HashMap<String, String> {
         }
         let Some(eq) = trimmed.find('=') else { continue };
         let key = trimmed[..eq].trim().to_string();
-        let value = trimmed[eq + 1..].trim().to_string();
+        let value = strip_inline_comment(&trimmed[eq + 1..]).trim().to_string();
         values.insert(key, value);
     }
     values
@@ -161,6 +179,16 @@ fn migrate_with_renames(ini_path: &str, default_ini: &str, renames: &[(&str, &st
     missing_count
 }
 
+/// Writes `contents` to `path` through a temporary file next to it and a rename,
+/// so a crash or a second writer never leaves a half-written config behind.
+pub(crate) fn write_atomic(path: &str, contents: &str) -> std::io::Result<()> {
+    let temp = format!("{path}.tmp");
+    fs::write(&temp, contents)?;
+    fs::rename(&temp, path).inspect_err(|_| {
+        let _ = fs::remove_file(&temp);
+    })
+}
+
 /// Writes `values` (key, value) back into `ini_path` and the shared config
 /// map - for a mod that saves state the player changed in-game (e.g. a
 /// menu's position). Each key's existing `key=value` line is rewritten in
@@ -202,7 +230,7 @@ pub fn set_values(ini_path: &str, values: &[(&str, String)]) -> bool {
     }
     let mut out = lines.join(newline);
     out.push_str(newline);
-    fs::write(ini_path, out).is_ok()
+    write_atomic(ini_path, &out).is_ok()
 }
 
 pub fn get_string(key: &str, default: &str) -> String {
@@ -250,6 +278,30 @@ pub fn get_bool(key: &str, default: bool) -> bool {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn trailing_comments_are_not_part_of_the_value() {
+        let parsed = parse(
+            "WarpWhenFar=true    ; Teleport far spirits\n\
+             WarpDistance=25     ; metres\n\
+             Tab=1\t# tab then hash\n\
+             Empty=   ; nothing here\n\
+             Glued=a;b\n\
+             Hash=a#b\n\
+             Milestone=1800:5000,3600:10000 ; ok\n\
+             ; whole-line comment\n\
+             Plain=7\n",
+        );
+        assert_eq!(parsed["WarpWhenFar"], "true");
+        assert_eq!(parsed["WarpDistance"], "25");
+        assert_eq!(parsed["Tab"], "1");
+        assert_eq!(parsed["Empty"], "");
+        assert_eq!(parsed["Glued"], "a;b");
+        assert_eq!(parsed["Hash"], "a#b");
+        assert_eq!(parsed["Milestone"], "1800:5000,3600:10000");
+        assert_eq!(parsed["Plain"], "7");
+        assert!(!parsed.contains_key("; whole-line comment"));
+    }
 
     // A small stand-in template, not any real mod's ini - this crate has no
     // ini of its own, so the migrate() tests exercise it against a fixture

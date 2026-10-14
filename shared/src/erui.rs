@@ -10,7 +10,8 @@
 //!   do it early: the host closes registration ~750 ms after the last
 //!   provider activity (5 s absolute cap), later clients fail cleanly.
 //! - Row values are bytes (`u8`); a slider's `minimum`/`maximum`/`step` are
-//!   integers, so a fractional setting must be scaled by the caller.
+//!   integers. Decimals, negatives and anything wider than a byte are typed
+//!   into a text row instead ([`NumberSetting`]).
 //! - Value-changed callbacks run on the host's worker thread, button
 //!   callbacks on the UI thread. Keep them short; never panic across the ABI.
 //! - The host supports Elden Ring 2.7.0.0 and 2.7.1.0 only (matched by PE
@@ -18,7 +19,7 @@
 
 use std::ffi::c_void;
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
@@ -410,6 +411,7 @@ impl Provider {
 
     /// Adds a slider row to `page`. `step` and the range are integers; the host owns the
     /// byte value and reports player changes through `callback`.
+    #[allow(clippy::too_many_arguments)]
     pub fn add_slider(
         &self,
         page: PageHandle,
@@ -448,6 +450,7 @@ impl Provider {
 
     /// Adds a row cycled with left/right through `options` (1-32 labels); the
     /// value is the zero-based index of the selected label.
+    #[allow(clippy::too_many_arguments)]
     pub fn add_inline_choice(
         &self,
         page: PageHandle,
@@ -484,6 +487,7 @@ impl Provider {
 
     /// Adds a row that opens the game's text editor; the callback gets the
     /// confirmed text when it changed. `maximum_length` is 1..=35 UTF-16 units.
+    #[allow(clippy::too_many_arguments)]
     pub fn add_text_input(
         &self,
         page: PageHandle,
@@ -585,8 +589,8 @@ impl Provider {
     pub fn commit(mut self) -> Result<Registration, String> {
         let status = unsafe { (self.api.commit_provider.unwrap())(self.provider) };
         if status != ERUI_OK {
-            // The host already dropped the draft; nothing to abort.
-            self.committed = true;
+            // A rejected commit (e.g. a callback outside this module) leaves the
+            // draft in the host; Drop aborts it so it cannot stall the host's startup.
             return Err(format!("commit_provider: {}", result_name(status)));
         }
         self.committed = true;
@@ -655,10 +659,42 @@ pub struct Setting {
 }
 
 impl Setting {
+    /// A toggle row stored as `true` / `false`.
+    pub const fn flag(key: &'static str) -> Self {
+        Setting { key, format: format_bool, apply: None }
+    }
+
+    /// A choice or slider row stored as its byte (`0`, `1`, ...).
+    pub const fn int(key: &'static str) -> Self {
+        Setting { key, format: format_int, apply: None }
+    }
+
     /// The `user_data` pointer for the row; `self` must be a `static`.
     pub fn user_data(&'static self) -> *mut c_void {
         self as *const Setting as *mut c_void
     }
+}
+
+/// `format` for a toggle: the byte as `true` / `false`.
+pub fn format_bool(value: u8) -> String {
+    (value != 0).to_string()
+}
+
+/// `format` for a choice or slider: the byte as a number.
+pub fn format_int(value: u8) -> String {
+    value.to_string()
+}
+
+/// Set by [`reload_from_menu`] and consumed by the next [`Menu::sync`], so a
+/// re-apply that the menu itself asked for does not put every row back to the
+/// config's values while the player is already editing another one.
+static MENU_RELOAD: AtomicBool = AtomicBool::new(false);
+
+/// For `on_saved` of a mod that re-applies on `RELOAD_GENERATION`: asks the mod
+/// to re-apply like the reload key does, without the menu re-reading its rows.
+pub fn reload_from_menu() {
+    MENU_RELOAD.store(true, Ordering::Release);
+    crate::reload::RELOAD_GENERATION.fetch_add(1, Ordering::Relaxed);
 }
 
 type Pending = (&'static str, String);
@@ -676,8 +712,13 @@ pub fn start_saver(ini_path: String, on_saved: Option<fn()>) {
     start_saver_with(
         move |changes| {
             // Also updates the shared config map, which a mod (and the log
-            // switch, see `logger`) reads from.
-            config::set_values(&ini_path, changes)
+            // switch, see `logger`) reads from, so a failed write still applies
+            // until the game closes.
+            let saved = config::set_values(&ini_path, changes);
+            if !saved {
+                logger::log("In-game menu: couldn't write the ini; the change applies until the game closes.");
+            }
+            saved
         },
         on_saved,
     );
@@ -712,7 +753,7 @@ pub fn start_saver_with(mut write: impl FnMut(&[(&'static str, String)]) -> bool
             if write(&changes) {
                 logger::log(&format!("In-game menu: saved {changes:?}."));
             } else {
-                logger::log("In-game menu: couldn't save the config; the change applies until the game closes.");
+                logger::log("In-game menu: couldn't save the config.");
             }
             changes.clear();
             if let Some(on_saved) = on_saved {
@@ -724,6 +765,10 @@ pub fn start_saver_with(mut write: impl FnMut(&[(&'static str, String)]) -> bool
 
 /// Value-changed callback for rows whose `user_data` is a [`Setting`]. Runs on
 /// the host's worker thread; never panics across the C ABI.
+///
+/// # Safety
+/// `user_data` must be null or [`Setting::user_data`] of a `static` [`Setting`]
+/// (the host hands back the pointer given when the row was added).
 pub unsafe extern "C" fn setting_changed(user_data: *mut c_void, value: u8) {
     let _ = std::panic::catch_unwind(|| {
         if user_data.is_null() {
@@ -735,6 +780,152 @@ pub unsafe extern "C" fn setting_changed(user_data: *mut c_void, value: u8) {
         }
         if let Some(tx) = SAVER.get() {
             let _ = tx.send((setting.key, (setting.format)(value)));
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// A mod's whole menu: build once, follow config reloads
+// ---------------------------------------------------------------------------
+
+type ByteReader = fn() -> u8;
+type NumberReader = fn() -> f64;
+
+/// A committed menu: every row with the function that reads its value from the
+/// mod's config, so [`Menu::sync`] can show a reloaded config.
+pub struct Menu {
+    registration: Registration,
+    rows: Vec<(RowHandle, ByteReader)>,
+    numbers: Vec<(&'static NumberSetting, NumberReader)>,
+}
+
+impl Menu {
+    /// Shows the current config values in every row (call after a config reload).
+    /// Skipped once when the reload was asked for by the menu itself
+    /// ([`reload_from_menu`]): the rows already hold what the player typed.
+    pub fn sync(&self) {
+        if MENU_RELOAD.swap(false, Ordering::AcqRel) {
+            return;
+        }
+        for (row, read) in &self.rows {
+            if let Err(reason) = self.registration.set_row_value(*row, read()) {
+                logger::log(&format!("In-game menu: couldn't update a row ({reason})."));
+            }
+        }
+        for (setting, read) in &self.numbers {
+            if let Err(reason) = setting.show(&self.registration, read()) {
+                logger::log(&format!("In-game menu: couldn't update a row ({reason})."));
+            }
+        }
+    }
+}
+
+/// Collects the rows of one mod's menu; every row added here is remembered with
+/// its reader for [`Menu::sync`].
+pub struct MenuBuilder {
+    provider: Provider,
+    rows: Vec<(RowHandle, ByteReader)>,
+    numbers: Vec<(&'static NumberSetting, NumberReader)>,
+}
+
+impl MenuBuilder {
+    /// The mod's row on System > Game Options is the parent of its top page.
+    pub fn root(&self) -> PageHandle {
+        self.provider.root_page()
+    }
+
+    /// The underlying provider, for a row the helpers below do not cover.
+    pub fn provider(&self) -> &Provider {
+        &self.provider
+    }
+
+    /// A row on `parent` that opens a page titled `name`; returns that page.
+    pub fn submenu(&self, parent: PageHandle, name: &str, help: &str) -> Result<PageHandle, String> {
+        Ok(self.provider.add_submenu(parent, name, help, name, help)?.0)
+    }
+
+    /// An on/off row; `read` gives its current value (`0` or `1`) from the config.
+    pub fn toggle(&mut self, page: PageHandle, label: &str, help: &str, setting: &'static Setting, read: ByteReader) -> Result<(), String> {
+        let row = self.provider.add_toggle(page, label, help, read() != 0, setting_changed, setting.user_data())?;
+        self.rows.push((row, read));
+        Ok(())
+    }
+
+    /// A left/right row over `options` (1-32 labels); the value is the index.
+    pub fn choice(
+        &mut self,
+        page: PageHandle,
+        label: &str,
+        help: &str,
+        options: &[&str],
+        setting: &'static Setting,
+        read: ByteReader,
+    ) -> Result<(), String> {
+        let row = self.provider.add_inline_choice(page, label, help, options, read(), setting_changed, setting.user_data())?;
+        self.rows.push((row, read));
+        Ok(())
+    }
+
+    /// A slider over the whole numbers `min..=max` (step 1, at most 255).
+    #[allow(clippy::too_many_arguments)]
+    pub fn slider(
+        &mut self,
+        page: PageHandle,
+        label: &str,
+        help: &str,
+        min: i32,
+        max: i32,
+        setting: &'static Setting,
+        read: ByteReader,
+    ) -> Result<(), String> {
+        let row = self.provider.add_slider(page, label, help, min, max, 1, read(), setting_changed, setting.user_data())?;
+        self.rows.push((row, read));
+        Ok(())
+    }
+
+    /// A text row for a number (see [`NumberSetting`]); `read` gives the config's value.
+    pub fn number(&mut self, page: PageHandle, label: &str, help: &str, setting: &'static NumberSetting, read: NumberReader) -> Result<(), String> {
+        self.provider.add_number(page, label, help, setting, read())?;
+        self.numbers.push((setting, read));
+        Ok(())
+    }
+}
+
+/// Registers a mod's menu on a worker thread and stores it in `slot` once the
+/// host has installed it. Call it very early in the mod's startup thread: the
+/// host only accepts registrations in its first seconds. Without the host (or on
+/// an unsupported game build) it logs one line and the mod runs from its config
+/// file exactly as before. `build` adds the rows (typically a submenu on
+/// [`MenuBuilder::root`] with everything inside).
+pub fn spawn_menu(
+    slot: &'static OnceLock<Menu>,
+    hmodule: u64,
+    provider_id: &'static str,
+    display_name: &'static str,
+    build: fn(&mut MenuBuilder) -> Result<(), String>,
+) {
+    std::thread::spawn(move || {
+        let connection = match connect(Duration::from_secs(10)) {
+            Ok(connection) => connection,
+            Err(reason) => {
+                logger::log(&format!("In-game menu unavailable ({reason}); using the config file only."));
+                return;
+            }
+        };
+        let result = (|| {
+            let provider = connection.register_provider(provider_id, display_name, hmodule)?;
+            let mut builder = MenuBuilder { provider, rows: Vec::new(), numbers: Vec::new() };
+            build(&mut builder)?;
+            let MenuBuilder { provider, rows, numbers } = builder;
+            let registration = provider.commit()?;
+            Ok::<_, String>(Menu { registration, rows, numbers })
+        })();
+        match result {
+            Ok(menu) => {
+                let _ = slot.set(menu);
+                logger::log("In-game menu: registered.");
+            }
+            Err(reason) => logger::log(&format!("In-game menu registration failed: {reason}")),
         }
     });
 }
@@ -836,10 +1027,10 @@ unsafe extern "C" fn number_changed(user_data: *mut c_void, change: *const TextI
         // Show the number actually in use (clamped, normalised, or the old one
         // when the text was not a number).
         let shown = setting.text(value);
-        if shown != typed.trim() {
-            if let (Some(registration), Some(row)) = (REGISTRATION.get(), setting.row.get()) {
-                let _ = registration.set_text(*row, &shown);
-            }
+        if shown != typed.trim()
+            && let (Some(registration), Some(row)) = (REGISTRATION.get(), setting.row.get())
+        {
+            let _ = registration.set_text(*row, &shown);
         }
         if accepted.is_none() {
             return;
