@@ -161,6 +161,36 @@ where
     pub fn path(&self) -> &str {
         &self.path
     }
+
+    /// Writes `values` (`("Section.Key", "text")`) into the file, keeping its
+    /// comments and layout, then re-reads it - for a mod that saves what the
+    /// player changed in-game (the ini `config::set_values`). Each text becomes
+    /// a bool (`true`/`false`), an integer, a float or else a string. On error
+    /// the file is left as it was (a failed re-read keeps the last good config).
+    pub fn save_values(&self, values: &[(&str, String)]) -> Result<(), String> {
+        let text = fs::read_to_string(&self.path).map_err(|e| e.to_string())?;
+        let mut doc: DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| e.to_string())?;
+        let template: DocumentMut = self.template.parse().map_err(|e: toml_edit::TomlError| e.to_string())?;
+        for (path, value) in values {
+            set_value(&mut doc, &template, path, scalar(value));
+        }
+        fs::write(&self.path, doc.to_string()).map_err(|e| e.to_string())?;
+        self.reload()
+    }
+}
+
+/// `true`/`false` -> bool, `42` -> integer, `1.5` -> float, anything else a string.
+fn scalar(text: &str) -> toml_edit::Value {
+    if let Ok(v) = text.parse::<bool>() {
+        return v.into();
+    }
+    if let Ok(v) = text.parse::<i64>() {
+        return v.into();
+    }
+    if let Ok(v) = text.parse::<f64>() {
+        return v.into();
+    }
+    text.into()
 }
 
 /// `#[serde(deserialize_with = "common::toml_config::key_name")]` for a
@@ -711,5 +741,169 @@ Walk = 1.1
         let mut d = doc("[Player]\nRun = 1.0 # mine\n");
         set_value(&mut d, &template, "Player.Run", 2.0);
         assert!(d.to_string().contains("Run = 2.0 # mine"), "{}", d);
+    }
+
+    // ---- save_values / scalar ----
+
+    #[test]
+    fn scalar_types_the_text() {
+        assert_eq!(scalar("true").as_bool(), Some(true));
+        assert_eq!(scalar("false").as_bool(), Some(false));
+        assert_eq!(scalar("42").as_integer(), Some(42));
+        assert_eq!(scalar("-3").as_integer(), Some(-3));
+        assert_eq!(scalar("1.5").as_float(), Some(1.5));
+        assert_eq!(scalar("1.0").as_float(), Some(1.0));
+        assert_eq!(scalar("F5").as_str(), Some("F5"));
+        assert_eq!(scalar("").as_str(), Some(""));
+        // Not a number: stays text.
+        assert_eq!(scalar("1.2.3").as_str(), Some("1.2.3"));
+    }
+
+    #[derive(serde::Deserialize, serde::Serialize, Default, Debug, Clone, PartialEq)]
+    #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
+    struct SaveCfg {
+        general: SaveGeneral,
+        player: SavePlayer,
+        extra: SaveExtra,
+    }
+
+    #[derive(serde::Deserialize, serde::Serialize, Default, Debug, Clone, PartialEq)]
+    #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
+    struct SaveGeneral {
+        reload_key: String,
+        count: i64,
+    }
+
+    #[derive(serde::Deserialize, serde::Serialize, Default, Debug, Clone, PartialEq)]
+    #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
+    struct SavePlayer {
+        walk: f32,
+        run: f32,
+        guard: bool,
+    }
+
+    #[derive(serde::Deserialize, serde::Serialize, Default, Debug, Clone, PartialEq)]
+    #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
+    struct SaveExtra {
+        // Present in the template only, so a save has to create it.
+        boost: f32,
+    }
+
+    const SAVE_TEMPLATE: &str = "\
+[General]
+# Reload key
+ReloadKey = \"F5\"
+Count = 1
+
+[Player]
+# Groups of actions.
+Walk = 1.1          # walking
+Run = 1.2           # running
+Guard = true        # raising the guard
+
+[Extra]
+# Added by a newer version.
+Boost = 2.0         # more speed
+";
+
+    /// A config over a fresh temp file holding `text`.
+    fn save_config(name: &str, text: &str) -> (TomlConfig<SaveCfg>, String) {
+        let path = std::env::temp_dir().join(format!("toml_config_test_{}_{name}.toml", std::process::id()));
+        fs::write(&path, text).unwrap();
+        let path = path.to_string_lossy().to_string();
+        let current = parse::<SaveCfg>(text, SAVE_TEMPLATE).unwrap();
+        let config = TomlConfig { path: path.clone(), template: SAVE_TEMPLATE.to_string(), current: RwLock::new(Arc::new(current)) };
+        (config, path)
+    }
+
+    const USER_FILE: &str = "\
+[General]
+# my own note on the key
+ReloadKey = \"F6\"   # mine
+Count = 1
+
+# Groups of actions.
+[Player]
+Walk = 1.1          # walking
+Run = 1.2           # running
+Guard = true        # raising the guard
+";
+
+    #[test]
+    fn save_values_keeps_comments_and_layout_and_updates_the_snapshot() {
+        let (config, path) = save_config("layout", USER_FILE);
+        config.save_values(&[("Player.Run", "1.5".to_string())]).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        // Only that value changed: same text with the one line swapped.
+        assert_eq!(text, USER_FILE.replace("Run = 1.2 ", "Run = 1.5 "));
+        assert!(text.contains("# my own note on the key"));
+        assert!(text.contains("ReloadKey = \"F6\"   # mine"));
+        assert!(text.contains("Walk = 1.1          # walking"));
+        // The snapshot was re-read from the file.
+        assert_eq!(config.get().player.run, 1.5);
+        assert_eq!(config.get().player.walk, 1.1);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn save_values_types_bool_int_float_and_string() {
+        let (config, path) = save_config("types", USER_FILE);
+        config
+            .save_values(&[
+                ("Player.Guard", "false".to_string()),
+                ("General.Count", "7".to_string()),
+                ("Player.Walk", "0.5".to_string()),
+                ("General.ReloadKey", "F7".to_string()),
+            ])
+            .unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        let d = doc(&text);
+        assert_eq!(d["Player"]["Guard"].as_bool(), Some(false));
+        assert_eq!(d["General"]["Count"].as_integer(), Some(7));
+        assert_eq!(d["Player"]["Walk"].as_float(), Some(0.5));
+        assert_eq!(d["General"]["ReloadKey"].as_str(), Some("F7"));
+        assert!(text.contains("Guard = false"));
+        assert!(text.contains("ReloadKey = \"F7\""));
+        // Inline comments stay.
+        assert!(text.contains("# mine") && text.contains("# raising the guard"));
+        let now = config.get();
+        assert!(!now.player.guard);
+        assert_eq!(now.general.count, 7);
+        assert_eq!(now.general.reload_key, "F7");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn save_values_creates_an_unknown_key_with_the_templates_comment() {
+        let (config, path) = save_config("create", USER_FILE);
+        assert!(!USER_FILE.contains("[Extra]"));
+        config.save_values(&[("Extra.Boost", "3.0".to_string())]).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        // The table and the key come with the template's comments.
+        assert!(text.contains("[Extra]\n# Added by a newer version.\nBoost = 3.0"), "{text}");
+        assert!(text.contains("Boost = 3.0         # more speed"), "{text}");
+        // The rest is untouched.
+        assert!(text.starts_with(USER_FILE), "{text}");
+        assert_eq!(config.get().extra.boost, 3.0);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn save_values_creates_a_missing_key_in_an_existing_table() {
+        let user = "[Player]\nWalk = 1.1\n";
+        let (config, path) = save_config("missing", user);
+        config.save_values(&[("Player.Run", "2.5".to_string())]).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("Walk = 1.1"));
+        assert!(text.contains("Run = 2.5") && text.contains("# running"), "{text}");
+        assert_eq!(config.get().player.run, 2.5);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn save_values_on_a_missing_file_is_an_error() {
+        let (config, path) = save_config("gone", USER_FILE);
+        fs::remove_file(&path).unwrap();
+        assert!(config.save_values(&[("Player.Run", "2.0".to_string())]).is_err());
     }
 }
