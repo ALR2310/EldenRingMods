@@ -1,60 +1,11 @@
-//! TOML config for mods whose settings outgrow a flat ini - lists of rules,
-//! per-entry tables (SpeedMultiplier's SpEffect rules, 2026-10-02). The ini
-//! reader ([`crate::config`]) folds every `[Section]` into one namespace and
-//! has no arrays, so that shape would need numbered keys (`Speed01`...).
-//!
-//! Each mod declares its settings as a serde struct `T`:
-//! `#[derive(Default)]` + `#[serde(default, deny_unknown_fields)]` on every
-//! struct. **The defaults live only in the mod's embedded template**
-//! (2026-10-02 - before, every value was written twice, in the template
-//! and in a hand-written `Default`, kept equal by a test). A file is read
-//! in two passes ([parse]): the user's text alone, for errors with their
-//! line (missing keys get the derived zero values there); then the
-//! user's values laid over the template's, for the real config - so a
-//! missing key gets its template value. `T::default()` (zeros) is never
-//! a config in use; [defaults] is the template's. A mod test should
-//! assert [template_missing_keys] is empty, or a field the template lacks
-//! would silently be zero.
-//! - Missing keys fall back to the template, so an old file still loads.
-//! - Unknown/misspelled keys and wrong types are an error *with the line*
-//!   (toml's own message), not silently ignored - on reload, while the user
-//!   is editing. At start-up they are moved out first (below).
-//! - A file that fails to parse never replaces the config in use: at
-//!   start-up the mod runs on the template's values, on reload it keeps
-//!   the last good config.
-//!
-//! Versioned migrations (2026-10-02, replacing a flat rename list - it
-//! depended on its own order, couldn't split or convert a key, and a
-//! dropped entry silently lost a value). The file carries a format version
-//! at [`Migration::version_key`] (e.g. `General.ConfigVersion`); the
-//! template's value there is the current version. A file without one is
-//! version 1, the first released format. [`Migration::steps`]`[i]` takes a
-//! file from version `i + 1` to `i + 2`, so each step runs exactly once per
-//! file, in order. **A released step must never change** - files already
-//! past it would not rerun it; fix mistakes with a new step.
-//!
-//! Start-up brings an existing file in line with the template, via
-//! `toml_edit` so the user's own comments, values and layout are kept:
-//! 1. The migration steps the file hasn't run yet, then its version is set
-//!    to the current one.
-//! 2. Keys and tables the template has but the file lacks are added, with
-//!    the template's comments (new keys after an update).
-//! 3. Keys the template doesn't have are taken out and written back as
-//!    comments in a block at the end of the file - the ini's `[Legacy]`,
-//!    but a comment so the file still parses. Top-level names in
-//!    [`Migration::keep`] are left alone (lists the template has no entry
-//!    for, e.g. `[[Override]]`).
-//! A file from a *newer* version (the mod was downgraded) is not touched
-//! at all - step 3 would otherwise strip the newer keys. A file that isn't
-//! valid TOML is left untouched (the parse step reports it). No file -> the
-//! template is written.
-//!
-//! The parsed config is an `Arc<T>` snapshot: [`TomlConfig::get`] once per
-//! tick, then plain field reads (no string-keyed lookups per value).
-//!
-//! Logging and the reload hotkey still come from the ini-based `logger` /
-//! `reload` by default; a TOML mod drives them with
-//! [`crate::logger::set_enabled`] and [`crate::reload::run_with`].
+//! TOML config for mods whose settings outgrow a flat ini (lists of rules,
+//! per-entry tables). A mod declares a serde struct `T` and an embedded
+//! template that holds every default; the file is read in two passes (errors
+//! with their line, then the user's values laid over the template), brought in
+//! line with the template at start-up via `toml_edit` (versioned migration
+//! steps, missing keys added, unknown keys kept as comments), and the parsed
+//! config is an `Arc<T>` snapshot: [`TomlConfig::get`] once per tick. Design,
+//! rules and history: `shared/docs/toml_config.md`.
 
 use std::fs;
 use std::sync::{Arc, RwLock};
@@ -116,16 +67,16 @@ where
             Ok(text) => {
                 let sync = sync_with_template(&text, template, migration);
                 report.newer = sync.newer;
-                if let Some(new_text) = &sync.text {
-                    if fs::write(path, new_text).is_ok() {
-                        report.migrated = sync.migrated;
-                        report.added_keys = sync.added;
-                        report.unknown = sync.unknown;
-                    }
+                if let Some(new_text) = &sync.text
+                    && crate::config::write_atomic(path, new_text).is_ok()
+                {
+                    report.migrated = sync.migrated;
+                    report.added_keys = sync.added;
+                    report.unknown = sync.unknown;
                 }
             }
             Err(_) => {
-                report.created = fs::write(path, template).is_ok();
+                report.created = crate::config::write_atomic(path, template).is_ok();
             }
         }
 
@@ -182,15 +133,14 @@ where
 /// `true`/`false` -> bool, `42` -> integer, `1.5` -> float, anything else a string.
 fn scalar(text: &str) -> toml_edit::Value {
     if let Ok(v) = text.parse::<bool>() {
-        return v.into();
+        v.into()
+    } else if let Ok(v) = text.parse::<i64>() {
+        v.into()
+    } else if let Ok(v) = text.parse::<f64>() {
+        v.into()
+    } else {
+        text.into()
     }
-    if let Ok(v) = text.parse::<i64>() {
-        return v.into();
-    }
-    if let Ok(v) = text.parse::<f64>() {
-        return v.into();
-    }
-    text.into()
 }
 
 /// `#[serde(deserialize_with = "common::toml_config::key_name")]` for a

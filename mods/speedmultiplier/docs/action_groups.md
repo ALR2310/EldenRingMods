@@ -13,7 +13,9 @@ tra prefix `XXX`: `tae-ids.md`.
    - `400..600` → **Cast** (sorcery/incantation); ví dụ `a435_045100/045110/045111` là
      incantation Golden Vow.
    - `600..1000` → **Skill** (Ash of War/Sword Art), trừ một số prefix của bộ chiêu vũ khí
-     đặc biệt nằm trong dải đó (`WEAPON_TAES_IN_SKILL_RANGE`); ví dụ `a885_040xxx` là AoW
+     đặc biệt nằm trong dải đó (`WEAPON_TAES_IN_SKILL_RANGE`: `831` Axe of Godfrey, `832`
+     Starscourge Greatsword, `839` Ghiza's Wheel, `852` Ornamental Straight Sword, `935`
+     Repeating Crossbow, `953` Rakshasa's Great Katana); ví dụ `a885_040xxx` là AoW
      Carian Sovereignty.
 2. **Theo đuôi** (`anim_id % 1_000_000`) cho mọi thứ còn lại (bảng dưới).
 3. Mọi anim không khớp → **Other**.

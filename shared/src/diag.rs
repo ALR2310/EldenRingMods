@@ -1,27 +1,8 @@
-//! Environment dump for bug-report logs (2026-09-26): the game exe's file
-//! version + PE timestamp, and every non-system DLL loaded into the process
-//! (name, file version, base, size) - modeled on the header MapForGoblins
-//! prints at startup.
-//!
-//! Added after a WeightMultiplier report where the log only said "anchor
-//! pattern not found" - with no way to tell from it whether the user was on a
-//! different game version or had another weight mod patching the same code.
-//! With this, the log answers both questions itself.
-//!
-//! The list skips Windows' own DLLs (anything under the Windows directory),
-//! the exe itself (already on the `Game:` line) and [HIDDEN_MODULES] - the
-//! game's bundled runtime DLLs and what the Steam client injects - so what's
-//! left is proxy loaders (dinput8/winmm/dxgi), mod loaders and mods: exactly
-//! what matters when two mods collide.
-//!
-//! Privacy (2026-09-26): users are asked to post this log publicly (Nexus
-//! comments), so it must not reveal more than needed. A module inside the
-//! game folder is printed relative to it (`modengine2\bin\lua.dll`, which
-//! also shows which loader a DLL belongs to); one outside it only by file
-//! name - its full path could contain the Windows account name
-//! (`C:\Users\<name>\...`). `steam_api64.dll` and `OnlineFix64.dll` are
-//! hidden too, even though they'd hint at a cracked install: that's not
-//! something a user should have to disclose to get help with a mod.
+//! Environment dump for bug-report logs: the game exe and every non-system
+//! DLL loaded into the process, so a log shows which game build and which
+//! other mods were running. The log is posted publicly, so paths are never
+//! printed in full. What is listed, what is hidden and why:
+//! `shared/docs/diag.md`.
 
 use std::ffi::c_void;
 
@@ -51,7 +32,7 @@ pub struct ModuleInfo {
     pub base: usize,
     /// `SizeOfImage` from the in-memory PE header.
     pub size: u32,
-    /// `FileHeader.TimeDateStamp` - identifies the exact build even when the
+    /// `FileHeader.TimeDateStamp`: identifies the exact build even when the
     /// file version string wasn't bumped.
     pub timestamp: u32,
     /// `a.b.c.d` from the file's version resource; `0.0.0.0` if it has none
@@ -63,39 +44,39 @@ fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-fn file_version(path: &str) -> String {
+fn read_file_version(path: &str) -> Option<String> {
     let path_w = wide(path);
     unsafe {
         let mut handle = 0u32;
         let size = GetFileVersionInfoSizeW(path_w.as_ptr(), &mut handle);
         if size == 0 {
-            return "0.0.0.0".to_string();
+            return None;
         }
         let mut data = vec![0u8; size as usize];
         if GetFileVersionInfoW(path_w.as_ptr(), 0, size, data.as_mut_ptr() as *mut c_void) == 0 {
-            return "0.0.0.0".to_string();
+            return None;
         }
         let mut info: *mut c_void = std::ptr::null_mut();
         let mut len = 0u32;
         let root = wide("\\");
         // VS_FIXEDFILEINFO: dwSignature, dwStrucVersion, dwFileVersionMS, dwFileVersionLS, ...
         if VerQueryValueW(data.as_ptr() as *const c_void, root.as_ptr(), &mut info, &mut len) == 0 || len < 16 {
-            return "0.0.0.0".to_string();
+            return None;
         }
         let fixed = info as *const u32;
-        let (ms, ls) = (*fixed.add(2), *fixed.add(3));
-        format!("{}.{}.{}.{}", ms >> 16, ms & 0xFFFF, ls >> 16, ls & 0xFFFF)
+        let (ms, ls) = (fixed.add(2).read_unaligned(), fixed.add(3).read_unaligned());
+        Some(format!("{}.{}.{}.{}", ms >> 16, ms & 0xFFFF, ls >> 16, ls & 0xFFFF))
     }
 }
 
 /// Reads `(SizeOfImage, TimeDateStamp)` from a loaded module's PE header.
 fn pe_size_and_timestamp(base: *const u8) -> (u32, u32) {
     unsafe {
-        let e_lfanew = *(base.add(0x3C) as *const i32);
+        let e_lfanew = (base.add(0x3C) as *const i32).read_unaligned();
         let nt = base.add(e_lfanew as usize);
-        // NT headers: Signature(4) + FileHeader(20: .., TimeDateStamp at +4) + OptionalHeader(SizeOfImage at +56)
-        let timestamp = *(nt.add(4 + 4) as *const u32);
-        let size = *(nt.add(4 + 20 + 56) as *const u32);
+        // NT headers: Signature(4) + FileHeader(20, TimeDateStamp at +4) + OptionalHeader(SizeOfImage at +56)
+        let timestamp = (nt.add(4 + 4) as *const u32).read_unaligned();
+        let size = (nt.add(4 + 20 + 56) as *const u32).read_unaligned();
         (size, timestamp)
     }
 }
@@ -104,12 +85,12 @@ fn module_info(hmodule: *mut c_void) -> Option<ModuleInfo> {
     let path = module_path(hmodule)?;
     let name = path.rsplit('\\').next().unwrap_or(&path).to_string();
     let (size, timestamp) = pe_size_and_timestamp(hmodule as *const u8);
-    Some(ModuleInfo { version: file_version(&path), name, path, base: hmodule as usize, size, timestamp })
+    let version = read_file_version(&path).unwrap_or_else(|| "0.0.0.0".to_string());
+    Some(ModuleInfo { version, name, path, base: hmodule as usize, size, timestamp })
 }
 
-/// Every module currently loaded in this process, in load order (the main
-/// exe first).
-pub fn loaded_modules() -> Vec<ModuleInfo> {
+/// Handles of every module in this process, in load order (the main exe first).
+fn module_handles() -> Vec<*mut c_void> {
     let mut handles: Vec<*mut c_void> = vec![std::ptr::null_mut(); 512];
     loop {
         let mut needed = 0u32;
@@ -121,15 +102,36 @@ pub fn loaded_modules() -> Vec<ModuleInfo> {
         let count = needed as usize / size_of::<*mut c_void>();
         if count <= handles.len() {
             handles.truncate(count);
-            break;
+            return handles;
         }
         handles.resize(count, std::ptr::null_mut());
     }
-    handles.into_iter().filter_map(module_info).collect()
+}
+
+/// Every module currently loaded in this process, in load order (the main
+/// exe first). Reads each file's version resource, so prefer
+/// [module_containing] / [is_module_loaded] for a single lookup.
+pub fn loaded_modules() -> Vec<ModuleInfo> {
+    module_handles().into_iter().filter_map(module_info).collect()
+}
+
+/// Whether a module with this file name (e.g. `ersc.dll`) is loaded.
+pub fn is_module_loaded(name: &str) -> bool {
+    !unsafe { GetModuleHandleW(wide(name).as_ptr()) }.is_null()
+}
+
+/// The loaded module whose image contains `addr`, if any - e.g. to name
+/// which DLL a foreign `jmp` patched into game code points into.
+pub fn module_containing(addr: usize) -> Option<ModuleInfo> {
+    let handle = module_handles().into_iter().find(|&h| {
+        let base = h as usize;
+        addr >= base && addr < base + pe_size_and_timestamp(h as *const u8).0 as usize
+    })?;
+    module_info(handle)
 }
 
 /// Game-bundled and Steam-client DLLs left out of the logged list (compared
-/// case-insensitively) - see the module doc.
+/// case-insensitively).
 const HIDDEN_MODULES: &[&str] = &[
     // Shipped with the game
     "bink2w64.dll",
@@ -142,16 +144,15 @@ const HIDDEN_MODULES: &[&str] = &[
     "tier0_s64.dll",
     "vstdlib_s64.dll",
     "gameoverlayrenderer64.dll",
-    // Online-play crack - same reasoning as steam_api64 (see module doc)
+    // Hidden for the same reason as steam_api64 (see docs)
     "onlinefix64.dll",
 ];
 
 /// `m`'s path relative to `game_dir` if it's inside it, else just its file
-/// name - never a full path (see module doc).
+/// name - never a full path.
 fn display_path(m: &ModuleInfo, game_dir: &str) -> String {
-    // Byte-length compare, not `to_lowercase()` on both sides: lowercasing a
-    // non-ASCII path can change its byte length, and slicing by the wrong
-    // length would panic on exactly the paths that broke `dll_dir` before.
+    // Compare by byte length, not `to_lowercase()` on both sides: lowercasing
+    // a non-ASCII path can change its length and the slice would panic.
     let n = game_dir.len();
     let inside = n > 0
         && m.path.is_char_boundary(n)
@@ -169,33 +170,16 @@ fn windows_dir() -> String {
     String::from_utf16_lossy(&buf[..n]).to_lowercase()
 }
 
-/// The loaded module whose image contains `addr`, if any - e.g. to name
-/// which DLL a foreign `jmp` patched into game code points into.
-pub fn module_containing(addr: usize) -> Option<ModuleInfo> {
-    loaded_modules().into_iter().find(|m| addr >= m.base && addr < m.base + m.size as usize)
-}
-
-/// Logs the game exe line and the non-system module list (see module doc).
-/// Call it late enough that the other mods have loaded too - e.g. right
-/// before the mod's own AOB scan/hook install, not straight from `DllMain`.
+/// Logs the non-system module list, the game exe first. Call it after the
+/// other mods have loaded, not straight from `DllMain`.
 pub fn log_environment() {
     let exe = unsafe { GetModuleHandleW(std::ptr::null()) };
-    if let Some(game) = module_info(exe) {
-        logger::log(&format!(
-            "Game: {} v{} base=0x{:X} size=0x{:X} ts=0x{:08X}",
-            game.name, game.version, game.base, game.size, game.timestamp
-        ));
-    }
-
-    let game_dir = module_path(exe)
-        .and_then(|p| p.rfind('\\').map(|i| p[..i].to_string()))
-        .unwrap_or_default();
+    let game_dir = module_path(exe).and_then(|p| crate::dir_of(&p).map(str::to_string)).unwrap_or_default();
     let win_dir = windows_dir();
     let mut hidden = 0;
     let modules: Vec<ModuleInfo> = loaded_modules()
         .into_iter()
-        // The exe is already fully described by the "Game:" line above.
-        .filter(|m| m.base != exe as usize && !m.path.to_lowercase().starts_with(&win_dir))
+        .filter(|m| !m.path.to_lowercase().starts_with(&win_dir))
         .filter(|m| {
             let hide = HIDDEN_MODULES.iter().any(|h| m.name.eq_ignore_ascii_case(h));
             hidden += hide as usize;
@@ -214,13 +198,10 @@ pub fn log_environment() {
     }
 }
 
-/// Waits for `CSTaskImp` (the game has finished initializing - every mod
-/// loader has loaded its DLLs by then), then [log_environment]. For a mod's
-/// startup thread, right before its feature starts: several features only
-/// reach their own `wait_for_cs_task` after the player is in the world,
-/// which would be too late for a "mod never started" report. The wait is
-/// cached (see `task::wait_for_cs_task`), so the feature's own later call
-/// returns immediately.
+/// Waits for `CSTaskImp` (by then every mod loader has loaded its DLLs), then
+/// [log_environment]. For a mod's startup thread, before its feature starts:
+/// several features only reach their own `wait_for_cs_task` once the player is
+/// in the world, too late for a "mod never started" report.
 pub fn log_environment_when_game_ready() {
     crate::task::wait_for_cs_task();
     log_environment();
@@ -238,8 +219,16 @@ mod tests {
         assert!(exe.size > 0 && exe.timestamp != 0);
         assert!(modules.iter().any(|m| m.name.eq_ignore_ascii_case("kernel32.dll") && m.version != "0.0.0.0"));
         // An address inside this test binary's own code resolves to the exe.
-        let here = lists_own_process_modules as usize;
+        let here = lists_own_process_modules as *const () as usize;
         assert_eq!(module_containing(here).map(|m| m.base), Some(exe.base));
+        assert!(module_containing(0).is_none());
+    }
+
+    #[test]
+    fn is_module_loaded_matches_by_file_name() {
+        assert!(is_module_loaded("kernel32.dll"));
+        assert!(is_module_loaded("KERNEL32.DLL"));
+        assert!(!is_module_loaded("no_such_module.dll"));
     }
 
     fn module(path: &str) -> ModuleInfo {

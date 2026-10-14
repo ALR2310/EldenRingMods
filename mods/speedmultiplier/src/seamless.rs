@@ -129,9 +129,7 @@ impl GetterFix {
         // A hook's code usually sits in memory the hooking DLL allocated (a
         // trampoline), not inside that DLL - so name Seamless when it's
         // loaded rather than an "unknown module".
-        let seamless_loaded = common::diag::loaded_modules()
-            .iter()
-            .any(|m| m.name.eq_ignore_ascii_case("ersc.dll"));
+        let seamless_loaded = common::diag::is_module_loaded("ersc.dll");
         let who = match common::diag::module_containing(target as usize) {
             Some(m) => m.name,
             None if seamless_loaded => "Seamless Co-op".to_string(),

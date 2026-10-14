@@ -1,14 +1,12 @@
-//! Generic IDA-style AOB (array-of-bytes) pattern scanner, restricted to the
-//! executable sections of the current process's main module. Used by mods
-//! that hook a bespoke call site not covered by fromsoftware-rs's reflected
-//! API (e.g. `attack_hook`'s hit-resolution hook, derived from a public
-//! Cheat Engine table rather than the game's own reflected engine types).
-//!
-//! Pattern example: "48 8B 05 ?? ?? ?? ?? 48 85 C0 74 07" - '??' or '?' marks a
-//! wildcard byte.
+//! IDA-style AOB (array-of-bytes) scanner over the executable sections of the
+//! game's main module, for hooking call sites that `fromsoftware-rs` doesn't
+//! reflect. A pattern is hex bytes with `?` or `??` as a wildcard:
+//! `"48 8B 05 ?? ?? ?? ?? 48 85 C0 74 07"`. Resolve cache and retry
+//! rationale: `shared/docs/memscan.md`.
 
 use std::ffi::c_void;
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 unsafe extern "system" {
     fn GetModuleHandleA(lp_module_name: *const u8) -> *mut c_void;
@@ -23,9 +21,11 @@ struct ImageDosHeader {
 
 #[repr(C)]
 struct ImageFileHeader {
-    machine: u16,
+    _machine: u16,
     number_of_sections: u16,
-    _reserved: [u8; 16],
+    _reserved: [u8; 12],
+    size_of_optional_header: u16,
+    _characteristics: u16,
 }
 
 #[repr(C)]
@@ -39,55 +39,34 @@ struct ImageSectionHeader {
 
 const IMAGE_SCN_MEM_EXECUTE: u32 = 0x2000_0000;
 
-enum PatternByte {
-    Exact(u8),
-    Wildcard,
-}
+/// `Some(byte)` must match exactly, `None` is a wildcard.
+type Pattern = Vec<Option<u8>>;
 
-fn parse_pattern(pattern: &str) -> Vec<PatternByte> {
+/// A token that isn't `?`, `??` or hex counts as byte `00`, so a typo in a
+/// pattern shows up as "not found" rather than a panic inside the game.
+fn parse_pattern(pattern: &str) -> Pattern {
     pattern
         .split_whitespace()
-        .map(|token| {
-            if token == "?" || token == "??" {
-                PatternByte::Wildcard
-            } else {
-                PatternByte::Exact(u8::from_str_radix(token, 16).unwrap_or(0))
-            }
+        .map(|token| match token {
+            "?" | "??" => None,
+            hex => Some(u8::from_str_radix(hex, 16).unwrap_or(0)),
         })
         .collect()
 }
 
-fn find_pattern(haystack: &[u8], pattern: &[PatternByte]) -> Option<usize> {
-    if pattern.is_empty() || haystack.len() < pattern.len() {
+fn find_pattern(haystack: &[u8], pattern: &[Option<u8>]) -> Option<usize> {
+    if pattern.is_empty() {
         return None;
     }
-    let last = haystack.len() - pattern.len();
-    'outer: for i in 0..=last {
-        for (j, p) in pattern.iter().enumerate() {
-            if let PatternByte::Exact(expected) = p {
-                if haystack[i + j] != *expected {
-                    continue 'outer;
-                }
-            }
-        }
-        return Some(i);
-    }
-    None
+    haystack.windows(pattern.len()).position(|window| {
+        window.iter().zip(pattern).all(|(byte, expected)| expected.is_none_or(|e| e == *byte))
+    })
 }
 
-/// A process-lifetime cache for one resolved address (an AOB match, or
-/// anything derived from one). Code addresses in the game exe never move
-/// once found - ASLR only picks the module base once, at process start - so
-/// scanning the same pattern again (once per registered task, once per
-/// reload banner, ...) is pure wasted work.
-///
-/// Only a *successful* resolve is cached: a miss (e.g. racing Arxan's
-/// unpacking at startup) leaves the cache empty so the next caller scans
-/// again instead of being locked into the failure. A `Mutex` rather than a
-/// `OnceLock` so that when several threads ask at once (e.g. a mod's
-/// `common::reload` thread and its feature thread both registering a task
-/// at startup), the later ones block until the first finishes and then
-/// reuse its result, instead of all scanning in parallel.
+/// A process-lifetime cache for one resolved address. Code addresses in the
+/// game exe never move once found, so scanning the same pattern again is
+/// wasted work. Only a successful resolve is cached; a miss is retried by the
+/// next caller.
 pub struct CachedAddr(Mutex<Option<usize>>);
 
 impl CachedAddr {
@@ -96,9 +75,9 @@ impl CachedAddr {
     }
 
     /// Returns the cached address, or runs `resolve` (holding the lock, so
-    /// concurrent callers wait for it) and caches its result if it's
-    /// `Some`. `resolve` only runs when nothing is cached yet - callers can
-    /// log "found" inside it to get exactly one line per process.
+    /// concurrent callers wait and reuse its result) and caches it if `Some`.
+    /// `resolve` runs only while nothing is cached, so a "found" log inside it
+    /// appears once per process.
     pub fn get_or_resolve(&self, resolve: impl FnOnce() -> Option<usize>) -> Option<usize> {
         let mut cached = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         if cached.is_none() {
@@ -108,33 +87,30 @@ impl CachedAddr {
     }
 }
 
+impl Default for CachedAddr {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Retries [find_pattern_in_module] every `retry_interval` until it matches
-/// or `timeout` elapses (returns `None` in that case) - useful for a
-/// one-shot startup scan that may race the game's own anti-tamper
-/// unpacking/relocation (e.g. Arxan) on a slow/loaded machine, when the
-/// caller has no other retry path of its own (a hook installed only once,
-/// not re-attempted every tick).
-pub fn wait_for_pattern_in_module(
-    pattern: &str,
-    retry_interval: std::time::Duration,
-    timeout: std::time::Duration,
-) -> Option<*mut u8> {
-    let mut waited = std::time::Duration::ZERO;
+/// or `timeout` elapses (then `None`). For a one-shot startup scan that may
+/// race the game's anti-tamper unpacking.
+pub fn wait_for_pattern_in_module(pattern: &str, retry_interval: Duration, timeout: Duration) -> Option<*mut u8> {
+    let deadline = Instant::now() + timeout;
     loop {
         if let Some(addr) = find_pattern_in_module(pattern) {
             return Some(addr);
         }
-        if waited >= timeout {
+        if Instant::now() >= deadline {
             return None;
         }
         std::thread::sleep(retry_interval);
-        waited += retry_interval;
     }
 }
 
-/// Scans the executable sections of the current process's main module (the
-/// game .exe) for `pattern`, returning the absolute address of the first
-/// match, or `None` if not found.
+/// Scans the executable sections of the main module (the game .exe) for
+/// `pattern`, returning the absolute address of the first match.
 pub fn find_pattern_in_module(pattern: &str) -> Option<*mut u8> {
     let bytes = parse_pattern(pattern);
     let base = unsafe { GetModuleHandleA(std::ptr::null()) } as *const u8;
@@ -145,12 +121,12 @@ pub fn find_pattern_in_module(pattern: &str) -> Option<*mut u8> {
     unsafe {
         let dos = &*(base as *const ImageDosHeader);
         let nt_base = base.add(dos.e_lfanew as usize);
-        // IMAGE_NT_HEADERS64: Signature(u32) + FileHeader + OptionalHeader.
-        // We only need FileHeader, which starts right after the u32 signature.
+        // IMAGE_NT_HEADERS64: Signature(u32), FileHeader, OptionalHeader; the
+        // section table follows the optional header.
         let file_header = &*(nt_base.add(4) as *const ImageFileHeader);
-        // OptionalHeader (IMAGE_OPTIONAL_HEADER64) is 0xF0 bytes on x64 - the
-        // section table follows it directly.
-        let section_table = nt_base.add(4 + size_of::<ImageFileHeader>() + 0xF0) as *const ImageSectionHeader;
+        let section_table = nt_base
+            .add(4 + size_of::<ImageFileHeader>() + file_header.size_of_optional_header as usize)
+            as *const ImageSectionHeader;
 
         for i in 0..file_header.number_of_sections as usize {
             let section = &*section_table.add(i);
@@ -165,4 +141,49 @@ pub fn find_pattern_in_module(pattern: &str) -> Option<*mut u8> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_hex_and_wildcards() {
+        assert_eq!(parse_pattern("48 8B ?? ? 0f"), vec![Some(0x48), Some(0x8B), None, None, Some(0x0F)]);
+        assert_eq!(parse_pattern("zz"), vec![Some(0)]); // typo: matches 00, never panics
+        assert!(parse_pattern("").is_empty());
+    }
+
+    #[test]
+    fn finds_first_match_with_wildcards() {
+        let hay = [0u8, 1, 2, 3, 4, 1, 9, 3];
+        assert_eq!(find_pattern(&hay, &parse_pattern("01 ?? 03")), Some(1));
+        assert_eq!(find_pattern(&hay, &parse_pattern("03 04")), Some(3));
+        assert_eq!(find_pattern(&hay, &parse_pattern("01 09")), Some(5));
+    }
+
+    #[test]
+    fn matches_at_the_very_end_and_rejects_oversized_or_empty_patterns() {
+        let hay = [1u8, 2, 3];
+        assert_eq!(find_pattern(&hay, &parse_pattern("02 03")), Some(1));
+        assert_eq!(find_pattern(&hay, &parse_pattern("01 02 03 04")), None);
+        assert_eq!(find_pattern(&hay, &[]), None);
+        assert_eq!(find_pattern(&hay, &parse_pattern("05")), None);
+    }
+
+    #[test]
+    fn cached_addr_caches_only_a_hit() {
+        let cache = CachedAddr::new();
+        assert_eq!(cache.get_or_resolve(|| None), None);
+        assert_eq!(cache.get_or_resolve(|| Some(7)), Some(7));
+        assert_eq!(cache.get_or_resolve(|| panic!("must not resolve again")), Some(7));
+    }
+
+    #[test]
+    fn scans_the_test_binary_itself() {
+        // The PE header's own first bytes are "MZ", but only executable
+        // sections are scanned: an all-wildcard pattern matches at .text's start.
+        assert!(find_pattern_in_module("?? ?? ??").is_some());
+        assert!(find_pattern_in_module("DE AD BE EF DE AD BE EF DE AD BE EF 01 02 03 04 05 06 07 08 09").is_none());
+    }
 }

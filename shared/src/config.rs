@@ -1,14 +1,14 @@
-//! Minimal flat INI reader: "key=value" per line, "#" or ";" starts a comment,
+//! Minimal flat INI reader: `key=value` per line, `#` or `;` starts a comment,
 //! on its own line or after the value when preceded by whitespace
-//! (`Width=25   ; metres`).
-//! Section headers ("[Section]") are accepted but ignored - all keys share one
-//! namespace. Generic over the caller's own default template: unlike a
-//! per-mod copy of this file, this crate has no ini of its own to embed, so
-//! every entry point below takes the mod's `include_str!`-embedded default as
-//! a parameter instead of baking one in.
+//! (`Width=25   ; metres`). Section headers are accepted but ignored: all keys
+//! share one namespace. Every entry point that needs a default takes the mod's
+//! `include_str!` template as a parameter, since this crate has no ini of its
+//! own. How the template is merged into a user's file: `shared/docs/config.md`.
 
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::fs;
+use std::str::FromStr;
 use std::sync::{LazyLock, RwLock};
 
 static VALUES: LazyLock<RwLock<HashMap<String, String>>> =
@@ -30,53 +30,46 @@ fn strip_inline_comment(raw: &str) -> &str {
     raw
 }
 
-fn parse(content: &str) -> HashMap<String, String> {
-    let mut values = HashMap::new();
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty()
-            || trimmed.starts_with('#')
-            || trimmed.starts_with(';')
-            || trimmed.starts_with('[')
-        {
-            continue;
-        }
-        let Some(eq) = trimmed.find('=') else { continue };
-        let key = trimmed[..eq].trim().to_string();
-        let value = strip_inline_comment(&trimmed[eq + 1..]).trim().to_string();
-        values.insert(key, value);
+/// `(key, value)` of a `key=value` line, the value without its trailing
+/// comment; `None` for blank lines, comments, section headers and lines
+/// without `=`.
+fn split_kv(line: &str) -> Option<(&str, &str)> {
+    let line = line.trim();
+    if line.is_empty() || line.starts_with(['#', ';', '[']) {
+        return None;
     }
-    values
+    let (key, value) = line.split_once('=')?;
+    Some((key.trim(), strip_inline_comment(value).trim()))
+}
+
+fn parse(content: &str) -> HashMap<String, String> {
+    content
+        .lines()
+        .filter_map(split_kv)
+        .map(|(key, value)| (key.to_string(), value.to_string()))
+        .collect()
 }
 
 /// Loads `ini_path` into the shared config map, replacing whatever was loaded
-/// before. Silently leaves the previous values in place if the file can't be
-/// read (e.g. transient lock during a hot reload).
+/// before. Keeps the previous values if the file can't be read (e.g. a
+/// transient lock during a hot reload).
 pub fn load(ini_path: &str) {
     if let Ok(content) = fs::read_to_string(ini_path) {
         *VALUES.write().unwrap() = parse(&content);
     }
 }
 
-/// If `ini_path` doesn't exist yet, writes `default_ini` (the caller's
-/// embedded default template) to it first (so a fresh install gets a real,
-/// editable file instead of relying silently on in-code defaults). If it does
-/// exist, merges in any keys `default_ini` has that the user's file is
-/// missing (e.g. after updating the mod to a version with new keys) - see
-/// [migrate]. Either way, loads the (possibly just-updated) file afterward.
-///
-/// Returns how many new keys were merged in, so the caller can log it once
-/// its logger is up.
+/// Writes `default_ini` to `ini_path` if the file doesn't exist yet; otherwise
+/// merges in the template's keys that the file is missing (see
+/// `migrate_with_renames`). Then loads the file. Returns how many new keys
+/// were merged, so the caller can log it once its logger is up.
 pub fn load_or_create_default(ini_path: &str, default_ini: &str) -> usize {
     load_or_create_default_with_renames(ini_path, default_ini, &[])
 }
 
-/// Same as [load_or_create_default], but also carries a renamed key's value
-/// over: for each `(old, new)` in `renames`, a user file that still has `old`
-/// but not `new` gets `new=<their old value>` instead of the template's
-/// default, and `old` is dropped rather than moved to `[Legacy]`. Without
-/// this, renaming a key in a new version silently resets every existing
-/// user's customized value to the default.
+/// Same as [load_or_create_default], but for each `(old, new)` in `renames` a
+/// file that still has `old` but not `new` keeps its value under `new`
+/// instead of resetting to the template default.
 pub fn load_or_create_default_with_renames(
     ini_path: &str,
     default_ini: &str,
@@ -92,24 +85,17 @@ pub fn load_or_create_default_with_renames(
     migrated
 }
 
-/// Merges any key present in `default_ini` but missing from the user's
-/// existing `ini_path` into that file - comments and layout come from the
-/// template, but every key the user already has keeps their value untouched.
-/// A no-op (no disk write) if the file already has every key the template
-/// defines.
-///
-/// Keys the user's file has that the template no longer defines (renamed or
-/// removed in a newer version) aren't silently discarded: they're moved to a
-/// trailing `[Legacy]` block instead, so nothing the user configured
-/// disappears without a trace.
 #[cfg(test)]
 fn migrate(ini_path: &str, default_ini: &str) -> usize {
     migrate_with_renames(ini_path, default_ini, &[])
 }
 
-/// [migrate] plus `renames` - see [load_or_create_default_with_renames].
-/// A renamed key isn't counted in the returned "new keys" total, since the
-/// user already had it under its old name.
+/// Rewrites `ini_path` from the template layout: comments and order come from
+/// `default_ini`, every key the user already has keeps their value, missing
+/// keys get the template default. Keys the template no longer defines go to a
+/// trailing `[Legacy]` block rather than being dropped. No disk write if there
+/// is nothing to merge, rename or move. Returns the number of keys added; a
+/// renamed key doesn't count, the user already had it.
 fn migrate_with_renames(ini_path: &str, default_ini: &str, renames: &[(&str, &str)]) -> usize {
     let Ok(existing_content) = fs::read_to_string(ini_path) else {
         return 0;
@@ -130,37 +116,29 @@ fn migrate_with_renames(ini_path: &str, default_ini: &str, renames: &[(&str, &st
         .keys()
         .filter(|k| !existing_values.contains_key(*k))
         .count();
-    let legacy: Vec<(&String, &String)> = existing_values
+    let mut legacy: Vec<(&String, &String)> = existing_values
         .iter()
         .filter(|(k, _)| !template_values.contains_key(*k))
         .collect();
     if missing_count == 0 && legacy.is_empty() && !renamed {
-        return 0; // already has every key the current template defines, nothing stale either
+        return 0;
     }
 
     let mut merged = String::new();
     for line in default_ini.lines() {
-        let trimmed = line.trim();
-        let is_kv = !trimmed.is_empty()
-            && !trimmed.starts_with('#')
-            && !trimmed.starts_with(';')
-            && !trimmed.starts_with('[')
-            && trimmed.contains('=');
-        if is_kv {
-            let key = trimmed[..trimmed.find('=').unwrap()].trim();
-            if let Some(value) = existing_values.get(key) {
-                merged.push_str(key);
-                merged.push('=');
-                merged.push_str(value);
+        match split_kv(line).and_then(|(key, _)| Some((key, existing_values.get(key)?))) {
+            Some((key, value)) => {
+                let _ = writeln!(merged, "{key}={value}");
+            }
+            None => {
+                merged.push_str(line);
                 merged.push('\n');
-                continue;
             }
         }
-        merged.push_str(line);
-        merged.push('\n');
     }
 
     if !legacy.is_empty() {
+        legacy.sort();
         merged.push_str(
             "\n[Legacy]\n\
              ; Keys below no longer exist in the shipped default ini template\n\
@@ -168,10 +146,7 @@ fn migrate_with_renames(ini_path: &str, default_ini: &str, renames: &[(&str, &st
              ; silently discarded. Safe to delete once you've moved the value elsewhere.\n",
         );
         for (key, value) in legacy {
-            merged.push_str(key);
-            merged.push('=');
-            merged.push_str(value);
-            merged.push('\n');
+            let _ = writeln!(merged, "{key}={value}");
         }
     }
 
@@ -189,15 +164,11 @@ pub(crate) fn write_atomic(path: &str, contents: &str) -> std::io::Result<()> {
     })
 }
 
-/// Writes `values` (key, value) back into `ini_path` and the shared config
-/// map - for a mod that saves state the player changed in-game (e.g. a
-/// menu's position). Each key's existing `key=value` line is rewritten in
-/// place, so comments, sections and every other line are kept as-is; a key
-/// with no line yet is appended at the end of the file. Returns `false` (map
-/// still updated) if the file couldn't be read or written.
-///
-/// Added 2026-09-25 for SoulsTeleport (nothing in this workspace wrote ini
-/// values before - `migrate` only rewrites the whole file from the template).
+/// Writes `values` into `ini_path` and the shared config map, for a mod that
+/// saves state changed in game (e.g. a menu position). An existing
+/// `key=value` line is rewritten in place so comments and layout survive; a
+/// key with no line yet is appended. Returns `false` (map still updated) if
+/// the file couldn't be read or written.
 pub fn set_values(ini_path: &str, values: &[(&str, String)]) -> bool {
     {
         let mut map = VALUES.write().unwrap();
@@ -212,21 +183,18 @@ pub fn set_values(ini_path: &str, values: &[(&str, String)]) -> bool {
     let mut pending: Vec<&(&str, String)> = values.iter().collect();
     let mut lines: Vec<String> = Vec::new();
     for line in content.lines() {
-        let trimmed = line.trim_start();
-        let key = trimmed
-            .find('=')
-            .filter(|_| !trimmed.starts_with(';') && !trimmed.starts_with('#') && !trimmed.starts_with('['))
-            .map(|eq| trimmed[..eq].trim());
-        if let Some(pos) = key.and_then(|k| pending.iter().position(|(pk, _)| *pk == k)) {
-            let (k, v) = pending.remove(pos);
-            let indent = &line[..line.len() - trimmed.len()];
-            lines.push(format!("{indent}{k}={v}"));
-        } else {
-            lines.push(line.to_string());
+        let slot = split_kv(line).and_then(|(key, _)| pending.iter().position(|(pk, _)| *pk == key));
+        match slot {
+            Some(pos) => {
+                let (key, value) = pending.remove(pos);
+                let indent = &line[..line.len() - line.trim_start().len()];
+                lines.push(format!("{indent}{key}={value}"));
+            }
+            None => lines.push(line.to_string()),
         }
     }
-    for (k, v) in pending {
-        lines.push(format!("{k}={v}"));
+    for (key, value) in pending {
+        lines.push(format!("{key}={value}"));
     }
     let mut out = lines.join(newline);
     out.push_str(newline);
@@ -242,36 +210,29 @@ pub fn get_string(key: &str, default: &str) -> String {
         .unwrap_or_else(|| default.to_string())
 }
 
-pub fn get_int(key: &str, default: i32) -> i32 {
+fn get_parsed<T: FromStr>(key: &str, default: T) -> T {
     VALUES
         .read()
         .unwrap()
         .get(key)
-        .and_then(|v| v.trim().parse().ok())
+        .and_then(|v| v.parse().ok())
         .unwrap_or(default)
+}
+
+pub fn get_int(key: &str, default: i32) -> i32 {
+    get_parsed(key, default)
 }
 
 pub fn get_double(key: &str, default: f64) -> f64 {
-    VALUES
-        .read()
-        .unwrap()
-        .get(key)
-        .and_then(|v| v.trim().parse().ok())
-        .unwrap_or(default)
+    get_parsed(key, default)
 }
 
 pub fn get_bool(key: &str, default: bool) -> bool {
-    VALUES
-        .read()
-        .unwrap()
-        .get(key)
-        .map(|v| v.trim().to_ascii_lowercase())
-        .map(|v| match v.as_str() {
-            "1" | "true" | "yes" => true,
-            "0" | "false" | "no" => false,
-            _ => default,
-        })
-        .unwrap_or(default)
+    match get_string(key, "").to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" => true,
+        "0" | "false" | "no" => false,
+        _ => default,
+    }
 }
 
 #[cfg(test)]
