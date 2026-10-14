@@ -22,7 +22,7 @@ Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong [`R
 ## Menu trong game (tùy chọn)
 
 Nếu `ERNativeUI.dll` (host menu dùng chung, https://github.com/Flammrock/ERNativeUI) đã được nạp trước mod, System >
-Game Options có thêm hàng **Rune Multiplier**: mở ra trang chỉnh hệ số (slider số nguyên 0-10) và bật/tắt log.
+Game Options có thêm hàng **Rune Multiplier**: mở ra trang chỉnh hệ số (hàng nhập số, gõ được số lẻ, 0 và số âm, trong khoảng -1000 đến 1000) và bật/tắt log.
 Đổi trong menu áp ngay và được ghi lại vào ini; bấm phím reload thì menu cập nhật theo ini. Không có host thì mod
 chạy hoàn toàn bằng ini như trước. Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0; chưa cần file GFX nào (có thì nhãn đẹp
 hơn). Client: `common::erui` ([shared/src/erui.rs](../../shared/src/erui.rs)), mod: [src/menu.rs](src/menu.rs),
@@ -56,7 +56,7 @@ Code: [src/hook.rs](src/hook.rs) (hook), [src/menu.rs](src/menu.rs) (menu tùy c
 - Phụ thuộc mẫu AOB neo: game vá làm đổi bố cục thì mod tự tắt cho phiên đó.
 - Mọi nguồn rune **nhận được** đều bị nhân, không có tuỳ chọn tách riêng từng nguồn.
 - Với `Multiplier` âm, rune nhận được bị **trừ** thay vì cộng.
-- Menu trong game: slider chỉ số nguyên 0-10 (muốn số lẻ hoặc cao hơn thì sửa ini); chỉ có khi có ERNativeUI.
+- Menu trong game: hàng nhập số trong khoảng -1000..1000 (ngoài khoảng đó thì sửa ini); chỉ có khi có ERNativeUI.
 - Chỉ dùng ở chế độ offline, tắt EAC.
 
 ## Tài liệu liên quan
