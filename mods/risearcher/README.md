@@ -45,8 +45,8 @@ thật duy nhất, README không lặp lại để khỏi lệch.
 Nếu `ERNativeUI.dll` (host menu dùng chung, https://github.com/Flammrock/ERNativeUI) đã được nạp trước mod, System >
 Game Options có thêm hàng **Rise Archer**: mở ra trang gồm nhóm **Damage** (sát thương, scaling, mở khoá Ash of War cho
 Bow), nhóm **Weight & Value** (trọng lượng, giá bán từng loại), nhóm **Ammo & Shots** (số lượng mang tối đa, tốc độ, tầm,
-độ loe, số mũi tên Rain of Arrows) và bật/tắt log. Các hệ số là hàng nhập số (gõ số lẻ như 1.5 hoặc 1,5; ngoài khoảng 0-1000
-thì bị cắt về khoảng đó, chữ không hợp lệ thì trả lại số cũ); giới hạn mang đạn và số mũi tên Rain là slider số nguyên. Đổi trong
+độ loe, số mũi tên Rain of Arrows) và bật/tắt log. Các hệ số là hàng nhập số (gõ số lẻ như 1.5 hoặc 1,5; ngoài khoảng -1000 đến 1000
+thì bị cắt về khoảng đó, mà code weapon cắt *kết quả* ở 0 nên hệ số âm cho ra 0; chữ không hợp lệ thì trả lại số cũ; số mũi tên Rain cũng là hàng nhập số, tối đa 1000); giới hạn mang đạn (0-255) là slider số nguyên. Đổi trong
 menu được ghi vào ini, rồi mod áp lại từ giá trị param gốc đúng một lần sau khi ngừng thao tác (cùng đường với phím
 reload, không cộng dồn). Không có host thì mod chạy bằng ini như trước. Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0. Client:
 `common::erui` ([shared/src/erui.rs](../../shared/src/erui.rs)), mod: [src/menu.rs](src/menu.rs), ghi chú dùng chung:

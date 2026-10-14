@@ -110,7 +110,7 @@ fn run() {
             let weapon_changed = weapon::apply(repo);
             let bullet_changed = bullet::apply(repo);
             logger::log(&format!(
-                "Reload: reapplied to {weapon_changed} EquipParamWeapon row(s) and {bullet_changed} Bullet row(s) (hotkey pressed)."
+                "Reload: reapplied to {weapon_changed} EquipParamWeapon row(s) and {bullet_changed} Bullet row(s) (reload)."
             ));
         },
     );
