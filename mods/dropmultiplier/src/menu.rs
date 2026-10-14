@@ -20,26 +20,22 @@
 //! every edit.
 
 use std::sync::OnceLock;
-use std::sync::atomic::Ordering;
-use std::time::Duration;
 
-use common::erui::{self, NumberSetting, Registration, RowHandle, Setting};
-use common::{config, logger};
+use common::config;
+use common::erui::{self, MenuBuilder, NumberSetting, Setting};
 
 /// Upper bound of the typed multipliers (the mod only clamps at 0 below).
 const MAX_MULTIPLIER: f64 = 1000.0;
 
-fn number(value: u8) -> String {
-    value.to_string()
-}
+static MENU: OnceLock<erui::Menu> = OnceLock::new();
 
-static MODE: Setting = Setting { key: "Mode", format: number, apply: None };
+static MODE: Setting = Setting::int("Mode");
 static MULTIPLIER: NumberSetting = NumberSetting::new("Multiplier", 0.0, MAX_MULTIPLIER, None);
-static PERCENTAGE: Setting = Setting { key: "Percentage", format: number, apply: None };
+static PERCENTAGE: Setting = Setting::int("Percentage");
 static CRAFTING: NumberSetting = NumberSetting::new("Crafting", 0.0, MAX_MULTIPLIER, None);
 static UPGRADE: NumberSetting = NumberSetting::new("Upgrade", 0.0, MAX_MULTIPLIER, None);
 static UNIQUE: NumberSetting = NumberSetting::new("Unique", 0.0, MAX_MULTIPLIER, None);
-static LOG_FILE: Setting = Setting { key: "LogFile", format: |value| (value != 0).to_string(), apply: None };
+static LOG_FILE: Setting = Setting::flag("LogFile");
 
 fn mode_row() -> u8 {
     config::get_int("Mode", 0).clamp(0, 1) as u8
@@ -54,139 +50,70 @@ fn log_file_row() -> u8 {
     config::get_bool("LogFile", false) as u8
 }
 
-struct Rows {
-    registration: Registration,
-    /// Each row with the function that reads its current value from the config.
-    rows: Vec<(RowHandle, fn() -> u8)>,
-    /// The typed-number rows, with the function that reads each from the config.
-    numbers: Vec<(&'static NumberSetting, fn() -> f64)>,
-}
+fn build(b: &mut MenuBuilder) -> Result<(), String> {
+    let page = b.submenu(b.root(), "Drop Multiplier", "Settings for the Drop Multiplier mod.")?;
+    let drops = b.submenu(page, "Drop Chance", "How likely enemies are to drop items.")?;
+    let materials = b.submenu(page, "Materials", "How many materials you get from each drop or pickup.")?;
 
-static ROWS: OnceLock<Rows> = OnceLock::new();
-
-/// After the ini is written: ask the mod to re-apply, like the reload key.
-fn reapply() {
-    common::reload::RELOAD_GENERATION.fetch_add(1, Ordering::Relaxed);
-}
-
-fn build(hmodule: u64, connection: erui::Connection) -> Result<Rows, String> {
-    let provider = connection.register_provider("drop-multiplier", "Drop Multiplier", hmodule)?;
-    let (page, _entry) = provider.add_submenu(
-        provider.root_page(),
-        "Drop Multiplier",
-        "Settings for the Drop Multiplier mod.",
-        "Drop Multiplier",
-        "Settings for the Drop Multiplier mod.",
-    )?;
-    let (drops, _entry) = provider.add_submenu(
-        page,
-        "Drop Chance",
-        "How likely enemies are to drop items.",
-        "Drop Chance",
-        "How likely enemies are to drop items.",
-    )?;
-    let (materials, _entry) = provider.add_submenu(
-        page,
-        "Materials",
-        "How many materials you get from each drop or pickup.",
-        "Materials",
-        "How many materials you get from each drop or pickup.",
-    )?;
-    let mut rows: Vec<(RowHandle, fn() -> u8)> = Vec::new();
-
-    rows.push((
-        provider.add_inline_choice(
-            drops,
-            "Mode",
-            "Multiply chance: an item's drop chance is multiplied. Fixed chance: every drop is set to one chance.",
-            &["Multiply chance", "Fixed chance"],
-            mode_row(),
-            erui::setting_changed,
-            MODE.user_data(),
-        )?,
+    b.choice(
+        drops,
+        "Mode",
+        "Multiply chance: an item's drop chance is multiplied. Fixed chance: every drop is set to one chance.",
+        &["Multiply chance", "Fixed chance"],
+        &MODE,
         mode_row,
-    ));
-    let mut numbers: Vec<(&'static NumberSetting, fn() -> f64)> = Vec::new();
-    provider.add_number(
+    )?;
+    b.number(
         drops,
         "Multiplier",
         "Drop-rate multiplier, used when Mode is Multiply chance. 1 = vanilla, 0 = no drops.",
         &MULTIPLIER,
-        config::get_double("Multiplier", 2.0),
+        || config::get_double("Multiplier", 2.0),
     )?;
-    numbers.push((&MULTIPLIER, || config::get_double("Multiplier", 2.0)));
-    rows.push((
-        provider.add_slider(
-            drops,
-            "Percentage (%)",
-            "Fixed drop chance in percent, used when Mode is Fixed chance. 100 guarantees a drop.",
-            0,
-            100,
-            1,
-            percentage_row(),
-            erui::setting_changed,
-            PERCENTAGE.user_data(),
-        )?,
+    b.slider(
+        drops,
+        "Percentage (%)",
+        "Fixed drop chance in percent, used when Mode is Fixed chance. 100 guarantees a drop.",
+        0,
+        100,
+        &PERCENTAGE,
         percentage_row,
-    ));
-    let materials_rows: [(&str, &str, &'static NumberSetting, fn() -> f64); 3] = [
-        ("Crafting", "Multiplies the crafting materials you get (Rowa Fruit, Herba, bones...). 1 = vanilla.", &CRAFTING, || config::get_double("Crafting", 1.0)),
-        ("Upgrade", "Multiplies the upgrade materials you get (Smithing Stones, Gloveworts...). 1 = vanilla.", &UPGRADE, || config::get_double("Upgrade", 1.0)),
-        ("Unique", "Multiplies materials found only once (Sacred Tears, Scadutree Fragments...). 1 = vanilla.", &UNIQUE, || config::get_double("Unique", 1.0)),
-    ];
-    for (label, help, setting, read) in materials_rows {
-        provider.add_number(materials, label, help, setting, read())?;
-        numbers.push((setting, read));
-    }
-    rows.push((
-        provider.add_toggle(
-            page,
-            "Log file",
-            "Write a log file next to the DLL, for troubleshooting.",
-            log_file_row() != 0,
-            erui::setting_changed,
-            LOG_FILE.user_data(),
-        )?,
-        log_file_row,
-    ));
-    let registration = provider.commit()?;
-    Ok(Rows { registration, rows, numbers })
+    )?;
+    b.number(
+        materials,
+        "Crafting",
+        "Multiplies the crafting materials you get (Rowa Fruit, Herba, bones...). 1 = vanilla.",
+        &CRAFTING,
+        || config::get_double("Crafting", 1.0),
+    )?;
+    b.number(
+        materials,
+        "Upgrade",
+        "Multiplies the upgrade materials you get (Smithing Stones, Gloveworts...). 1 = vanilla.",
+        &UPGRADE,
+        || config::get_double("Upgrade", 1.0),
+    )?;
+    b.number(
+        materials,
+        "Unique",
+        "Multiplies materials found only once (Sacred Tears, Scadutree Fragments...). 1 = vanilla.",
+        &UNIQUE,
+        || config::get_double("Unique", 1.0),
+    )?;
+    b.toggle(page, "Log file", "Write a log file next to the DLL, for troubleshooting.", &LOG_FILE, log_file_row)?;
+    Ok(())
 }
 
 /// Registers the menu on a worker thread. Must start early: the host closes
 /// registration shortly after startup.
 pub fn start(hmodule: u64, ini_path: String) {
-    erui::start_saver(ini_path, Some(reapply));
-    std::thread::spawn(move || {
-        let connection = match erui::connect(Duration::from_secs(10)) {
-            Ok(c) => c,
-            Err(reason) => {
-                logger::log(&format!("In-game menu unavailable ({reason}); using the ini only."));
-                return;
-            }
-        };
-        match build(hmodule, connection) {
-            Ok(rows) => {
-                let _ = ROWS.set(rows);
-                logger::log("In-game menu: registered.");
-            }
-            Err(reason) => logger::log(&format!("In-game menu registration failed: {reason}")),
-        }
-    });
+    erui::start_saver(ini_path, Some(erui::reload_from_menu));
+    erui::spawn_menu(&MENU, hmodule, "drop-multiplier", "Drop Multiplier", build);
 }
 
 /// After an ini reload: show the reloaded values in the menu.
 pub fn sync_from_config() {
-    if let Some(rows) = ROWS.get() {
-        for (row, read) in &rows.rows {
-            if let Err(reason) = rows.registration.set_row_value(*row, read()) {
-                logger::log(&format!("In-game menu: couldn't update a row ({reason})."));
-            }
-        }
-        for (setting, read) in &rows.numbers {
-            if let Err(reason) = setting.show(&rows.registration, read()) {
-                logger::log(&format!("In-game menu: couldn't update a row ({reason})."));
-            }
-        }
+    if let Some(menu) = MENU.get() {
+        menu.sync();
     }
 }

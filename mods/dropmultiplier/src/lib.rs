@@ -41,13 +41,14 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
             ));
         }
 
+        // The menu registers right away (the host only accepts registrations
+        // at startup) and follows reloads through `drop_rate::run`.
+        menu::start(hmodule, ini_path.clone());
+
         // `common::reload` owns `General.ReloadKey` watching for the whole
         // DLL (see its module doc comment for why only one caller may poll
         // that key) - `drop_rate::run` below only polls
         // `common::reload::RELOAD_GENERATION`.
-        // The menu registers right away (the host only accepts registrations
-        // at startup) and follows reloads through `drop_rate::run`.
-        menu::start(hmodule, ini_path.clone());
         std::thread::spawn(move || common::reload::run(ini_path));
 
         common::diag::log_environment_when_game_ready();
