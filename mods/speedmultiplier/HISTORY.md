@@ -24,3 +24,4 @@ sử git của `README.md`.
 | 2026-10-07 | Bảng `[Enemy]` với `All`: tốc độ chung cho kẻ địch và boss; lọc bằng `chr_type` (Npc / Unk7 = boss), `team_type` và `NpcParam.threatLv`; thêm `EnemyProbe` (log mục tiêu đang khoá); chưa hỗ trợ Seamless | [docs](docs/enemy_speed.md) |
 | 2026-10-12 | Đưa `Group`, `group_of`, `current_anim_id` (cùng test) sang `common::anim` để AnimCancel dùng chung; không đổi hành vi | |
 | 2026-10-13 | Mặc định `ReloadBanner` đổi thành `false`: nhiều mod cùng bật thì mỗi mod hiện một banner vài giây khi bấm reload | |
+| 2026-10-13 | Thêm menu trong game tùy chọn (ERNativeUI, `common::erui`): hàng tốc độ là ô gõ số 0.1-10 (slider không có số lẻ), ghi về TOML qua `TomlConfig::save_values`; `[[Override]]` và probe vẫn chỉ ở file | [docs](../../docs/ingame_menu.md) |
