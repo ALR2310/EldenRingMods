@@ -4,6 +4,18 @@ Chỉ liệt kê việc **còn mở**, mỗi việc 1 dòng. Việc xong xoá đ
 `mods/<mod>/HISTORY.md`); lý do / chi tiết kỹ thuật ở `mods/<mod>/docs/`.
 Quy ước đầy đủ: `CLAUDE.md`, mục "Viết `TODO.md` gọn".
 
+## Menu trong game (ERNativeUI)
+
+Chi tiết: `docs/ingame_menu.md`
+
+- [ ] [research] Slider số âm/thập phân: hook `0x74FA20` ánh xạ `min + chỉ_số x step` (tiền lệ `mod-settings-menu.dll`), thử bản fork ERNativeUI (`docs/ingame_menu_slider.md`)
+- [ ] [research] Menu cuộn / vượt giới hạn 15 hàng của trang con (`docs/ingame_menu_scroll.md`)
+- [ ] Phát hành lần lượt các mod đã có menu (bullet có sẵn ở `[Unreleased]`); ghi trên trang Nexus rằng ERNativeUI là phụ thuộc tùy chọn (exe 2.7.0.0 / 2.7.1.0)
+
+## InfiniteAilment
+
+- [ ] [research] Thêm Black Flame (DoT theo % máu, giống Poison/Rot) làm ailment chỉnh được; Destined Death (giảm máu tối đa) khó hơn (long41, 2026-10-13)
+
 ## SpiritMultiplier
 
 Chi tiết: `mods/spiritmultiplier/docs/open_issues.md`, `docs/warp_research.md`
@@ -23,6 +35,7 @@ Chi tiết: `mods/spiritmultiplier/docs/open_issues.md`, `docs/warp_research.md`
 - [ ] Seamless Co-op: đồng bộ hình ảnh tốc độ giữa các máy bằng Steam P2P (hướng B, chốt 2026-10-03; xem `docs/seamless.md`)
 - [ ] Test `Critical` khác 1 với nạn nhân backstab/riposte (`docs/critical_victim.md`)
 - [ ] Hệ số tốc độ đánh theo loại vũ khí (InvertedButt, 2026-10-01; gộp cả cung/nỏ riêng, tạm không làm)
+- [ ] Tách hệ số tốc độ kẻ địch thường / boss (Nickademus84, 2026-10-13; tách theo nhóm hành động như player thì chưa khả thi)
 - [ ] Tuỳ chọn: Seamless cho Spirit / Enemy / nạn nhân critical; chia nhóm boss / spirit
 
 ## DropMultiplier

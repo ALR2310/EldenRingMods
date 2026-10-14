@@ -42,6 +42,8 @@
 //!   fromsoftware-rs's `rows()`/`rows_mut()`, which panic on some modded
 //!   regulation.bin files (Convergence), and checks a param's slot really
 //!   holds that param before writing to it.
+//! - `erui`: optional client for the ERNativeUI in-game menu host (settings
+//!   rows in System > Game Options); see its module doc.
 //! - `toml_config`: typed TOML config (serde) for mods whose settings need
 //!   lists/tables an ini can't hold; the ini `config` stays for the rest.
 
@@ -51,6 +53,7 @@ pub mod announce;
 pub mod codepatch;
 pub mod config;
 pub mod diag;
+pub mod erui;
 pub mod input;
 pub mod logger;
 pub mod memscan;

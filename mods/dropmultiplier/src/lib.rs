@@ -2,6 +2,7 @@
 
 mod drop_rate;
 mod materials;
+mod menu;
 
 use common::{config, dll_dir, logger};
 
@@ -39,6 +40,10 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
                 "DropMultiplier.ini updated: added {migrated} new key(s) from a newer default template."
             ));
         }
+
+        // The menu registers right away (the host only accepts registrations
+        // at startup) and follows reloads through `drop_rate::run`.
+        menu::start(hmodule, ini_path.clone());
 
         // `common::reload` owns `General.ReloadKey` watching for the whole
         // DLL (see its module doc comment for why only one caller may poll

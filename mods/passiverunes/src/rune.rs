@@ -208,12 +208,20 @@ pub fn run() {
     let mut session_elapsed_ms: f64 = 0.0;
     let mut interval_elapsed_ms: f64 = 0.0;
     let mut interest_state = InterestState::default();
+    let mut last_seen_generation = common::reload::RELOAD_GENERATION.load(std::sync::atomic::Ordering::Relaxed);
 
     let installed = common::task::run_recurring_safe(
         cs_task,
         "Rune",
         CSTaskGroupIndex::FrameBegin,
         move |data: &eldenring::fd4::FD4TaskData| {
+            // After an ini reload, make the in-game menu rows show the new values.
+            let generation = common::reload::RELOAD_GENERATION.load(std::sync::atomic::Ordering::Relaxed);
+            if generation != last_seen_generation {
+                last_seen_generation = generation;
+                crate::menu::sync_from_config();
+            }
+
             // Rune.Passive.Enabled=false turns off both the per-interval
             // grant and the milestone bonuses below - same "whole section"
             // scope as Regen.PerTick.Enabled/Regen.PerHit.Enabled.

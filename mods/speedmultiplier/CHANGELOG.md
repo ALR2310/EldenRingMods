@@ -6,6 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+- Added in-game settings menu support (requires the ERNativeUI mod).
+
 ## [1.3.0] - 2026-10-07
 
 - Added a speed for summoned spirits.

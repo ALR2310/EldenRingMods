@@ -8,7 +8,7 @@ ReloadKey = "F5"
 
 # Show banner at the top of the screen after a reload.
 # Errors always show.
-ReloadBanner = true
+ReloadBanner = false
 
 
 [Player]

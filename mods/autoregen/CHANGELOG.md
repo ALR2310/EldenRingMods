@@ -6,6 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+- Added in-game settings menu support (requires the ERNativeUI mod).
+
 ## [2.6.4] - 2026-10-10
 
 - Fixed the Ash of War exclusion not working for stance-type Ashes, e.g. Unsheathe.

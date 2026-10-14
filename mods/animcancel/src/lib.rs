@@ -2,6 +2,7 @@
 
 mod cancel;
 mod config;
+mod menu;
 mod probe;
 
 use common::{dll_dir, logger};
@@ -24,6 +25,11 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         logger::set_enabled(config::get().logging.log_file);
         logger::init(&dir, "AnimCancel.log");
         logger::install_panic_hook();
+
+        // Registers the in-game menu right away: the host only accepts
+        // registrations in its first seconds. No-op without ERNativeUI.
+        menu::start(hmodule);
+
         logger::log("Activating AnimCancel...");
         if report.created {
             logger::log("AnimCancel.toml created with the default settings.");
@@ -62,6 +68,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
                 || {
                     config::reload()?;
                     logger::set_enabled(config::get().logging.log_file);
+                    menu::sync_from_config();
                     Ok(())
                 },
             )

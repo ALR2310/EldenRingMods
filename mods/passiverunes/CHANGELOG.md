@@ -6,6 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+- Added in-game settings menu support (requires the ERNativeUI mod).
+
 ## [2.1.1] - 2026-09-24
 
 - Fixed install paths with non-ASCII characters.

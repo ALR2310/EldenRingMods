@@ -19,6 +19,19 @@ Cấu hình trong `SpiritMultiplier.ini` cạnh DLL (tự tạo nếu thiếu; k
 
 Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong [`SpiritMultiplier.ini`](SpiritMultiplier.ini); file mẫu này được nhúng vào DLL nên là nguồn sự thật duy nhất, README không lặp lại để khỏi lệch.
 
+## Menu trong game (tùy chọn)
+
+Nếu `ERNativeUI.dll` (host menu dùng chung, https://github.com/Flammrock/ERNativeUI) đã được nạp trước mod, System >
+Game Options có thêm hàng **Spirit Multiplier**: mở ra trang gồm các nhóm **Spirit Count** (hệ số, số cố định, trần
+spirit), **Summoning** (nhiều Ash cùng lúc, gọi lại không cần nghỉ, gọi ở mọi nơi), **Health and Look** (hồi máu, màu
+ma), **Behavior** (3 cải thiện AI) và **Teleport** (thử nghiệm), cùng bật/tắt log. Các giá trị số (hệ số, số cố định, trần spirit,
+lượng hồi máu, khoảng cách và thời gian dịch chuyển) gõ trực tiếp vào hàng chữ, cho phép số thập phân; chế độ hồi máu (Regen Mode) vẫn là
+hàng chọn. Đổi trong menu được ghi vào ini và có tác dụng ngay (mod đọc lại các key này mỗi giây), trừ trần
+spirit (`MaxSpirits`) chỉ có hiệu lực sau khi khởi động lại game (hàng đó có ghi chú). Bấm phím reload thì menu hiện lại giá
+trị từ ini. Không có host thì mod chạy bằng ini như trước. Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0. Client:
+`common::erui` ([shared/src/erui.rs](../../shared/src/erui.rs)), mod: [src/menu.rs](src/menu.rs), ghi chú dùng chung:
+[docs/ingame_menu.md](../../docs/ingame_menu.md).
+
 ## Cách hoạt động
 
 - **Vượt trần 10 spirit** (`src/band.rs`, `src/chain.rs`): spirit nằm trong
