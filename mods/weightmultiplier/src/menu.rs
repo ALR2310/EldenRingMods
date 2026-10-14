@@ -17,26 +17,19 @@
 //! The multiplier and the fixed value are typed into text rows.
 
 use std::sync::OnceLock;
-use std::time::Duration;
 
-use common::erui::{self, NumberSetting, Registration, RowHandle, Setting};
-use common::{config, logger};
+use common::config;
+use common::erui::{self, MenuBuilder, NumberSetting, Setting};
 
-fn number(value: u8) -> String {
-    value.to_string()
-}
-
-static MODE: Setting = Setting { key: "Mode", format: number, apply: None };
+static MODE: Setting = Setting::int("Mode");
 static MULTIPLIER: NumberSetting = NumberSetting::new("Multiplier", -1000.0, 1000.0, None);
 static FIXED_VALUE: NumberSetting = NumberSetting::new("FixedValue", -1000.0, 1000.0, None);
-static LOG_FILE: Setting = Setting { key: "LogFile", format: |value| (value != 0).to_string(), apply: None };
+static LOG_FILE: Setting = Setting::flag("LogFile");
+
+static MENU: OnceLock<erui::Menu> = OnceLock::new();
 
 fn mode_row() -> u8 {
     config::get_int("Mode", 0).clamp(0, 1) as u8
-}
-
-fn multiplier_value() -> f64 {
-    config::get_double("Multiplier", 0.5)
 }
 
 fn fixed_value() -> f64 {
@@ -47,109 +40,48 @@ fn log_file_row() -> u8 {
     config::get_bool("LogFile", false) as u8
 }
 
-struct Rows {
-    registration: Registration,
-    /// Each toggle/choice row with the function that reads its current value from the config.
-    rows: Vec<(RowHandle, fn() -> u8)>,
-    /// The typed-number rows, with the function that reads each from the config.
-    numbers: Vec<(&'static NumberSetting, fn() -> f64)>,
-}
-
-static ROWS: OnceLock<Rows> = OnceLock::new();
-
 /// After the ini is written: apply it to the hook, like the reload key does.
 fn apply_saved() {
     crate::hook::reload_from_config();
 }
 
-fn build(hmodule: u64, connection: erui::Connection) -> Result<Rows, String> {
-    let provider = connection.register_provider("weight-multiplier", "Weight Multiplier", hmodule)?;
-    let (page, _entry) = provider.add_submenu(
-        provider.root_page(),
-        "Weight Multiplier",
-        "Settings for the Weight Multiplier mod.",
-        "Weight Multiplier",
-        "Settings for the Weight Multiplier mod.",
-    )?;
-    let mut rows: Vec<(RowHandle, fn() -> u8)> = Vec::new();
-
-    rows.push((
-        provider.add_inline_choice(
-            page,
-            "Mode",
-            "Multiply: your equip load is multiplied. Fixed value: your equip load is always one number.",
-            &["Multiply", "Fixed value"],
-            mode_row(),
-            erui::setting_changed,
-            MODE.user_data(),
-        )?,
+fn build(b: &mut MenuBuilder) -> Result<(), String> {
+    let page = b.submenu(b.root(), "Weight Multiplier", "Settings for the Weight Multiplier mod.")?;
+    b.choice(
+        page,
+        "Mode",
+        "Multiply: your equip load is multiplied. Fixed value: your equip load is always one number.",
+        &["Multiply", "Fixed value"],
+        &MODE,
         mode_row,
-    ));
-    provider.add_number(
+    )?;
+    b.number(
         page,
         "Multiplier",
         "Multiplies your equip load, used when Mode is Multiply. 1 = vanilla.",
         &MULTIPLIER,
-        multiplier_value(),
+        crate::hook::configured_multiplier,
     )?;
-    provider.add_number(
+    b.number(
         page,
         "Fixed Value",
         "The equip load you always have, used when Mode is Fixed value.",
         &FIXED_VALUE,
-        fixed_value(),
+        fixed_value,
     )?;
-    rows.push((
-        provider.add_toggle(
-            page,
-            "Log file",
-            "Write a log file next to the DLL, for troubleshooting.",
-            log_file_row() != 0,
-            erui::setting_changed,
-            LOG_FILE.user_data(),
-        )?,
-        log_file_row,
-    ));
-    let registration = provider.commit()?;
-    let numbers: Vec<(&'static NumberSetting, fn() -> f64)> =
-        vec![(&MULTIPLIER, multiplier_value), (&FIXED_VALUE, fixed_value)];
-    Ok(Rows { registration, rows, numbers })
+    b.toggle(page, "Log file", "Write a log file next to the DLL, for troubleshooting.", &LOG_FILE, log_file_row)
 }
 
 /// Registers the menu on a worker thread. Must start early: the host closes
 /// registration shortly after startup.
 pub fn start(hmodule: u64, ini_path: String) {
     erui::start_saver(ini_path, Some(apply_saved));
-    std::thread::spawn(move || {
-        let connection = match erui::connect(Duration::from_secs(10)) {
-            Ok(c) => c,
-            Err(reason) => {
-                logger::log(&format!("In-game menu unavailable ({reason}); using the ini only."));
-                return;
-            }
-        };
-        match build(hmodule, connection) {
-            Ok(rows) => {
-                let _ = ROWS.set(rows);
-                logger::log("In-game menu: registered.");
-            }
-            Err(reason) => logger::log(&format!("In-game menu registration failed: {reason}")),
-        }
-    });
+    erui::spawn_menu(&MENU, hmodule, "weight-multiplier", "Weight Multiplier", build);
 }
 
 /// After an ini reload: show the reloaded values in the menu.
 pub fn sync_from_config() {
-    if let Some(rows) = ROWS.get() {
-        for (row, read) in &rows.rows {
-            if let Err(reason) = rows.registration.set_row_value(*row, read()) {
-                logger::log(&format!("In-game menu: couldn't update a row ({reason})."));
-            }
-        }
-        for (setting, read) in &rows.numbers {
-            if let Err(reason) = setting.show(&rows.registration, read()) {
-                logger::log(&format!("In-game menu: couldn't update a row ({reason})."));
-            }
-        }
+    if let Some(menu) = MENU.get() {
+        menu.sync();
     }
 }
