@@ -18,6 +18,14 @@ Cấu hình trong `InfiniteAilment.ini` cạnh DLL (tự tạo nếu thiếu). C
 
 Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong [`InfiniteAilment.ini`](InfiniteAilment.ini); file mẫu này được nhúng vào DLL nên là nguồn sự thật duy nhất, README không lặp lại để khỏi lệch.
 
+## Menu trong game (tùy chọn)
+
+Nếu `ERNativeUI.dll` (host menu dùng chung, https://github.com/Flammrock/ERNativeUI) đã được nạp trước mod, System >
+Game Options có thêm hàng **Infinite Ailment**: mở ra trang gồm nhóm **Scarlet Rot** và nhóm **Poison** (mỗi nhóm: thời lượng, phần trăm máu tối đa mỗi nhịp, sát thương cố định mỗi nhịp) và bật/tắt log. Cả ba giá trị đều gõ số vào ô văn bản (thời lượng tính bằng giây, -1 = vô hạn; phần trăm có thể là số thập phân như 0.18; sát thương cố định tới 100000).
+Đổi trong menu được ghi vào ini rồi mod áp lại lên param đúng một lần sau khi ngừng thao tác (cùng đường với phím reload); nếu đang ở màn hình chính thì chờ đến khi vào thế giới. Không có host thì mod chạy bằng ini như trước.
+Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0. Client: `common::erui` ([shared/src/erui.rs](../../shared/src/erui.rs)), mod:
+[src/menu.rs](src/menu.rs), ghi chú dùng chung: [docs/ingame_menu.md](../../docs/ingame_menu.md).
+
 ## Cách hoạt động
 
 - **Khởi động:** `DllMain` tạo 1 thread, nạp/tạo ini, mở log, chạy watcher
