@@ -17,7 +17,12 @@
 //!   timestamp + image size); on any other exe it reports not-ready.
 
 use std::ffi::c_void;
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
+
+use crate::{config, logger};
 
 type Result_ = u32;
 const ERUI_OK: u32 = 0;
@@ -107,6 +112,58 @@ struct SubmenuDesc {
     reserved: u32,
 }
 
+#[repr(C)]
+struct ChoiceDesc {
+    size: u32,
+    flags: u32,
+    label: Utf16View,
+    help: Utf16View,
+    changed_callback: Option<ValueChangedCallback>,
+    user_data: *mut c_void,
+    options: *const Utf16View,
+    option_count: u32,
+    initial_index: u8,
+    reserved8: [u8; 3],
+}
+
+/// What the host passes to a text-input callback (`ERUI_TextInputChangeContext`).
+#[repr(C)]
+pub struct TextInputChange {
+    size: u32,
+    flags: u32,
+    provider: u64,
+    row: u64,
+    value: Utf16View,
+    reserved: [u32; 2],
+}
+
+impl TextInputChange {
+    /// The confirmed text. Only valid inside the callback.
+    fn text(&self) -> String {
+        if self.value.data.is_null() || self.value.length == 0 {
+            return String::new();
+        }
+        let units = unsafe { std::slice::from_raw_parts(self.value.data, self.value.length as usize) };
+        String::from_utf16_lossy(units)
+    }
+}
+
+pub type TextChangedCallback = unsafe extern "C" fn(user_data: *mut c_void, change: *const TextInputChange);
+
+#[repr(C)]
+struct TextInputDesc {
+    size: u32,
+    flags: u32,
+    label: Utf16View,
+    help: Utf16View,
+    initial_value: Utf16View,
+    placeholder: Utf16View,
+    changed_callback: Option<TextChangedCallback>,
+    user_data: *mut c_void,
+    maximum_length: u32,
+    reserved: u32,
+}
+
 type Unused = Option<unsafe extern "C" fn()>;
 
 /// `ERUI_Api` (API 1.1). Field order is the ABI; entries this module does not
@@ -128,7 +185,9 @@ struct Api {
     add_slider: Option<
         unsafe extern "C" fn(ProviderHandle, PageHandle, *const SliderDesc, *mut RowHandle) -> Result_,
     >,
-    add_inline_choice: Unused,
+    add_inline_choice: Option<
+        unsafe extern "C" fn(ProviderHandle, PageHandle, *const ChoiceDesc, *mut RowHandle) -> Result_,
+    >,
     add_popup_choice: Unused,
     add_submenu: Option<
         unsafe extern "C" fn(
@@ -146,8 +205,10 @@ struct Api {
     get_row_value: Option<unsafe extern "C" fn(ProviderHandle, RowHandle, *mut u8) -> Result_>,
     enqueue_alert: Unused,
     get_game_language: Unused,
-    add_text_input: Unused,
-    set_text_input_value: Unused,
+    add_text_input: Option<
+        unsafe extern "C" fn(ProviderHandle, PageHandle, *const TextInputDesc, *mut RowHandle) -> Result_,
+    >,
+    set_text_input_value: Option<unsafe extern "C" fn(ProviderHandle, RowHandle, *const Utf16View) -> Result_>,
     get_text_input_value: Unused,
     add_color_picker: Unused,
     set_color_picker_value: Unused,
@@ -242,6 +303,9 @@ pub fn connect(timeout: Duration) -> Result<Connection, String> {
                         || api.add_slider.is_none()
                         || api.add_toggle.is_none()
                         || api.add_submenu.is_none()
+                        || api.add_inline_choice.is_none()
+                        || api.add_text_input.is_none()
+                        || api.set_text_input_value.is_none()
                         || api.commit_provider.is_none()
                         || api.abort_provider.is_none()
                         || api.set_row_value.is_none()
@@ -382,6 +446,108 @@ impl Provider {
         Ok(row)
     }
 
+    /// Adds a row cycled with left/right through `options` (1-32 labels); the
+    /// value is the zero-based index of the selected label.
+    pub fn add_inline_choice(
+        &self,
+        page: PageHandle,
+        label: &str,
+        help: &str,
+        options: &[&str],
+        initial_index: u8,
+        callback: ValueChangedCallback,
+        user_data: *mut c_void,
+    ) -> Result<RowHandle, String> {
+        let label = wide(label);
+        let help = wide(help);
+        let option_text: Vec<Vec<u16>> = options.iter().map(|o| wide(o)).collect();
+        let views: Vec<Utf16View> = option_text.iter().map(|o| Utf16View::of(o)).collect();
+        let desc = ChoiceDesc {
+            size: std::mem::size_of::<ChoiceDesc>() as u32,
+            flags: 0,
+            label: Utf16View::of(&label),
+            help: Utf16View::of(&help),
+            changed_callback: Some(callback),
+            user_data,
+            options: views.as_ptr(),
+            option_count: views.len() as u32,
+            initial_index,
+            reserved8: [0; 3],
+        };
+        let mut row: RowHandle = 0;
+        let status = unsafe { (self.api.add_inline_choice.unwrap())(self.provider, page, &desc, &mut row) };
+        if status != ERUI_OK {
+            return Err(format!("add_inline_choice: {}", result_name(status)));
+        }
+        Ok(row)
+    }
+
+    /// Adds a row that opens the game's text editor; the callback gets the
+    /// confirmed text when it changed. `maximum_length` is 1..=35 UTF-16 units.
+    pub fn add_text_input(
+        &self,
+        page: PageHandle,
+        label: &str,
+        help: &str,
+        initial: &str,
+        placeholder: &str,
+        maximum_length: u32,
+        callback: TextChangedCallback,
+        user_data: *mut c_void,
+    ) -> Result<RowHandle, String> {
+        let label = wide(label);
+        let help = wide(help);
+        let initial = wide(initial);
+        let placeholder = wide(placeholder);
+        let desc = TextInputDesc {
+            size: std::mem::size_of::<TextInputDesc>() as u32,
+            flags: 0,
+            label: Utf16View::of(&label),
+            help: Utf16View::of(&help),
+            initial_value: Utf16View::of(&initial),
+            placeholder: Utf16View::of(&placeholder),
+            changed_callback: Some(callback),
+            user_data,
+            maximum_length,
+            reserved: 0,
+        };
+        let mut row: RowHandle = 0;
+        let status = unsafe { (self.api.add_text_input.unwrap())(self.provider, page, &desc, &mut row) };
+        if status != ERUI_OK {
+            return Err(format!("add_text_input: {}", result_name(status)));
+        }
+        Ok(row)
+    }
+
+    /// Adds a text row for a number, kept in range and written to the config
+    /// like any other [`Setting`]: the player types `1.5` (a comma works too),
+    /// out-of-range values are clamped and bad text is put back to the last
+    /// good value. `initial` is the number the row starts with.
+    pub fn add_number(
+        &self,
+        page: PageHandle,
+        label: &str,
+        help: &str,
+        setting: &'static NumberSetting,
+        initial: f64,
+    ) -> Result<RowHandle, String> {
+        let initial = if setting.integer { initial.round() } else { initial };
+        let initial = initial.clamp(setting.min, setting.max);
+        setting.last.store(initial.to_bits(), Ordering::Relaxed);
+        let row = self.add_text_input(
+            page,
+            label,
+            help,
+            &setting.text(initial),
+            "",
+            NUMBER_MAX_LENGTH,
+            number_changed,
+            setting as *const NumberSetting as *mut c_void,
+        )?;
+        let _ = setting.row.set(row);
+        Ok(row)
+    }
+
     /// Adds an on/off row to `page`.
     pub fn add_toggle(
         &self,
@@ -424,7 +590,10 @@ impl Provider {
             return Err(format!("commit_provider: {}", result_name(status)));
         }
         self.committed = true;
-        Ok(Registration { api: self.api, provider: self.provider })
+        let registration = Registration { api: self.api, provider: self.provider };
+        // Callbacks (see `NumberSetting`) need it to put text back.
+        let _ = REGISTRATION.set(registration);
+        Ok(registration)
     }
 }
 
@@ -444,7 +613,17 @@ pub struct Registration {
     provider: ProviderHandle,
 }
 
+static REGISTRATION: OnceLock<Registration> = OnceLock::new();
+
 impl Registration {
+    /// Replaces a text row's value (no callback); the screen catches up shortly after.
+    pub fn set_text(&self, row: RowHandle, text: &str) -> Result<(), String> {
+        let units = wide(text);
+        let view = Utf16View::of(&units);
+        let status = unsafe { (self.api.set_text_input_value.unwrap())(self.provider, row, &view) };
+        if status == ERUI_OK { Ok(()) } else { Err(format!("set_text_input_value: {}", result_name(status))) }
+    }
+
     pub fn set_row_value(&self, row: RowHandle, value: u8) -> Result<(), String> {
         let status = unsafe { (self.api.set_row_value.unwrap())(self.provider, row, value) };
         if status == ERUI_OK { Ok(()) } else { Err(format!("set_row_value: {}", result_name(status))) }
@@ -454,5 +633,250 @@ impl Registration {
         let mut value = 0u8;
         let status = unsafe { (self.api.get_row_value.unwrap())(self.provider, row, &mut value) };
         if status == ERUI_OK { Ok(value) } else { Err(format!("get_row_value: {}", result_name(status))) }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Settings saved back to the ini
+// ---------------------------------------------------------------------------
+
+/// One menu row bound to an ini key. Pass it as the row's `user_data` (via
+/// [`Setting::user_data`]) together with [`setting_changed`] as the callback:
+/// a change is applied at once with `apply` (if any) and written to the ini
+/// by the saver started with [`start_saver`].
+pub struct Setting {
+    /// The ini key, e.g. `"Multiplier"`.
+    pub key: &'static str,
+    /// The row's byte as the text stored in the ini.
+    pub format: fn(u8) -> String,
+    /// Runs on the host's worker thread right when the player changes the row
+    /// (keep it short); `None` when the mod only needs the saved value.
+    pub apply: Option<fn(u8)>,
+}
+
+impl Setting {
+    /// The `user_data` pointer for the row; `self` must be a `static`.
+    pub fn user_data(&'static self) -> *mut c_void {
+        self as *const Setting as *mut c_void
+    }
+}
+
+type Pending = (&'static str, String);
+
+static SAVER: OnceLock<Sender<Pending>> = OnceLock::new();
+
+/// How long the player must stop changing rows before the ini is written.
+const SAVE_DELAY: Duration = Duration::from_millis(1000);
+
+/// Starts the thread that writes menu changes into `ini_path` (and the shared
+/// config map) once the player has stopped for a second, then calls
+/// `on_saved` (e.g. to tell the mod to re-read its config). The thread sleeps
+/// until there is something to save. Call once, before registering rows.
+pub fn start_saver(ini_path: String, on_saved: Option<fn()>) {
+    start_saver_with(
+        move |changes| {
+            // Also updates the shared config map, which a mod (and the log
+            // switch, see `logger`) reads from.
+            config::set_values(&ini_path, changes)
+        },
+        on_saved,
+    );
+}
+
+/// [`start_saver`] for a mod with its own way of saving, e.g. a TOML config:
+/// `write` gets the changed `(key, text)` pairs (the latest per key) and
+/// returns whether they were saved. `Setting::key` is then whatever `write`
+/// expects (`"Section.Key"` for [`crate::toml_config::TomlConfig::save_values`]).
+pub fn start_saver_with(mut write: impl FnMut(&[(&'static str, String)]) -> bool + Send + 'static, on_saved: Option<fn()>) {
+    let (tx, rx) = mpsc::channel::<Pending>();
+    if SAVER.set(tx).is_err() {
+        return;
+    }
+    std::thread::spawn(move || {
+        let mut changes: Vec<Pending> = Vec::new();
+        while let Ok(first) = rx.recv() {
+            let mut next = Some(first);
+            loop {
+                if let Some((key, value)) = next.take() {
+                    match changes.iter_mut().find(|(k, _)| *k == key) {
+                        Some(entry) => entry.1 = value,
+                        None => changes.push((key, value)),
+                    }
+                }
+                match rx.recv_timeout(SAVE_DELAY) {
+                    Ok(change) => next = Some(change),
+                    Err(RecvTimeoutError::Timeout) => break,
+                    Err(RecvTimeoutError::Disconnected) => return,
+                }
+            }
+            if write(&changes) {
+                logger::log(&format!("In-game menu: saved {changes:?}."));
+            } else {
+                logger::log("In-game menu: couldn't save the config; the change applies until the game closes.");
+            }
+            changes.clear();
+            if let Some(on_saved) = on_saved {
+                on_saved();
+            }
+        }
+    });
+}
+
+/// Value-changed callback for rows whose `user_data` is a [`Setting`]. Runs on
+/// the host's worker thread; never panics across the C ABI.
+pub unsafe extern "C" fn setting_changed(user_data: *mut c_void, value: u8) {
+    let _ = std::panic::catch_unwind(|| {
+        if user_data.is_null() {
+            return;
+        }
+        let setting = unsafe { &*(user_data as *const Setting) };
+        if let Some(apply) = setting.apply {
+            apply(value);
+        }
+        if let Some(tx) = SAVER.get() {
+            let _ = tx.send((setting.key, (setting.format)(value)));
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Numbers typed in a text row
+// ---------------------------------------------------------------------------
+
+/// Longest number text the row accepts (UTF-16 units; the host allows 35).
+const NUMBER_MAX_LENGTH: u32 = 12;
+
+/// One text row holding a number bound to an ini key (or `"Section.Key"` for a
+/// TOML mod, see [`start_saver_with`]). Declare it as a `static` and add the
+/// row with [`Provider::add_number`].
+pub struct NumberSetting {
+    pub key: &'static str,
+    pub min: f64,
+    pub max: f64,
+    /// Runs on the host's worker thread with the accepted value (keep it short).
+    pub apply: Option<fn(f64)>,
+    /// The row, set by `add_number`, so rejected text can be put back.
+    pub row: OnceLock<RowHandle>,
+    /// Last accepted value (`f64` bits).
+    pub last: AtomicU64,
+    /// Write whole numbers with a decimal point (`2.0`), for a TOML float
+    /// field; an ini just takes `2`.
+    pub decimal_point: bool,
+    /// The mod reads the key as a whole number (`config::get_int`): typed
+    /// decimals are rounded, since `1.5` would not parse and the mod would
+    /// fall back to its default.
+    pub integer: bool,
+}
+
+impl NumberSetting {
+    pub const fn new(key: &'static str, min: f64, max: f64, apply: Option<fn(f64)>) -> Self {
+        NumberSetting { key, min, max, apply, row: OnceLock::new(), last: AtomicU64::new(0), decimal_point: false, integer: false }
+    }
+
+    /// Like [`NumberSetting::new`] for a key the mod reads as a whole number.
+    pub const fn whole(key: &'static str, min: f64, max: f64, apply: Option<fn(f64)>) -> Self {
+        NumberSetting { key, min, max, apply, row: OnceLock::new(), last: AtomicU64::new(0), decimal_point: false, integer: true }
+    }
+
+    /// Like [`NumberSetting::new`] for a TOML float field: `2` is shown and
+    /// saved as `2.0`, so the file keeps its style.
+    pub const fn float(key: &'static str, min: f64, max: f64, apply: Option<fn(f64)>) -> Self {
+        NumberSetting { key, min, max, apply, row: OnceLock::new(), last: AtomicU64::new(0), decimal_point: true, integer: false }
+    }
+
+    /// The text shown in the row and written to the config for `value`.
+    fn text(&self, value: f64) -> String {
+        let text = number_text(value);
+        if self.decimal_point && !text.contains('.') { format!("{text}.0") } else { text }
+    }
+}
+
+impl NumberSetting {
+    /// Shows `value` (clamped) in the row, e.g. after the config was reloaded.
+    pub fn show(&'static self, registration: &Registration, value: f64) -> Result<(), String> {
+        let value = if self.integer { value.round() } else { value };
+        let value = value.clamp(self.min, self.max);
+        self.last.store(value.to_bits(), Ordering::Relaxed);
+        match self.row.get() {
+            Some(row) => registration.set_text(*row, &self.text(value)),
+            None => Ok(()),
+        }
+    }
+}
+
+/// Shortest text that reads back as `value` (`1`, `0.5`, never `1e-7`),
+/// rounded to six decimals so a value that went through `f32` (`1.2` read back
+/// as `1.2000000476837158`) shows as the number the player typed.
+fn number_text(value: f64) -> String {
+    let rounded = if value.abs() < 1e9 { (value * 1e6).round() / 1e6 } else { value };
+    format!("{rounded}")
+}
+
+/// Parses what the player typed: `1.5` or `1,5`, surrounding spaces ignored.
+fn parse_number(text: &str) -> Option<f64> {
+    let value: f64 = text.trim().replace(',', ".").parse().ok()?;
+    value.is_finite().then_some(value)
+}
+
+unsafe extern "C" fn number_changed(user_data: *mut c_void, change: *const TextInputChange) {
+    let _ = std::panic::catch_unwind(|| {
+        if user_data.is_null() || change.is_null() {
+            return;
+        }
+        let setting = unsafe { &*(user_data as *const NumberSetting) };
+        let typed = unsafe { &*change }.text();
+        let accepted = parse_number(&typed).map(|v| {
+            let v = if setting.integer { v.round() } else { v };
+            v.clamp(setting.min, setting.max)
+        });
+        let value = match accepted {
+            Some(v) => v,
+            None => f64::from_bits(setting.last.load(Ordering::Relaxed)),
+        };
+        // Show the number actually in use (clamped, normalised, or the old one
+        // when the text was not a number).
+        let shown = setting.text(value);
+        if shown != typed.trim() {
+            if let (Some(registration), Some(row)) = (REGISTRATION.get(), setting.row.get()) {
+                let _ = registration.set_text(*row, &shown);
+            }
+        }
+        if accepted.is_none() {
+            return;
+        }
+        setting.last.store(value.to_bits(), Ordering::Relaxed);
+        if let Some(apply) = setting.apply {
+            apply(value);
+        }
+        if let Some(tx) = SAVER.get() {
+            let _ = tx.send((setting.key, shown));
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn numbers_are_parsed_leniently() {
+        assert_eq!(parse_number("1.5"), Some(1.5));
+        assert_eq!(parse_number(" 2,25 "), Some(2.25));
+        assert_eq!(parse_number("-3"), Some(-3.0));
+        assert_eq!(parse_number(""), None);
+        assert_eq!(parse_number("abc"), None);
+        assert_eq!(parse_number("inf"), None);
+        assert_eq!(parse_number("NaN"), None);
+    }
+
+    #[test]
+    fn number_text_is_short_and_round_trips() {
+        for v in [0.0, 1.0, 0.5, 0.25, 1000.0, 0.1, 12345.678] {
+            assert_eq!(parse_number(&number_text(v)), Some(v));
+        }
+        assert_eq!(number_text(1.0), "1");
+        assert_eq!(number_text(0.5), "0.5");
+        assert_eq!(number_text(f64::from(1.2f32)), "1.2");
+        assert_eq!(number_text(f64::from(0.07f32)), "0.07");
     }
 }
