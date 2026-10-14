@@ -15,3 +15,4 @@ sử git của `README.md`.
 | 2026-09-26 | Dòng lỗi `[INFO ] ERROR:` chuyển sang `logger::error`/`warn`; `[INFO ]` thành `[INFO]`; log phiên bản game và danh sách DLL, nhận ra mod khác hook đè (sau báo lỗi "anchor not found" trên Nexus) | [docs](docs/hook_point.md) |
 | 2026-10-05 | Version thật trong thuộc tính file DLL (`build.rs` + `winresource`) | |
 | 2026-10-07 | Đổi thư mục `crates/` thành `mods/`; tách README thành README + HISTORY + docs/; kiểm tra bằng IDA: mẫu neo duy nhất và cùng RVA `0x247C9E` trên 2.6.2.0, 2.7.0.0, 2.7.1.0 | [docs](docs/hook_point.md) |
+| 2026-10-13 | Thêm menu tùy chọn trong game qua ERNativeUI (`common::erui`): chế độ, hệ số và giá trị cố định (gõ số vào ô văn bản), log. Menu ghi ini rồi gọi đúng hàm reload sẵn có (`reload_weight_value`) từ thread của bộ lưu; thiết kế không dùng task game giữ nguyên. | [docs](../../docs/ingame_menu.md) |

@@ -1,6 +1,7 @@
 #![allow(non_snake_case)] // crate name is "WeightMultiplier" to control the output DLL's filename
 
 mod hook;
+mod menu;
 
 use common::{config, dll_dir, logger};
 
@@ -35,6 +36,10 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
                 "WeightMultiplier.ini updated: added {migrated} new key(s) from a newer default template."
             ));
         }
+
+        // Optional in-game menu (ERNativeUI); must register within the host's first seconds,
+        // so before `hook::run` sleeps for LoadDelay.
+        menu::start(hmodule, ini_path.clone());
 
         hook::run(ini_path);
     });

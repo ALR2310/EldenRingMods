@@ -154,6 +154,15 @@ fn reload_weight_value() {
     }
 }
 
+/// Applies the current config to the running hook; used by the in-game menu
+/// after it has saved a change (same effect as the reload key, without
+/// re-reading the file: the menu's saver already updated the shared config).
+pub fn reload_from_config() {
+    if let Err(panic) = std::panic::catch_unwind(reload_weight_value) {
+        logger::error(&format!("Menu reload panicked, skipped: {panic:?}"));
+    }
+}
+
 fn build_stub(mode: i32, weight_value_addr: u64) -> Vec<u8> {
     let mut body = Vec::with_capacity(21);
 
@@ -258,6 +267,7 @@ pub fn run(ini_path: String) {
             if is_key_pressed(reload_key) {
                 config::load(&ini_path);
                 reload_weight_value();
+                crate::menu::sync_from_config();
                 logger::log("Config reloaded");
             }
         }) {
