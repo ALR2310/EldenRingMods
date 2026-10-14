@@ -25,6 +25,14 @@ Tên key, khoảng giá trị, giá trị mặc định và ý nghĩa nằm ở 
 [`PassiveRunes.ini`](PassiveRunes.ini); file mẫu này được nhúng vào DLL nên là nguồn sự
 thật duy nhất, README không lặp lại để khỏi lệch.
 
+## Menu trong game (tùy chọn)
+
+Nếu `ERNativeUI.dll` (host menu dùng chung, https://github.com/Flammrock/ERNativeUI) đã được nạp trước mod, System >
+Game Options có thêm hàng **Passive Runes**: mở ra trang gồm công tắc bật/tắt, chu kỳ nhận rune, lượng rune cố định, phần trăm theo chi phí lên cấp kế tiếp, phần trăm lãi theo số rune đang giữ và bật/tắt log. Các giá trị số (chu kỳ tính bằng ms, lượng rune có thể âm, hai phần trăm có thể là số thập phân) gõ vào ô văn bản; danh sách mốc thời gian (milestone) và các key khác chỉ sửa trong ini.
+Mod đọc ini mỗi tick nên đổi trong menu được ghi vào ini (sau khi ngừng thao tác 1 giây) và có hiệu lực ngay. Không có host thì mod chạy bằng ini như trước.
+Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0. Client: `common::erui` ([shared/src/erui.rs](../../shared/src/erui.rs)), mod:
+[src/menu.rs](src/menu.rs), ghi chú dùng chung: [docs/ingame_menu.md](../../docs/ingame_menu.md).
+
 ## Cách hoạt động
 
 - **Đọc/ghi rune trực tiếp** qua `WorldChrMan.main_player.player_game_data` của
