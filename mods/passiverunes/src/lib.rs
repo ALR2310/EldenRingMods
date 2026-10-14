@@ -1,5 +1,6 @@
 #![allow(non_snake_case)] // crate name is "PassiveRunes" to control the output DLL's filename
 
+mod menu;
 mod rune;
 
 use common::{config, dll_dir, logger};
@@ -34,6 +35,9 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
                 "PassiveRunes.ini updated: added {migrated} new key(s) from a newer default template."
             ));
         }
+
+        // Optional in-game menu (ERNativeUI); must register within the host's first seconds.
+        menu::start(hmodule, ini_path.clone());
 
         // `common::reload` owns `General.ReloadKey` watching for the whole
         // DLL (see its module doc comment) and shows the in-game "Config
