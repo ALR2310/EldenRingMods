@@ -23,14 +23,15 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         let dir = dll_dir(hmodule);
         let report = config::init(&format!("{dir}\\SpeedMultiplier.toml"));
 
-        // Registers the in-game menu right away: the host only accepts
-        // registrations in its first seconds. No-op without ERNativeUI.
-        menu::start(hmodule);
-
         // [Logging] LogFile gates the log file entirely - see common::logger.
         logger::set_enabled(config::get().logging.log_file);
         logger::init(&dir, "SpeedMultiplier.log");
         logger::install_panic_hook();
+
+        // Registers the in-game menu right away: the host only accepts
+        // registrations in its first seconds. No-op without ERNativeUI.
+        menu::start(hmodule);
+
         logger::log("Activating SpeedMultiplier...");
         if report.created {
             logger::log("SpeedMultiplier.toml created with the default settings.");
