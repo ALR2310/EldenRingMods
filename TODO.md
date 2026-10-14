@@ -9,7 +9,11 @@ Quy ước đầy đủ: `CLAUDE.md`, mục "Viết `TODO.md` gọn".
 Chi tiết: `docs/ingame_menu.md`
 
 - [ ] Đưa menu tùy chọn lên các mod khác (ứng viên chọn 2026-10-13); mỗi mod 1 hàng trang con, tên chứa tên mod
-- [ ] `common::erui`: thêm `add_inline_choice` / `add_text_input` khi mod nào cần số lẻ hoặc giá trị âm
+- [ ] [research] Slider số âm/thập phân: thử bản fork ERNativeUI + sửa 1 byte game (`docs/ingame_menu_slider.md`)
+
+## InfiniteAilment
+
+- [ ] [research] Thêm Black Flame (DoT theo % máu, giống Poison/Rot) làm ailment chỉnh được; Destined Death (giảm máu tối đa) khó hơn (long41, 2026-10-13)
 
 ## SpiritMultiplier
 
@@ -30,6 +34,7 @@ Chi tiết: `mods/spiritmultiplier/docs/open_issues.md`, `docs/warp_research.md`
 - [ ] Seamless Co-op: đồng bộ hình ảnh tốc độ giữa các máy bằng Steam P2P (hướng B, chốt 2026-10-03; xem `docs/seamless.md`)
 - [ ] Test `Critical` khác 1 với nạn nhân backstab/riposte (`docs/critical_victim.md`)
 - [ ] Hệ số tốc độ đánh theo loại vũ khí (InvertedButt, 2026-10-01; gộp cả cung/nỏ riêng, tạm không làm)
+- [ ] Tách hệ số tốc độ kẻ địch thường / boss (Nickademus84, 2026-10-13; tách theo nhóm hành động như player thì chưa khả thi)
 - [ ] Tuỳ chọn: Seamless cho Spirit / Enemy / nạn nhân critical; chia nhóm boss / spirit
 
 ## DropMultiplier

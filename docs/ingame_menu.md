@@ -44,12 +44,23 @@ chung + SDK C ABI (`erui.h`). Release 1.0.0 (2026-08-30), 1.1.0 (09-06), 1.1.1
 - GFX thay thế file của game, xung đột với mod khác sửa cùng file (Solid Uncapper...): **không nên bắt buộc**.
   Thiết kế: mỗi mod 1 hàng trang con (tên chứa tên mod, vì nhãn trùng nhau giữa các mod), mọi setting nằm trong.
 
+- Slider số âm / thập phân: nghiên cứu xong, chưa thử trong game -> [ingame_menu_slider.md](ingame_menu_slider.md). Bố cục từng mod: [ingame_menu_layouts.md](ingame_menu_layouts.md). Menu cuộn thay vì phân trang: [ingame_menu_scroll.md](ingame_menu_scroll.md).
+
 ## Mẫu client trong repo
 
 `shared/src/erui.rs` (`common::erui`): `connect`, `register_provider`, `add_submenu`, `add_slider`, `add_toggle`,
-`commit`, `set_row_value`/`get_row_value`; mod thiếu host thì ghi log và chạy bằng ini. Mẫu dùng:
-`mods/runemultiplier/src/menu.rs` (menu "Rune Multiplier" -> Multiplier 0..10, Log file; thread ghi ini sau khi
-dừng thao tác 1 s; F5 reload đồng bộ lại hàng). Chưa có `add_inline_choice`, `add_text_input` trong `common::erui`.
+`add_inline_choice`, `commit`, `set_row_value`/`get_row_value`; mod thiếu host thì ghi log và chạy bằng ini.
+Lưu về ini dùng chung: `Setting` (khoá ini + hàm đổi byte thành chữ + `apply` tuỳ chọn) làm `user_data` của hàng cùng
+callback `setting_changed`; `start_saver(ini_path, on_saved)` chạy 1 thread ngủ cho đến khi có thay đổi, gộp theo khoá,
+ghi ini + map cấu hình sau 1 s yên rồi gọi `on_saved`.
+Số thập phân: `add_text_input` + `NumberSetting` (`Provider::add_number`): gõ `1.5` (dấu phẩy cũng được), kẹp vào
+[min, max], chữ không phải số thì trả về giá trị cũ; `NumberSetting::show` đồng bộ lại sau reload. Key mod đọc bằng
+`config::get_int` phải dùng `NumberSetting::whole` (làm tròn, vì `1.5` làm `get_int` hỏng và rơi về mặc định); key TOML kiểu
+float dùng `NumberSetting::float` (ghi `2.0`); số hiển thị làm tròn 6 chữ số thập phân (số qua `f32` hiện `1.2`). Chưa kiểm trong game
+xem editor chữ của game có cho gõ `.` và `-` không (trạng thái 2026-10-13: AutoRegen là mod thử).
+Mẫu: `mods/runemultiplier/src/menu.rs` (áp ngay trong `apply`, ini lưu sau) và `mods/dropmultiplier/src/menu.rs`
+(nhiều hàng + hàng chọn Mode; `on_saved` tăng `common::reload::RELOAD_GENERATION` để mod quét lại param từ baseline
+đúng một lần). Mod gate "đã vào thế giới" phải giữ yêu cầu reload đến khi vào thế giới (xem `drop_rate.rs`).
 
 ## Nghiên cứu nền (IDA 2.7.1.0, đối chiếu với ERNativeUI)
 
