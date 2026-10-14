@@ -174,7 +174,7 @@ where
         for (path, value) in values {
             set_value(&mut doc, &template, path, scalar(value));
         }
-        fs::write(&self.path, doc.to_string()).map_err(|e| e.to_string())?;
+        crate::config::write_atomic(&self.path, &doc.to_string()).map_err(|e| e.to_string())?;
         self.reload()
     }
 }
