@@ -18,6 +18,15 @@ Cấu hình trong `DropMultiplier.ini` cạnh DLL (tự tạo nếu thiếu; khi
 
 Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong [`DropMultiplier.ini`](DropMultiplier.ini); file mẫu này được nhúng vào DLL nên là nguồn sự thật duy nhất, README không lặp lại để khỏi lệch.
 
+## Menu trong game (tùy chọn)
+
+Nếu `ERNativeUI.dll` (host menu dùng chung, https://github.com/Flammrock/ERNativeUI) đã được nạp trước mod, System >
+Game Options có thêm hàng **Drop Multiplier**: mở ra trang gồm nhóm **Drop Chance** (chế độ, hệ số, tỉ lệ cố định), nhóm **Materials** (hệ số nguyên liệu) và
+bật/tắt log (hệ số là hàng nhập số, gõ được số lẻ, tối đa 1000; tỉ lệ rơi cố định là thanh trượt 0-100). Đổi trong menu được ghi vào ini, rồi mod áp lại từ bảng
+gốc đúng một lần sau khi ngừng thao tác (cùng đường với phím reload). Không có host thì mod chạy bằng ini như trước.
+Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0. Client: `common::erui` ([shared/src/erui.rs](../../shared/src/erui.rs)), mod:
+[src/menu.rs](src/menu.rs), ghi chú dùng chung: [docs/ingame_menu.md](../../docs/ingame_menu.md).
+
 ## Cách hoạt động
 
 - **Khởi động:** `DllMain` tạo 1 thread, nạp/tạo ini, mở log, chạy watcher
