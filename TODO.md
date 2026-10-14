@@ -49,13 +49,13 @@ Chi tiết: `mods/spiritmultiplier/docs/open_issues.md`, `docs/warp_research.md`
 
 ## AnimCancel
 
-- [ ] Trả lời DAM127 (Nexus, 2026-10-12): đã có bản chạy (đòn đánh, skill, phép huỷ bằng guard/lăn/đổi vũ khí); hỏi muốn cancel gì thêm `[chờ phản hồi]`
+- [ ] Trả lời DAM127 (Nexus, 2026-10-12): bản 1.0.0 đã phát hành (đòn đánh, skill, phép, item huỷ bằng guard/lăn/đổi vũ khí); hỏi muốn cancel gì thêm `[chờ phản hồi]`
 - [ ] Kiểm tra tác dụng phụ (i-frame, hitbox, FP khi cắt phép) và Seamless Co-op; xem `mods/animcancel/docs/animation_cancel.md`
 
 ## Chung
 
-- [ ] `ReloadKey` lọt sang instance game khác: `common::reload` và autoregen nên dùng `common::input::is_key_pressed` (xem `mods/soulsteleport/docs/position_exchange.md`)
+- [ ] `ReloadKey` lọt sang instance game khác: `common::reload` (`reload.rs`) và autoregen (`regen.rs`) còn dùng `eldenring::util::input`, đổi sang `common::input::is_key_pressed` (xem `mods/soulsteleport/docs/position_exchange.md`, `shared/docs/input.md`)
 - [ ] `risearcher` (`weapon.rs`, `bullet.rs`), `infiniteailment` (`status_effect.rs`): chuyển sang `common::params::for_each_row_mut` (xem `mods/dropmultiplier/docs/convergence_panic.md`)
 - [ ] `ReloadBanner` cho `weightmultiplier` - cần quyết định (phải bỏ thiết kế không dùng task game)
-- [ ] Dọn tham chiếu `.docs/...` lỗi thời (~47 dòng / 15 file)
+- [ ] Dọn tham chiếu `.docs/...` lỗi thời (~17 dòng / 13 file, phần lớn ở `sometweaks` đã bỏ; còn `autoregen/hit_hook.rs`, `spiritmultiplier/chain.rs`, `probe.rs`)
 - [ ] `mods/risearcher/project.json` chứa đường dẫn máy: git-ignore hoặc đổi thành file mẫu

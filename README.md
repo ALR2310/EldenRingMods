@@ -1,117 +1,141 @@
+<div align="center">
+
 # EldenRingMod
 
-Cargo workspace gộp các mod Elden Ring viết bằng Rust vào 1 repo duy nhất,
-mỗi mod là 1 crate `cdylib` riêng, dùng chung 1 crate `common` cho phần
-plumbing lặp lại giữa các mod (đọc/ghi ini, log ra file, AOB pattern scan).
+**Bộ mod DLL viết bằng Rust của tôi cho Elden Ring.**
 
-## Cấu trúc
+![Rust](https://img.shields.io/badge/Rust-2024_edition-orange?logo=rust)
+![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)
+![Game](https://img.shields.io/badge/game-Elden_Ring-8a6d3b)
+![Mods](https://img.shields.io/badge/mods-14-green)
+
+</div>
+
+---
+
+## Giới thiệu
+
+EldenRingMod là một monorepo gồm các mod cho Elden Ring. Mỗi mod là một DLL độc lập:
+bỏ vào thư mục mod loader, không cần sửa file game và không phải ghi đè `regulation.bin`.
+Các mod đọc và ghi trạng thái game ngay trong lúc chạy (qua binding
+[fromsoftware-rs](https://github.com/vswarte/fromsoftware-rs) hoặc hook mã máy), và cấu
+hình bằng một file `.ini` hoặc `.toml` đặt cạnh DLL.
+
+Phần lớn mod đã được đăng trên Nexus Mods và kiểm thử trong game, gồm cả bản vanilla,
+Seamless Co-op và các bản mod lớn như Convergence và Reforged.
+
+## Danh sách mod
+
+| Mod                                           | Chức năng                                                               | Nexus                                                   |
+| --------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------- |
+| [**AnimCancel**](mods/animcancel)             | Cắt animation đang chạy bằng guard, lăn hoặc đổi vũ khí                 | [11328](https://www.nexusmods.com/eldenring/mods/11328) |
+| [**AutoRegen**](mods/autoregen)               | Hồi HP, FP, Stamina theo thời gian, khi đánh trúng và khi bị đánh trúng | [10548](https://www.nexusmods.com/eldenring/mods/10548) |
+| [**DropMultiplier**](mods/dropmultiplier)     | Chỉnh tỉ lệ rớt đồ của quái                                             | [11075](https://www.nexusmods.com/eldenring/mods/11075) |
+| [**FasterRevival**](mods/fasterrevival)       | Rút ngắn thời gian từ lúc chết đến lúc hồi sinh                         | [11160](https://www.nexusmods.com/eldenring/mods/11160) |
+| [**InfiniteAilment**](mods/infiniteailment)   | Chỉnh thời lượng và sát thương Poison, Scarlet Rot mà người chơi gây ra | [11087](https://www.nexusmods.com/eldenring/mods/11087) |
+| [**PassiveRunes**](mods/passiverunes)         | Cộng rune theo thời gian, có bonus theo mốc                             | [10528](https://www.nexusmods.com/eldenring/mods/10528) |
+| [**RiseArcher**](mods/risearcher)             | Buff Bow, Crossbow, Ballista, Arrow, Bolt                               | [5807](https://www.nexusmods.com/eldenring/mods/5807)   |
+| [**RuneMultiplier**](mods/runemultiplier)     | Nhân lượng rune nhận được từ mọi nguồn                                  | [10630](https://www.nexusmods.com/eldenring/mods/10630) |
+| [**SoulsTeleport**](mods/soulsteleport)       | Dịch chuyển tới người chơi khác trong Seamless Co-op                    | [11119](https://www.nexusmods.com/eldenring/mods/11119) |
+| [**SpeedMultiplier**](mods/speedmultiplier)   | Tăng tốc di chuyển, tấn công và thi triển phép                          | [11173](https://www.nexusmods.com/eldenring/mods/11173) |
+| [**SpiritMultiplier**](mods/spiritmultiplier) | Nhân số linh hồn (spirit ash) triệu hồi, vượt trần mặc định             | [11168](https://www.nexusmods.com/eldenring/mods/11168) |
+| [**WeightMultiplier**](mods/weightmultiplier) | Nhân hệ số Trọng Tải                                                    | [10549](https://www.nexusmods.com/eldenring/mods/10549) |
+| [**WindowResize**](mods/windowresize)         | Kéo viền để đổi kích thước cửa sổ Windowed                              | nội bộ                                                  |
+| [**SomeTweaks**](mods/sometweaks)             | Gói QoL thử nghiệm, đã ngừng phát triển                                 | không đăng                                              |
+
+Phiên bản và ghi chú phát hành của từng mod nằm ở `CHANGELOG.md` trong thư mục mod đó.
+
+## Cài đặt mod
+
+1. Tải bản phát hành của mod từ trang Nexus tương ứng ở bảng trên.
+2. Cần một mod loader nạp được DLL, ví dụ
+   [Mod Engine 2](https://github.com/soulsmods/ModEngine2/releases) (khuyến nghị),
+   [Mod Engine 3](https://github.com/garyttierney/me3/releases) hoặc
+   [Elden Mod Loader](https://www.nexusmods.com/eldenring/mods/117).
+3. Đặt `<Mod>.dll` vào thư mục mod của loader và khai báo nó theo hướng dẫn của loader.
+4. Chạy game. File cấu hình (`<Mod>.ini` hoặc `<Mod>.toml`) được tạo cạnh DLL nếu chưa có;
+   sửa file đó để đổi hành vi. Nhiều mod hỗ trợ phím nóng để nạp lại cấu hình khi đang chơi.
+
+Hướng dẫn chi tiết hơn có trên trang Nexus của từng mod.
+
+## Kiến trúc
 
 ```
 EldenRingMod/
-├── Cargo.toml       # workspace root - liệt kê member crates + dependency dùng chung
-├── builds/          # builds/<crate>/ chứa .dll + .ini (+ .zip) của từng mod (git-ignored) - xem `scripts/build-mod.ps1`
-├── mods/            # mỗi thư mục con = 1 mod (thường là 1 crate Rust build ra 1 DLL; có thể thêm mod chỉ có dữ liệu Smithbox)
-│   ├── autoregen/        # AutoRegen: hồi HP/FP/Stamina theo tick + khi đánh trúng/bị đánh trúng
-│   ├── dropmultiplier/   # DropMultiplier: chỉnh tỉ lệ rớt đồ của quái (nhân hệ số hoặc ép tỉ lệ tổng)
-│   ├── fasterrevival/    # FasterRevival: rút ngắn thời gian từ lúc hết máu tới hồi sinh (~4-5s thay vì 12-14s)
-│   ├── infiniteailment/  # InfiniteAilment: chỉnh thời lượng + sát thương Poison/Scarlet Rot người chơi gây ra
-│   ├── passiverunes/     # PassiveRunes: cộng rune theo thời gian + bonus mốc thời gian
-│   ├── risearcher/       # RiseArcher: buff Bow/Crossbow/Ballista/Arrow/Bolt qua SoloParamRepository sống
-│   ├── runemultiplier/   # RuneMultiplier: nhân hệ số rune từ mọi nguồn qua 1 hook AddSoul_Call
-│   ├── sometweaks/       # SomeTweaks (đã bỏ, không phát triển nữa): gộp nhiều QoL
-│   ├── soulsteleport/    # SoulsTeleport: dịch chuyển tới người chơi khác trong Seamless Co-op
-│   ├── speedmultiplier/  # SpeedMultiplier: tăng tốc di chuyển / tấn công / thi triển phép
-│   ├── spiritmultiplier/ # SpiritMultiplier: nhân số linh hồn (spirit ash) triệu hồi vượt trần 10 con
-│   ├── weightmultiplier/ # WeightMultiplier (đổi tên từ ReductionWeight): nhân hệ số Trọng Tải qua 1 hook code
-│   └── windowresize/     # WindowResize: kéo viền đổi kích thước cửa sổ Windowed nhỏ hơn mức mặc định
-├── shared/          # crate `common` dùng chung: config/logger/memscan/dll_dir, KHÔNG phụ thuộc eldenring-rs
-├── scripts/         # công cụ chạy được: build-mod.ps1 (build 1 mod → builds/<mod>/), ida/ (IDAPython qua run.ps1), ghidra/ (script tham khảo)
-├── docs/            # tư liệu dùng chung: nexus_page.bbcode, logo/thumbnail prompt, nexus-openapi.yaml
-├── dumps/           # dữ liệu dịch ngược, git-ignored (database IDA ở eldenring/<ver>/, ~25 phút/bản nếu mất), ngoại lệ seamless-diff/ được commit
-└── tmp/             # repo/DLL tải về, file tạm nghiên cứu (git-ignored, xoá được bất kỳ lúc nào)
+├── mods/       # mỗi thư mục là một mod, một crate cdylib, một DLL
+├── shared/     # crate `common`: hạ tầng dùng chung (kèm docs/ giải thích từng module)
+├── scripts/    # build-mod.ps1, công cụ dịch ngược (IDA, Ghidra), tiện ích trang Nexus
+├── docs/       # tư liệu dùng chung: trang Nexus, prompt logo, OpenAPI của Nexus
+└── builds/     # đầu ra build theo từng mod (không commit)
 ```
 
-`shared/` nằm ngoài `mods/` có chủ đích: `mods/` chỉ chứa các mod thật
-sự (mỗi thư mục = 1 DLL xuất bản), còn `shared/` là hạ tầng dùng chung,
-không phải 1 mod. Tên package Cargo của nó vẫn là `common` (không đổi
-tên package theo tên thư mục) — mỗi mod vẫn `use common::...` như cũ.
+Một mod điển hình gồm:
 
-Mỗi mod Rust (`mods/autoregen`, `mods/dropmultiplier`, ...) có:
-- `Cargo.toml` riêng, `common = { path = "../../shared" }` + các dependency
-  `eldenring`/`fromsoftware-shared`/`chrono` lấy version thống nhất từ
-  `[workspace.dependencies]` ở root qua cú pháp `xxx.workspace = true`.
-- 1 file `.ini` cùng tên crate, nhúng vào binary lúc build (`include_str!`) -
-  đây là nguồn sự thật duy nhất cho cấu hình mặc định.
-- `src/lib.rs` mỏng: chỉ có `DllMain` + gọi `common::config`/`common::logger`,
-  logic thật nằm trong module riêng của mod (`src/regen/`, ...).
-- `README.md` (mô tả chung: cách hoạt động, giới hạn; cấu hình chỉ ở mức khái niệm,
-  chi tiết ở chú thích `.ini`) + `HISTORY.md`
-  (dòng thời gian, mỗi thay đổi 1 dòng) + các phân tích chi tiết ở
-  `mods/<mod>/docs/<chủ đề>.md` - quy ước đầy đủ trong `CLAUDE.md`, khuôn mẫu là
-  `mods/dropmultiplier/`. Mod chưa được tách vẫn còn README kiểu nhật ký dài.
-- `CHANGELOG.md` (ghi chú phát hành cho người dùng, có mục `[Unreleased]`) và
-  `nexus_page.bbcode` (mô tả trang Nexus, không chứa changelog) khi mod đã publish.
+```
+mods/<mod>/
+├── Cargo.toml        # [lib] crate-type = ["cdylib"]
+├── <Mod>.ini|toml    # config mặc định, nhúng vào DLL lúc build
+├── src/lib.rs        # DllMain mỏng: nạp config, khởi tạo log, đăng ký tính năng
+├── README.md         # cách hoạt động và giới hạn
+├── CHANGELOG.md      # ghi chú phát hành
+├── HISTORY.md        # dòng thời gian thay đổi
+└── docs/             # phân tích kỹ thuật theo chủ đề
+```
 
-## Vì sao tách `common` thay vì copy-paste
+### Crate `common`
 
-`config.rs`/`logger.rs`/`memscan.rs` từng bị copy gần như y hệt giữa các mod
-(AutoRegen, LifeBetween cũ, và các mod C++ PassiveRunes/ReductionWeight/
-RuneMultiplier) - sửa 1 bug ở 1 bản không tự động lan sang các bản còn lại.
-Cùng lý do đó, `common` còn có `input::parse_virtual_key` (parse hotkey từ
-ini, dùng chung bởi `autoregen`/`sometweaks`/`runemultiplier`) và
-`codepatch::install_jmp_hook` (JMP tương đối 5-byte + tìm vùng nhớ gần,
-dùng bởi `weightmultiplier` khi patch site không đủ ~12 byte cho absolute
-jump).
-`common` giải quyết việc đó bằng path dependency trong cùng workspace - khả
-thi vì giờ toàn bộ mod nằm chung 1 repo, không còn là các repo Git tách biệt
-như trước (không gặp vấn đề "clone 1 mod thì thiếu `../common`").
+Mọi mod chia sẻ mã nguồn qua `common` thay vì sao chép, nên một bản sửa lỗi có hiệu lực
+cho cả bộ.
 
-`common` cố tình **không** phụ thuộc `eldenring`/`fromsoftware-shared`: đây
-là plumbing chung chung (ini, log, AOB scan) không liên quan gì đến struct
-riêng của Elden Ring, tách biệt hoàn toàn khỏi phần logic đọc/ghi game state
-nằm trong từng mod.
+| Nhóm          | Module                                    | Vai trò                                                                                 |
+| ------------- | ----------------------------------------- | --------------------------------------------------------------------------------------- |
+| Cấu hình, log | `config`, `toml_config`, `logger`, `diag` | Đọc và ghi config, log ra file, ghi lại môi trường để phục vụ báo lỗi                   |
+| Bộ nhớ        | `memscan`, `codepatch`                    | Quét AOB, JMP hook                                                                      |
+| Game engine   | `task`, `task_hook`, `alloc_hook`         | Đăng ký tác vụ chạy theo frame, tìm hàm của game bằng AOB để không vỡ khi game cập nhật |
+|               | `player`, `params`, `anim`                | Phát hiện lúc người chơi đã vào thế giới, duyệt param an toàn, phân loại animation      |
+| Tương tác     | `input`, `reload`, `announce`             | Phím nóng, nạp lại config, banner thông báo trong game                                  |
 
-## Build
+Mỗi mod được link tĩnh với `common` và không chia sẻ trạng thái lúc chạy với mod khác.
+Mô tả đầy đủ từng module ở [shared/src/lib.rs](shared/src/lib.rs).
+
+## Build từ mã nguồn
+
+**Yêu cầu:** Windows x64, [Rust](https://rustup.rs) (edition 2024), target MSVC.
 
 ```powershell
-cargo build --release              # build tất cả mod trong workspace (ra ở target/release/)
-cargo build --release -p autoregen # chỉ build 1 mod
-cargo test --workspace             # chạy unit test (chủ yếu là config::migrate)
+cargo build --release                 # build toàn bộ mod
+cargo build --release -p autoregen    # build một mod
+cargo test --workspace                # chạy unit test
 
-pwsh scripts/build-mod.ps1 -Mod AutoRegen   # build + copy AutoRegen.dll/.ini vào builds/autoregen/
+# Build một mod, chép DLL và config vào builds/<mod>/
+pwsh scripts/build-mod.ps1 -Mod AutoRegen
+pwsh scripts/build-mod.ps1 -Mod AutoRegen -Zip   # kèm file .zip để phát hành
 ```
 
-Hoặc dùng task có sẵn trong VS Code (**Ctrl+Shift+B**) - mở danh sách chọn:
-`Cargo: Build AutoRegen/SomeTweaks/PassiveRunes/RuneMultiplier/
-WeightMultiplier/RiseArcher (Release)` build riêng 1 mod, `Cargo: Build All
-(Release)` chạy hết. Mỗi task build xong đều tự copy
-`.dll` + `.ini` của mod đó vào `builds/<crate>/` (vd. `builds/autoregen/`,
-không lẫn vào hàng trăm file khác trong `target/release/`; file `.zip` khi
-`-Zip` cũng nằm cùng thư mục) - mỗi mod 1 thư mục riêng, dễ tìm và copy sang
-thư mục mod loader.
+`-Mod` là tên PascalCase của mod, lấy từ `[lib] name` trong `Cargo.toml`. Trong VS Code,
+`Ctrl+Shift+B` mở danh sách task build cho từng mod và task `Cargo: Build All (Release)`.
 
-## Trạng thái
+## Tài liệu
 
-- `autoregen` - đầy đủ tính năng gốc (Regen theo tick + OnHit) cộng thêm
-  OnDamage (hồi máu khi bị đánh trúng).
-- `sometweaks` - port của LifeBetween, mới có module Regen; Rune/Spirit/Misc
-  trong ini vẫn là placeholder, chưa có code tương ứng.
-- `passiverunes` - port của PassiveRunes: cộng rune qua
-  `GameDataMan::main_player_game_data.rune_count` (thay AOB pointer chain tự
-  dò tay) + bonus mốc thời gian bằng threshold-crossing thay vì so sánh
-  `==` tuyệt đối như bản C++ (không bỏ sót mốc nào nếu tick bị lệch nhịp).
-- `runemultiplier` - port của RuneMultiplier: giữ nguyên hook `AddSoul_Call`,
-  nhưng đổi sang jump tuyệt đối cả 2 chiều (kiểu `attack_hook.rs`) thay vì
-  `E9 rel32` + tìm vùng nhớ gần bằng tay (`CodePatch.cpp` bị bỏ hoàn toàn).
-- `weightmultiplier` - đổi tên từ ReductionWeight, port giữ nguyên hook +
-  AOB pattern gốc. Patch site chỉ có 7 byte (không đủ cho absolute jump),
-  nên đây là mod duy nhất còn giữ kỹ thuật `E9 rel32` + tìm vùng nhớ gần
-  (`common::codepatch`) - không cần `eldenring`/`fromsoftware-shared`,
-  không có hotkey reload (giữ nguyên quyết định thiết kế gốc).
-- `risearcher` - giữ **cả 2 cách** song song: sửa tĩnh `regulation.bin` gốc
-  (`csv/RiseArcher.MASSEDIT` + `csv/*.csv` + `.smithbox/`, dùng Smithbox)
-  và DLL mới đọc/ghi `SoloParamRepository` sống qua `fromsoftware-rs`
-  (không cần `libER` như kế hoạch gốc) - DLL không xung đột với mod
-  `regulation.bin` khác, mọi hệ số đọc từ ini; 2 cách không tự đồng bộ với
-  nhau, xem `mods/risearcher/README.md`. Mod duy nhất không cần `CSTaskImp` lẫn
-  hotkey - patch 1 lần lúc `SoloParamRepository` sẵn sàng rồi thôi.
+| Tài liệu                                       | Nội dung                                                                   |
+| ---------------------------------------------- | -------------------------------------------------------------------------- |
+| `mods/<mod>/README.md`                         | Cách hoạt động, giới hạn và cấu hình ở mức khái niệm của từng mod          |
+| `mods/<mod>/docs/`                             | Phân tích kỹ thuật: hook, RVA, nguyên nhân gốc của lỗi, hướng đã thử và bỏ |
+| `shared/docs/`                                 | Cách các module của `common` hoạt động: AOB, hook, lý do thiết kế          |
+| [scripts/ida/README.md](scripts/ida/README.md) | Bộ script IDAPython cho dịch ngược                                         |
+| [CLAUDE.md](CLAUDE.md)                         | Quy ước làm việc và viết tài liệu trong repo                               |
+| [TODO.md](TODO.md)                             | Việc còn mở theo từng mod                                                  |
+
+## Công nghệ
+
+- [Rust](https://www.rust-lang.org) với `cdylib`, LTO và `codegen-units = 1` cho bản release
+- [fromsoftware-rs](https://github.com/vswarte/fromsoftware-rs) cho binding tới struct của engine
+- [vtable-rs](https://crates.io/crates/vtable-rs) để đăng ký closure Rust làm task của game
+- `serde`, `toml`, `toml_edit` cho cấu hình TOML
+- IDA Pro và Ghidra cho phần dịch ngược
+
+## Lưu ý
+
+Các mod chỉnh sửa bộ nhớ của game đang chạy. Dùng ở chế độ offline hoặc Seamless Co-op
+với bạn bè và tự chịu rủi ro: không dùng khi chơi online có Easy Anti-Cheat, vì có thể
+bị khoá tài khoản. Dự án không liên kết với FromSoftware hay Bandai Namco.
