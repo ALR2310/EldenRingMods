@@ -6,6 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+- Added in-game settings menu support (requires the ERNativeUI mod).
+
 ## [2.0.0]
 
 - Rewritten as a Rust DLL - patches EquipParamWeapon/Bullet live in memory via fromsoftware-rs instead of shipping a modified regulation.bin, so it no longer conflicts with other regulation.bin mods.

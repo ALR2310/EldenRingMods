@@ -2,6 +2,7 @@
 
 mod config;
 mod enemy;
+mod menu;
 mod probe;
 mod seamless;
 mod speed;
@@ -26,6 +27,11 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         logger::set_enabled(config::get().logging.log_file);
         logger::init(&dir, "SpeedMultiplier.log");
         logger::install_panic_hook();
+
+        // Registers the in-game menu right away: the host only accepts
+        // registrations in its first seconds. No-op without ERNativeUI.
+        menu::start(hmodule);
+
         logger::log("Activating SpeedMultiplier...");
         if report.created {
             logger::log("SpeedMultiplier.toml created with the default settings.");
@@ -64,6 +70,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
                 || {
                     config::reload()?;
                     logger::set_enabled(config::get().logging.log_file);
+                    menu::sync_from_config();
                     Ok(())
                 },
             )

@@ -6,6 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+- Added in-game settings menu support (requires the ERNativeUI mod).
+
 ## [1.1.0] - 2026-09-28
 
 - Added multipliers for how many crafting and upgrade materials you get.

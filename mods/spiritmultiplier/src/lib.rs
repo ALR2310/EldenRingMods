@@ -6,6 +6,7 @@ mod buddy_stone;
 mod chain;
 mod enemy_probe;
 mod ghost_color;
+mod menu;
 mod multi_spirit;
 mod probe;
 mod regen;
@@ -42,6 +43,10 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
                 "SpiritMultiplier.ini updated: added {migrated} new key(s) from a newer default template."
             ));
         }
+
+        // The menu registers right away (the host only accepts registrations
+        // at startup). Every setting but MaxSpirits is read live by the mod.
+        menu::start(hmodule, ini_path.clone());
 
         // Band first: without it, chains longer than 10 are harmless (the
         // engine just drops the extra spirits) - so a failed band patch

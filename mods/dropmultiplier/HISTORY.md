@@ -17,3 +17,5 @@ lịch sử git của `README.md`.
 | 2026-10-05 | Version thật trong thuộc tính file DLL (`build.rs` + `winresource`); thêm key `ReloadBanner` | |
 | 2026-10-07 | Đổi thư mục `crates/` thành `mods/`; tách README thành README + HISTORY + docs/ | |
 | 2026-10-07 | Thêm `CHANGELOG.md` (gộp từ khối changelog của trang Nexus) và gỡ khối đó khỏi `nexus_page.bbcode` (đổi tên từ `DESCRIPTION.bbcode`) | [CHANGELOG](CHANGELOG.md) |
+| 2026-10-13 | Mặc định `ReloadBanner` đổi thành `false`: nhiều mod cùng bật thì mỗi mod hiện một banner vài giây khi bấm reload | |
+| 2026-10-13 | Menu trong game tùy chọn qua ERNativeUI (`src/menu.rs`): chế độ (lựa chọn), hệ số và 3 hệ số nguyên liệu (hàng nhập số), tỉ lệ cố định (thanh trượt 0-100), log; đổi trong menu ghi vào ini rồi kích hoạt lại đường reload (`RELOAD_GENERATION`) một lần sau khi ngừng thao tác. Reload yêu cầu khi chưa vào thế giới (vd. đổi ở menu màn hình chính) giờ được giữ lại thay vì bị bỏ | [docs](../../docs/ingame_menu.md) |

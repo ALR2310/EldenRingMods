@@ -46,7 +46,7 @@ pub static RELOAD_GENERATION: AtomicU64 = AtomicU64::new(0);
 pub fn run(ini_path: String) {
     run_with(
         || config::get_string("ReloadKey", "F5"),
-        || config::get_bool("ReloadBanner", true),
+        || config::get_bool("ReloadBanner", false),
         move || {
             config::load(&ini_path);
             Ok(())

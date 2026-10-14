@@ -22,3 +22,5 @@ sử git của `README.md`.
 | 2026-09-26 | Log: `[INFO ]` thành `[INFO]`; thêm phiên bản game và danh sách DLL đã nạp (`common::diag`) | |
 | 2026-10-05 | Version thật trong thuộc tính file DLL (`build.rs` + `winresource`); thêm key `ReloadBanner` | |
 | 2026-10-07 | Đổi thư mục `crates/` thành `mods/`; tách README thành README + HISTORY + docs/ | |
+| 2026-10-13 | Mặc định `ReloadBanner` đổi thành `false`: nhiều mod cùng bật thì mỗi mod hiện một banner vài giây khi bấm reload | |
+| 2026-10-13 | Thêm menu tùy chọn trong game qua ERNativeUI (`common::erui`): bật/tắt, chu kỳ, lượng rune, phần trăm, lãi (số gõ vào ô văn bản), log. Mod đọc ini mỗi tick nên chỉ cần lưu ini, không cần reload; danh sách milestone giữ ở ini. | [docs](../../docs/ingame_menu.md) |

@@ -1,6 +1,7 @@
 #![allow(non_snake_case)] // crate name is "RiseArcher" to control the output DLL's filename
 
 mod bullet;
+mod menu;
 mod weapon;
 
 use std::sync::atomic::Ordering;
@@ -47,6 +48,9 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         // module doc comment for why only one module may call
         // eldenring::util::input::is_key_pressed for the same key) - `run`
         // below only polls `common::reload::RELOAD_GENERATION`.
+        // The menu registers right away (the host only accepts registrations
+        // at startup); its changes reach `run` through the same generation.
+        menu::start(hmodule, ini_path.clone());
         std::thread::spawn(move || common::reload::run(ini_path));
 
         common::diag::log_environment_when_game_ready();
@@ -97,6 +101,7 @@ fn run() {
                 return;
             }
             last_seen_generation = generation;
+            menu::sync_from_config();
 
             let Ok(repo) = (unsafe { SoloParamRepository::instance_mut() }) else {
                 logger::warn("RiseArcher: SoloParamRepository not available on reload, skipped.");
@@ -105,7 +110,7 @@ fn run() {
             let weapon_changed = weapon::apply(repo);
             let bullet_changed = bullet::apply(repo);
             logger::log(&format!(
-                "Reload: reapplied to {weapon_changed} EquipParamWeapon row(s) and {bullet_changed} Bullet row(s) (hotkey pressed)."
+                "Reload: reapplied to {weapon_changed} EquipParamWeapon row(s) and {bullet_changed} Bullet row(s) (reload)."
             ));
         },
     );

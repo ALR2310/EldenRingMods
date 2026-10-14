@@ -21,6 +21,14 @@ Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong [`W
 
 Đổi chế độ, hệ số hoặc giá trị cố định rồi bấm phím reload là có hiệu lực ngay, không cần khởi động lại game.
 
+## Menu trong game (tùy chọn)
+
+Nếu `ERNativeUI.dll` (host menu dùng chung, https://github.com/Flammrock/ERNativeUI) đã được nạp trước mod, System >
+Game Options có thêm hàng **Weight Multiplier**: mở ra trang gồm chế độ (nhân hoặc đặt cứng), hệ số và giá trị cố định (gõ số vào ô văn bản, hệ số có thể là số thập phân) và bật/tắt log.
+Mod này không dùng task game nên menu đi cùng đường reload của chính nó: ghi ini (sau khi ngừng thao tác 1 giây) rồi cập nhật giá trị cho stub, giống bấm phím reload; đổi chế độ cũng vá lại opcode trong stub như khi reload. Không có host thì mod chạy bằng ini như trước.
+Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0. Client: `common::erui` ([shared/src/erui.rs](../../shared/src/erui.rs)), mod:
+[src/menu.rs](src/menu.rs), ghi chú dùng chung: [docs/ingame_menu.md](../../docs/ingame_menu.md).
+
 ## Cách hoạt động
 
 - **Điểm hook:** game cộng trọng lượng 5 slot trong một vòng lặp rồi copy tổng ra

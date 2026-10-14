@@ -37,6 +37,7 @@
 //! be mid-execution of), just repeated on demand instead of only once.
 
 use std::sync::atomic::{AtomicI32, AtomicU32, AtomicU64, Ordering};
+use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
 use common::codepatch;
@@ -108,12 +109,26 @@ fn mode_instruction(mode: i32) -> [u8; 4] {
     }
 }
 
+/// The configured `Multiplier` (1.0 = vanilla when the key is missing); the
+/// in-game menu shows this same value.
+pub fn configured_multiplier() -> f64 {
+    config::get_double("Multiplier", 1.0)
+}
+
 fn read_weight_value(mode: i32) -> f32 {
     (if mode == MODE_FIXED_VALUE {
         config::get_double("FixedValue", 0.0)
     } else {
-        config::get_double("Multiplier", 1.0)
+        configured_multiplier()
     }) as f32
+}
+
+// Serialises config reloads: the ReloadKey poll thread and the menu's saver
+// thread (via [reload_from_config]) both end up in [reload_weight_value_locked].
+static RELOAD_LOCK: Mutex<()> = Mutex::new(());
+
+fn lock_reload() -> MutexGuard<'static, ()> {
+    RELOAD_LOCK.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 fn init_weight_value() {
@@ -132,25 +147,49 @@ fn init_weight_value() {
 /// needed); if `Mode` itself changed, also re-patches the stub's
 /// mulss/movss instruction in place via `codepatch::overwrite_bytes` - see
 /// the module doc comment for why that's riskier than the value-only path.
+/// Takes `RELOAD_LOCK`, so it never interleaves with another reload.
 fn reload_weight_value() {
-    let new_mode = config::get_int("Mode", MODE_MULTIPLIER);
-    let value = read_weight_value(new_mode);
-    WEIGHT_VALUE.store(value.to_bits(), Ordering::Relaxed);
+    let _guard = lock_reload();
+    reload_weight_value_locked();
+}
 
-    let old_mode = WEIGHT_MODE.swap(new_mode, Ordering::Relaxed);
+/// Body of [reload_weight_value]; the caller holds `RELOAD_LOCK`.
+fn reload_weight_value_locked() {
+    let new_mode = config::get_int("Mode", MODE_MULTIPLIER);
+    let old_mode = WEIGHT_MODE.load(Ordering::Relaxed);
+    let mut mode = new_mode;
+    let mut value = read_weight_value(new_mode);
+
     if new_mode != old_mode {
         let addr = STUB_MODE_INSTR_ADDR.load(Ordering::Relaxed);
         if addr != 0 {
+            // Patch the instruction first and publish the new value only
+            // afterwards, so the stub never runs with the new mode's value
+            // under the old mode's instruction.
             let patched = unsafe { codepatch::overwrite_bytes(addr as *mut u8, &mode_instruction(new_mode)) };
             if !patched {
                 logger::warn("Failed to re-patch stub for new Mode - keeping the previous Mode's behavior.");
-                WEIGHT_MODE.store(old_mode, Ordering::Relaxed);
+                // The instruction is unchanged: keep the old mode and its value.
+                mode = old_mode;
+                value = read_weight_value(old_mode);
             }
         }
     }
 
+    WEIGHT_VALUE.store(value.to_bits(), Ordering::Relaxed);
+    WEIGHT_MODE.store(mode, Ordering::Relaxed);
+
     if config::get_bool("LogFile", false) {
-        logger::log(&format!("Mode={new_mode}, value={value:.3}"));
+        logger::log(&format!("Mode={mode}, value={value:.3}"));
+    }
+}
+
+/// Applies the current config to the running hook; used by the in-game menu
+/// after it has saved a change (same effect as the reload key, without
+/// re-reading the file: the menu's saver already updated the shared config).
+pub fn reload_from_config() {
+    if let Err(panic) = std::panic::catch_unwind(reload_weight_value) {
+        logger::error(&format!("Menu reload panicked, skipped: {panic:?}"));
     }
 }
 
@@ -256,8 +295,10 @@ pub fn run(ini_path: String) {
         if let Err(panic) = std::panic::catch_unwind(|| {
             let reload_key = parse_virtual_key(&config::get_string("ReloadKey", "F5"), VK_F5);
             if is_key_pressed(reload_key) {
+                let _guard = lock_reload();
                 config::load(&ini_path);
-                reload_weight_value();
+                reload_weight_value_locked();
+                crate::menu::sync_from_config();
                 logger::log("Config reloaded");
             }
         }) {

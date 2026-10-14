@@ -255,6 +255,7 @@ pub fn run() {
     apply_and_log(&POISON, repo, "");
     log_matched_rows_detail(&POISON, repo);
 
+    let mut waiting_logged = false;
     let cs_task = common::task::wait_for_cs_task();
     common::task::run_recurring_safe(
         cs_task,
@@ -265,7 +266,18 @@ pub fn run() {
             if generation == last_seen_generation {
                 return;
             }
+            // Not in the world (e.g. a change made from the title screen's
+            // menu): keep the request and apply it once the world is loaded.
+            if common::player::main_player_chr_ins_ptr().is_none() {
+                if !waiting_logged {
+                    logger::warn("not in-world yet, reload deferred until the world is loaded.");
+                    waiting_logged = true;
+                }
+                return;
+            }
+            waiting_logged = false;
             last_seen_generation = generation;
+            crate::menu::sync_from_config();
 
             let Ok(repo) = (unsafe { SoloParamRepository::instance_mut() }) else {
                 logger::warn("SoloParamRepository not available on reload, skipped.");

@@ -6,7 +6,7 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
-- Shows an in-game notification when the config is reloaded, with an option to turn it off.
+- Added in-game settings menu support (requires the ERNativeUI mod).
 
 ## [1.0.4] - 2026-09-24
 
