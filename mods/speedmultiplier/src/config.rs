@@ -409,6 +409,15 @@ pub fn reload() -> Result<(), String> {
     }
 }
 
+/// Writes `("Section.Key", text)` pairs into the file (comments kept) and re-reads it;
+/// for the in-game menu. Returns whether it was saved.
+pub fn save(values: &[(&str, String)]) -> bool {
+    match CONFIG.get() {
+        Some(config) => config.save_values(values).is_ok(),
+        None => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -598,5 +607,51 @@ Player.Roll = 0.8
         let doc: toml::Value = toml::from_str(TEMPLATE).unwrap();
         let current = doc["General"]["ConfigVersion"].as_integer().unwrap();
         assert_eq!(STEPS.len() as i64, current - 1);
+    }
+
+    /// A save from the in-game menu changes values only: every comment of the
+    /// template (own-line and trailing) is still in the file afterwards.
+    #[test]
+    fn menu_save_keeps_every_comment() {
+        let path = std::env::temp_dir().join(format!("speedmultiplier_menu_save_{}.toml", std::process::id()));
+        let path_text = path.to_string_lossy().to_string();
+        let _ = std::fs::remove_file(&path);
+        init(&path_text);
+        assert!(save(&[("Player.All", "1.0".to_string()), ("Player.Run", "1.5".to_string()), ("Player.Walk", "2.0".to_string()), ("Torrent.Walk", "2.0".to_string()), ("Enemy.All", "0.8".to_string()), ("Logging.LogFile", "false".to_string())]));
+        let config = get();
+        assert_eq!(config.player.run, 1.5);
+        assert_eq!(config.enemy.all, 0.8);
+        assert_eq!(config.player.walk, 2.0);
+        assert!(!config.logging.log_file);
+        let text = std::fs::read_to_string(&path).unwrap();
+        let comments = |text: &str| -> Vec<String> {
+            text.lines().filter_map(|line| line.find('#').map(|i| line[i..].trim_end().to_string())).collect()
+        };
+        assert!(text.lines().any(|l| l.trim_start().starts_with("Walk") && l.contains("2.0")), "whole number keeps its decimal point");
+        assert_eq!(comments(&text), comments(TEMPLATE));
+        assert_eq!(text.lines().count(), TEMPLATE.lines().count());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A save from the in-game menu changes values only: every comment of the
+    /// template (own-line and trailing) is still in the file afterwards.
+    #[test]
+    fn menu_save_keeps_every_comment() {
+        let path = std::env::temp_dir().join(format!("speedmultiplier_menu_save_{}.toml", std::process::id()));
+        let path_text = path.to_string_lossy().to_string();
+        let _ = std::fs::remove_file(&path);
+        init(&path_text);
+        assert!(save(&[("Player.All", "1.0".to_string()), ("Player.Run", "1.5".to_string()), ("Torrent.Walk", "2.0".to_string()), ("Enemy.All", "0.8".to_string()), ("Logging.LogFile", "false".to_string())]));
+        let config = get();
+        assert_eq!(config.player.run, 1.5);
+        assert_eq!(config.enemy.all, 0.8);
+        assert!(!config.logging.log_file);
+        let text = std::fs::read_to_string(&path).unwrap();
+        let comments = |text: &str| -> Vec<String> {
+            text.lines().filter_map(|line| line.find('#').map(|i| line[i..].trim_end().to_string())).collect()
+        };
+        assert_eq!(comments(&text), comments(TEMPLATE));
+        assert_eq!(text.lines().count(), TEMPLATE.lines().count());
+        let _ = std::fs::remove_file(&path);
     }
 }
