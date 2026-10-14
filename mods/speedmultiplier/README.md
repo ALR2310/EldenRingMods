@@ -35,7 +35,7 @@ Game Options có thêm hàng **Speed Multiplier**: mở ra trang gồm hàng **A
 **Player Actions**, **Torrent**, **Spirit & Enemy** (mỗi hàng tốc độ là ô gõ số, vd. `1.5` hoặc `1,5`, giới hạn 0.1 đến 10) và bật/tắt
 log. Hệ số "All" khác 1 thì ghi đè các hàng riêng lẻ, như trong file. Khối `[[Override]]` và các probe chỉ chỉnh
 trong file. Đổi trong menu được ghi vào `SpeedMultiplier.toml` (giữ nguyên comment) sau khi ngừng thao tác 1 giây; mod
-đọc cấu hình mỗi frame nên có hiệu lực ngay. Số gõ vào được ghi dạng số thực (`2` thành `2.0`). Không có host thì mod chạy bằng file như trước. Host chỉ hỗ trợ exe 2.7.0.0 và
+đọc lại file ngay sau đó rồi áp dụng (khoảng 1 giây sau khi ngừng thao tác). Số gõ vào được ghi dạng số thực (`2` thành `2.0`). Không có host thì mod chạy bằng file như trước. Host chỉ hỗ trợ exe 2.7.0.0 và
 2.7.1.0. Client: `common::erui` ([shared/src/erui.rs](../../shared/src/erui.rs)), mod: [src/menu.rs](src/menu.rs), ghi chú
 dùng chung: [docs/ingame_menu.md](../../docs/ingame_menu.md).
 
