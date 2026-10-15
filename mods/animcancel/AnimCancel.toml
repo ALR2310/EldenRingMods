@@ -1,6 +1,6 @@
 [General]
 # file format version, managed by the mod - don't change
-ConfigVersion = 1
+ConfigVersion = 2
 
 # Key that reloads this config file in-game, no restart needed.
 # https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
@@ -11,27 +11,39 @@ ReloadKey = "F5"
 ReloadBanner = false
 
 
-[Cancel]
-# Actions that can cancel the animation you are playing.
-Guard = true        # raising the guard
-Dodge = true        # rolling and backstepping
-WeaponSwap = true   # switching weapons
-
-
-[Animations]
-# Which animations the actions above can cancel.
+[Guard]
+# Raising the guard cancels the animations below.
+Enabled = true
 Attack = true       # normal attacks
 Skill = true        # weapon arts (Ashes of War)
 Cast = true         # casting sorceries and incantations
 Item = true         # using items (flasks...)
 
 
+[Dodge]
+# Rolling and backstepping cancel the animations below.
+Enabled = true
+Attack = true
+Skill = true
+Cast = true
+Item = true
+
+
+[WeaponSwap]
+# Switching weapons cancels the animations below.
+Enabled = true
+Attack = true
+Skill = true
+Cast = true
+Item = true
+
+
 [Logging]
 # Write a log file next to the DLL, for troubleshooting.
 LogFile = true
 
-# Log the cancel windows of the animation you are playing, each time they change.
+# Log the cancel windows of the animation you are playing.
 CancelProbe = false
 
-# Log every change of the animation-event flags (CSChrActionFlagModule).
+# Log every change of the animation-event flags.
 FlagProbe = false

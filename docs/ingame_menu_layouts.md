@@ -189,11 +189,20 @@ Lưu ý: nhóm Teleport hiện không có tác dụng theo ini mẫu (chú thíc
 
 ```
 ▶ Anim Cancel
-  ├─ ▷ Cancel With
-  │     Guard         ◄ On ►
-  │     Dodge         ◄ On ►
-  │     Weapon swap   ◄ On ►
-  ├─ ▷ Cancel What
+  ├─ ▷ Guard
+  │     Enabled       ◄ On ►
+  │     Attacks       ◄ On ►
+  │     Skills        ◄ On ►
+  │     Spells        ◄ On ►
+  │     Items         ◄ On ►
+  ├─ ▷ Dodge
+  │     Enabled       ◄ On ►
+  │     Attacks       ◄ On ►
+  │     Skills        ◄ On ►
+  │     Spells        ◄ On ►
+  │     Items         ◄ On ►
+  ├─ ▷ Weapon swap
+  │     Enabled       ◄ On ►
   │     Attacks       ◄ On ►
   │     Skills        ◄ On ►
   │     Spells        ◄ On ►

@@ -108,8 +108,9 @@ cancel: giả thuyết đó đã loại.
 
 ## Mod thật (khác với probe)
 
-- Cấu hình `AnimCancel.toml`: `[Cancel]` (Guard, Dodge, WeaponSwap) và
-  `[Animations]` (Attack, Skill, Cast), mặc định bật hết. Hot reload qua
+- Cấu hình `AnimCancel.toml`: mỗi hành động một section (`[Guard]`, `[Dodge]`,
+  `[WeaponSwap]`) có `Enabled` và bộ animation riêng (Attack, Skill, Cast, Item),
+  mặc định bật hết (2026-10-15, trước đó `[Cancel]` + `[Animations]` dùng chung). Hot reload qua
   `common::reload` (F5).
 - Anim nào đang chạy do **id hàng đợi** quyết định (`group_for_cancel(queue_id)`),
   không phải anim đọc từ `anim_queue`: khi niệm phép lúc đang đi, `anim_queue` hiện
