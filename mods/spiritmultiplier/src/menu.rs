@@ -69,7 +69,7 @@ fn t(key: &str) -> String {
     TEXT.tr(key)
 }
 
-static MULTIPLIER: NumberSetting = NumberSetting::new("Multiplier", 0.0, 1000.0, None);
+static MULTIPLIER: NumberSetting = NumberSetting::new("Multiplier", 0.0, 1000.0, None).slider(0.0, 10.0, 0.25);
 static AMOUNT: NumberSetting = NumberSetting::whole("Amount", 0.0, 1000.0, None);
 static MAX_SPIRITS: NumberSetting = NumberSetting::whole("MaxSpirits", 60.0, 1000.0, None);
 static MULTI_SPIRIT: Setting = Setting::flag("MultiSpirit");
@@ -90,7 +90,7 @@ static WARP_WHEN_FAR: Setting = Setting::flag("WarpWhenFar");
 static WARP_DISTANCE: NumberSetting = NumberSetting::new("WarpDistance", 0.0, 1000.0, None);
 static WARP_BLOCKED: NumberSetting = NumberSetting::new("WarpBlockedTime", 0.0, 600.0, None);
 static WARP_STUCK_TIME: NumberSetting = NumberSetting::new("WarpStuckTime", 0.0, 600.0, None);
-static WARP_STUCK_RANGE: NumberSetting = NumberSetting::new("WarpStuckRange", 0.0, 100.0, None);
+static WARP_STUCK_RANGE: NumberSetting = NumberSetting::new("WarpStuckRange", 0.0, 100.0, None).slider(0.0, 100.0, 1.0);
 static LOG_FILE: Setting = Setting::flag("LogFile");
 
 fn build(b: &mut MenuBuilder) -> Result<(), String> {
@@ -290,5 +290,14 @@ mod tests {
         assert!(used.len() > 30, "found only {} menu keys", used.len());
         assert_eq!(used, TEXT.keys("english"), "menu.rs keys and locales/en.json differ");
         assert_eq!(used, TEXT.keys("vietnamese"), "menu.rs keys and locales/vi.json differ");
+    }
+
+    /// Every row meant to be a native slider has a valid range and step (else
+    /// it silently stays a typed row).
+    #[test]
+    fn slider_rows_have_a_valid_range() {
+        for setting in [&MULTIPLIER, &WARP_STUCK_RANGE] {
+            assert!(setting.has_slider(), "{} would not be a slider", setting.key);
+        }
     }
 }

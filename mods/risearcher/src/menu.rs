@@ -30,22 +30,22 @@ use common::config;
 use common::erui::{self, NumberSetting, Setting};
 use common::i18n::Catalog;
 
-static BOW_DAMAGE: NumberSetting = NumberSetting::new("Bow.DamageMultiplier", -1000.0, 1000.0, None);
-static CROSSBOW_DAMAGE: NumberSetting = NumberSetting::new("Crossbow.DamageMultiplier", -1000.0, 1000.0, None);
-static BALLISTA_DAMAGE: NumberSetting = NumberSetting::new("Ballista.DamageMultiplier", -1000.0, 1000.0, None);
-static BOW_SCALING: NumberSetting = NumberSetting::new("Bow.ScalingMultiplier", -1000.0, 1000.0, None);
+static BOW_DAMAGE: NumberSetting = NumberSetting::new("Bow.DamageMultiplier", -1000.0, 1000.0, None).slider(0.0, 10.0, 0.1);
+static CROSSBOW_DAMAGE: NumberSetting = NumberSetting::new("Crossbow.DamageMultiplier", -1000.0, 1000.0, None).slider(0.0, 10.0, 0.1);
+static BALLISTA_DAMAGE: NumberSetting = NumberSetting::new("Ballista.DamageMultiplier", -1000.0, 1000.0, None).slider(0.0, 10.0, 0.1);
+static BOW_SCALING: NumberSetting = NumberSetting::new("Bow.ScalingMultiplier", -1000.0, 1000.0, None).slider(0.0, 10.0, 0.1);
 static BOW_AOW: Setting = Setting::flag("Bow.UnlockAOW");
-static BOW_WEIGHT: NumberSetting = NumberSetting::new("Bow.WeightMultiplier", -1000.0, 1000.0, None);
-static CROSSBOW_WEIGHT: NumberSetting = NumberSetting::new("Crossbow.WeightMultiplier", -1000.0, 1000.0, None);
-static BALLISTA_WEIGHT: NumberSetting = NumberSetting::new("Ballista.WeightMultiplier", -1000.0, 1000.0, None);
-static BOW_SELL: NumberSetting = NumberSetting::new("Bow.SellValueMultiplier", -1000.0, 1000.0, None);
-static CROSSBOW_SELL: NumberSetting = NumberSetting::new("Crossbow.SellValueMultiplier", -1000.0, 1000.0, None);
-static BALLISTA_SELL: NumberSetting = NumberSetting::new("Ballista.SellValueMultiplier", -1000.0, 1000.0, None);
+static BOW_WEIGHT: NumberSetting = NumberSetting::new("Bow.WeightMultiplier", -1000.0, 1000.0, None).slider(0.0, 5.0, 0.1);
+static CROSSBOW_WEIGHT: NumberSetting = NumberSetting::new("Crossbow.WeightMultiplier", -1000.0, 1000.0, None).slider(0.0, 5.0, 0.1);
+static BALLISTA_WEIGHT: NumberSetting = NumberSetting::new("Ballista.WeightMultiplier", -1000.0, 1000.0, None).slider(0.0, 5.0, 0.1);
+static BOW_SELL: NumberSetting = NumberSetting::new("Bow.SellValueMultiplier", -1000.0, 1000.0, None).slider(0.0, 10.0, 0.5);
+static CROSSBOW_SELL: NumberSetting = NumberSetting::new("Crossbow.SellValueMultiplier", -1000.0, 1000.0, None).slider(0.0, 10.0, 0.5);
+static BALLISTA_SELL: NumberSetting = NumberSetting::new("Ballista.SellValueMultiplier", -1000.0, 1000.0, None).slider(0.0, 10.0, 0.5);
 static ARROW_MAX: Setting = Setting::int("Bullet.Arrow.MaxQuantity");
 static BOLT_MAX: Setting = Setting::int("Bullet.Bolt.MaxQuantity");
-static BULLET_SPEED: NumberSetting = NumberSetting::new("Bullet.SpeedMultiplier", -1000.0, 1000.0, None);
-static BULLET_RANGE: NumberSetting = NumberSetting::new("Bullet.RangeMultiplier", -1000.0, 1000.0, None);
-static BULLET_SPREAD: NumberSetting = NumberSetting::new("Bullet.SpreadMultiplier", -1000.0, 1000.0, None);
+static BULLET_SPEED: NumberSetting = NumberSetting::new("Bullet.SpeedMultiplier", -1000.0, 1000.0, None).slider(0.0, 10.0, 0.1);
+static BULLET_RANGE: NumberSetting = NumberSetting::new("Bullet.RangeMultiplier", -1000.0, 1000.0, None).slider(0.0, 10.0, 0.1);
+static BULLET_SPREAD: NumberSetting = NumberSetting::new("Bullet.SpreadMultiplier", -1000.0, 1000.0, None).slider(0.0, 10.0, 0.1);
 static RAIN_COUNT: NumberSetting = NumberSetting::whole("Bullet.RainOfArrowsCount", 0.0, 1000.0, None);
 static LOG_FILE: Setting = Setting::flag("LogFile");
 
@@ -147,5 +147,14 @@ mod tests {
         assert!(used.len() > 20, "found only {} menu keys", used.len());
         assert_eq!(used, TEXT.keys("english"), "menu.rs keys and locales/en.json differ");
         assert_eq!(used, TEXT.keys("vietnamese"), "menu.rs keys and locales/vi.json differ");
+    }
+
+    /// Every row meant to be a native slider has a valid range and step (else
+    /// it silently stays a typed row).
+    #[test]
+    fn slider_rows_have_a_valid_range() {
+        for setting in [&BOW_DAMAGE, &CROSSBOW_DAMAGE, &BALLISTA_DAMAGE, &BOW_SCALING, &BOW_WEIGHT, &CROSSBOW_WEIGHT, &BALLISTA_WEIGHT, &BOW_SELL, &CROSSBOW_SELL, &BALLISTA_SELL, &BULLET_SPEED, &BULLET_RANGE, &BULLET_SPREAD] {
+            assert!(setting.has_slider(), "{} would not be a slider", setting.key);
+        }
     }
 }

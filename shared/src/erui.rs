@@ -1128,6 +1128,9 @@ pub struct NumberSetting {
     pub integer: bool,
     /// Step of the native slider (`0` = text row only, see [`NumberSetting::stepped`]).
     pub step: f64,
+    /// Range of the native slider when it is narrower than `min..max`
+    /// ([`NumberSetting::slider`]); `None` = the slider covers `min..max`.
+    pub slider_range: Option<(f64, f64)>,
     /// Set by `add_number`: `0` for a text row, else the slider's decimal
     /// places plus one.
     slider: AtomicU32,
@@ -1164,6 +1167,7 @@ impl NumberSetting {
             decimal_point,
             integer,
             step: 0.0,
+            slider_range: None,
             slider: AtomicU32::new(0),
         }
     }
@@ -1177,6 +1181,23 @@ impl NumberSetting {
         self
     }
 
+    /// Like [`NumberSetting::stepped`] for a setting whose accepted range
+    /// (`min..max`, used by the typed text row and for clamping) is much wider
+    /// than what a slider can show: the slider covers `from..=to` in steps of
+    /// `step`. A value outside it is shown at the nearest end; the config is
+    /// only changed when the player moves the slider.
+    pub const fn slider(mut self, from: f64, to: f64, step: f64) -> Self {
+        self.step = step;
+        self.slider_range = Some((from, to));
+        self
+    }
+
+    /// Whether this setting is shown as a native slider on an API 1.2 host (it
+    /// has a step and a range of 2 to 256 positions that the step reaches).
+    pub fn has_slider(&self) -> bool {
+        self.slider_plan().is_some()
+    }
+
     /// The slider's exact range, or `None` when this setting has no step or the
     /// range cannot be a native slider.
     fn slider_plan(&self) -> Option<SliderPlan> {
@@ -1188,10 +1209,11 @@ impl NumberSetting {
             (scaled - scaled.round()).abs() < 1e-9
         })?;
         let scale = 10f64.powi(places as i32);
+        let (low, high) = self.slider_range.unwrap_or((self.min, self.max));
         let plan = SliderPlan {
             places,
-            min: (self.min * scale).round() as i64,
-            max: (self.max * scale).round() as i64,
+            min: (low * scale).round() as i64,
+            max: (high * scale).round() as i64,
             step: (self.step * scale).round() as i64,
         };
         let span = plan.max - plan.min;
@@ -1318,6 +1340,14 @@ mod tests {
 
         let fine = NumberSetting::new("B", -1.0, 1.0, None).stepped(0.25);
         assert_eq!(fine.slider_plan().unwrap(), SliderPlan { places: 2, min: -100, max: 100, step: 25 });
+
+        // A slider narrower than the accepted range: values outside snap to the ends.
+        let wide = NumberSetting::new("W", 0.0, 1000.0, None).slider(0.0, 10.0, 0.5);
+        let plan = wide.slider_plan().unwrap();
+        assert_eq!(plan, SliderPlan { places: 1, min: 0, max: 100, step: 5 });
+        assert_eq!(plan.snap(2.0), 20);
+        assert_eq!(plan.snap(500.0), 100);
+        assert_eq!(wide.normalize(500.0), 500.0); // the typed row still accepts it
 
         // Not a slider: no step, too many positions, a step that misses the max.
         assert!(NumberSetting::new("C", 0.0, 10.0, None).slider_plan().is_none());
