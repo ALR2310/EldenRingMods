@@ -98,7 +98,8 @@ impl GetterFix {
                     return;
                 };
                 let call = unsafe { site.add(CALL_OFFSET) };
-                let Some(thunk) = codepatch::rel32_target(call).map(|a| a as *mut u8) else {
+                // SAFETY: reads the 5 bytes of a call/jmp found in the game image.
+                let Some(thunk) = unsafe { codepatch::rel32_target(call) }.map(|a| a as *mut u8) else {
                     return;
                 };
                 if unsafe { *thunk } != 0xE9 {
@@ -113,7 +114,8 @@ impl GetterFix {
         if thunk.is_null() {
             return;
         }
-        let Some(target) = codepatch::rel32_target(thunk) else {
+        // SAFETY: reads the 5 bytes of a call/jmp found in the game image.
+        let Some(target) = (unsafe { codepatch::rel32_target(thunk) }) else {
             return;
         };
         if target == self.last_target || target == self.stub {
@@ -135,7 +137,8 @@ impl GetterFix {
             None if seamless_loaded => "Seamless Co-op".to_string(),
             None => "Another mod".to_string(),
         };
-        match codepatch::redirect_rel32(thunk, &stub(target)) {
+        // SAFETY: `thunk` is the call target read from the game image; the length/offset is the one its pattern matched.
+        match unsafe { codepatch::redirect_rel32(thunk, &stub(target)) } {
             Some(stub) => {
                 self.stub = stub as u64;
                 logger::log(&format!("{who} detected: speeds now bypass its animation speed hook."));

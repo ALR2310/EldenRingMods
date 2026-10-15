@@ -75,6 +75,11 @@ unsafe fn write_jmp_rel32(at: *mut u8, to: *const u8) {
 /// fit the original byte window exactly (no stub, unlike [install_jmp_hook]).
 /// Returns `false`, leaving the original bytes untouched, if `VirtualProtect`
 /// fails.
+///
+/// # Safety
+/// `addr..addr + patched.len()` must be mapped code of this process, and
+/// `patched` must be valid machine code for the bytes it replaces, since
+/// other threads may be running them.
 pub unsafe fn overwrite_bytes(addr: *mut u8, patched: &[u8]) -> bool {
     unsafe {
         with_writable_code(addr, patched.len(), || {
@@ -90,7 +95,12 @@ pub unsafe fn overwrite_bytes(addr: *mut u8, patched: &[u8]) -> bool {
 /// `stub_body` must not itself jump/return - the return jump is appended.
 /// `original_len` must be >= 5. Returns the stub's address; on any failure the
 /// original bytes are left untouched.
-pub fn install_jmp_hook(target_addr: *mut u8, original_len: usize, stub_body: &[u8]) -> Option<*mut u8> {
+///
+/// # Safety
+/// `target_addr..target_addr + original_len` must be mapped code of this
+/// process that ends on an instruction boundary, and `stub_body` must be valid
+/// machine code that does what the replaced instructions did.
+pub unsafe fn install_jmp_hook(target_addr: *mut u8, original_len: usize, stub_body: &[u8]) -> Option<*mut u8> {
     if original_len < 5 {
         return None;
     }
@@ -118,7 +128,10 @@ pub fn install_jmp_hook(target_addr: *mut u8, original_len: usize, stub_body: &[
 
 /// Destination of the 5-byte `call rel32` (`E8`) or `jmp rel32` (`E9`) at
 /// `site`, or `None` if `site` holds neither.
-pub fn rel32_target(site: *const u8) -> Option<u64> {
+///
+/// # Safety
+/// `site..site + 5` must be readable memory of this process.
+pub unsafe fn rel32_target(site: *const u8) -> Option<u64> {
     let opcode = unsafe { site.read() };
     if opcode != 0xE8 && opcode != 0xE9 {
         return None;
@@ -136,8 +149,12 @@ pub fn rel32_target(site: *const u8) -> Option<u64> {
 /// `stub_body` is entered exactly as the original destination would be, so it
 /// must end with its own `ret` / tail jump; nothing is appended. Returns the
 /// stub's address; on any failure the original bytes are left untouched.
-pub fn redirect_rel32(site: *mut u8, stub_body: &[u8]) -> Option<*mut u8> {
-    rel32_target(site)?;
+///
+/// # Safety
+/// `site` must be a mapped `call rel32` / `jmp rel32` of this process, and
+/// `stub_body` must be valid machine code that stands in for its destination.
+pub unsafe fn redirect_rel32(site: *mut u8, stub_body: &[u8]) -> Option<*mut u8> {
+    unsafe { rel32_target(site) }?;
     let stub = alloc_near(site, stub_body.len())?;
     unsafe {
         std::ptr::copy_nonoverlapping(stub_body.as_ptr(), stub, stub_body.len());

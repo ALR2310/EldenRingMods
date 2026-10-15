@@ -273,7 +273,8 @@ fn install_area_eligibility() -> bool {
         return false;
     };
     let stub = build_area_eligibility_stub();
-    let Some(stub_addr) = codepatch::install_jmp_hook(entry, AREA_ELIGIBILITY_HOOK_LEN, &stub) else {
+    // SAFETY: `entry` is the scanned site in the game image; the length/offset is the one its pattern matched.
+    let Some(stub_addr) = (unsafe { codepatch::install_jmp_hook(entry, AREA_ELIGIBILITY_HOOK_LEN, &stub) }) else {
         logger::error("Spirit.Summon.Anywhere: AreaEligibility - failed to install hook.");
         return false;
     };
@@ -288,7 +289,8 @@ fn install_gate() -> bool {
     };
 
     let stub = build_stub();
-    let Some(stub_addr) = codepatch::install_jmp_hook(entry, GATE_INNER_LEN, &stub) else {
+    // SAFETY: `entry` is the scanned site in the game image; the length/offset is the one its pattern matched.
+    let Some(stub_addr) = (unsafe { codepatch::install_jmp_hook(entry, GATE_INNER_LEN, &stub) }) else {
         logger::error("Spirit.Summon.Anywhere: failed to install hook (couldn't allocate stub or patch target).");
         return false;
     };

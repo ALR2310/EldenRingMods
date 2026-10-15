@@ -122,7 +122,8 @@ fn seamless_loaded() -> bool {
 /// The target of the `call` at `offset` in the first match of `pattern`.
 fn call_target(pattern: &str, offset: usize) -> Option<usize> {
     let at = memscan::wait_for_pattern_in_module(pattern, Duration::from_millis(500), Duration::from_secs(30))?;
-    codepatch::rel32_target(unsafe { at.add(offset) }).map(|target| target as usize)
+    // SAFETY: reads the 5 bytes of a call/jmp found in the game image.
+    unsafe { codepatch::rel32_target(at.add(offset)) }.map(|target| target as usize)
 }
 
 unsafe extern "system" {

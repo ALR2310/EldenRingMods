@@ -110,7 +110,9 @@ fn install() -> bool {
     let factor_addr = &WEIGHT_FACTOR as *const AtomicU32 as u64;
     let stub_body = build_stub(factor_addr);
 
-    let Some(stub) = codepatch::install_jmp_hook(target, TARGET_INSTRUCTION_LEN, &stub_body) else {
+    // SAFETY: `target` is the scanned instruction in the game image; the length/offset is the one its pattern matched.
+
+    let Some(stub) = (unsafe { codepatch::install_jmp_hook(target, TARGET_INSTRUCTION_LEN, &stub_body) }) else {
         logger::error("WeightMultiplier: failed to install hook (couldn't allocate stub or patch target).");
         return false;
     };
