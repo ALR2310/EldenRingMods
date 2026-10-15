@@ -31,6 +31,8 @@ vtable-rs = "0.1.5"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 toml_edit = "0.22"
+# Menu translation files (common::i18n).
+serde_json = "1"
 
 [profile.release]
 lto = true

@@ -68,8 +68,8 @@ static MENU: OnceLock<erui::Menu> = OnceLock::new();
 
 /// The menu texts, one file per language (`locales/`); English is the fallback.
 static TEXT: Catalog = Catalog::new(&[
-    ("english", include_str!("../locales/en.toml")),
-    ("vietnamese", include_str!("../locales/vi.toml")),
+    ("english", include_str!("../locales/en.json")),
+    ("vietnamese", include_str!("../locales/vi.json")),
 ]);
 
 /// The text of `key` in the host language.
@@ -175,7 +175,7 @@ mod tests {
         used.sort();
         used.dedup();
         assert!(used.len() > 40, "found only {} menu keys", used.len());
-        assert_eq!(used, TEXT.keys("english"), "menu.rs keys and locales/en.toml differ");
-        assert_eq!(used, TEXT.keys("vietnamese"), "menu.rs keys and locales/vi.toml differ");
+        assert_eq!(used, TEXT.keys("english"), "menu.rs keys and locales/en.json differ");
+        assert_eq!(used, TEXT.keys("vietnamese"), "menu.rs keys and locales/vi.json differ");
     }
 }
