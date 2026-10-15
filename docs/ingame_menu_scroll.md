@@ -4,6 +4,8 @@
 không có cơ chế cuộn; game chỉ có danh sách cuộn thật ở màn hình gán phím (`KeyConfigDialog`), vốn chuyên cho hàng gán phím. Muốn cuộn cho slider/công tắc/ô số
 phải tự "ảo hoá" hàng (fork host) hoặc giảm số hàng gốc. Hiện giữ phân trang.**
 
+Nghiên cứu tiếp (cấu trúc GFX, `GridControl`, callback làm mới, probe trong game): [ingame_menu_newpage.md](ingame_menu_newpage.md). Đính chính: `0x869580` là dispatcher theo byte `[a2+8]`, không phải builder.
+
 Bối cảnh: [ingame_menu.md](ingame_menu.md). Phân trang hiện tại là hàng Next/Previous do ERNativeUI chèn khi hết chỗ.
 
 ## Bằng chứng

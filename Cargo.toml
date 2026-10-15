@@ -16,6 +16,7 @@ members = [
     "mods/windowresize",
     "mods/speedmultiplier",
     "mods/animcancel",
+    "scratch/menuprobe",
 ]
 
 [workspace.dependencies]
