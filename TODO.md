@@ -59,3 +59,7 @@ Chi tiết: `mods/spiritmultiplier/docs/open_issues.md`, `docs/warp_research.md`
 - [ ] `ReloadBanner` cho `weightmultiplier` - cần quyết định (phải bỏ thiết kế không dùng task game)
 - [ ] Dọn tham chiếu `.docs/...` lỗi thời (~17 dòng / 13 file, phần lớn ở `sometweaks` đã bỏ; còn `autoregen/hit_hook.rs`, `spiritmultiplier/chain.rs`, `probe.rs`)
 - [ ] `mods/risearcher/project.json` chứa đường dẫn máy: git-ignore hoặc đổi thành file mẫu
+
+## Đã dừng
+
+- AnimCancel: đỡ đòn trên không (như Sekiro) - không làm được chỉ bằng DLL, xem [mods/animcancel/docs/air_guard.md](mods/animcancel/docs/air_guard.md) (OKLICKMAN, 2026-10-15)
