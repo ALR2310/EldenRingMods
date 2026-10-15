@@ -33,7 +33,7 @@ use fromsoftware_shared::FromStatic;
 use common::anim::{group_of, Group};
 use common::logger;
 
-use crate::config::{self, Animations, Cancel};
+use crate::config::{self, Action, Config};
 
 /// `ChrActions` bit numbers (fromsoftware-rs `action_request.rs`).
 const L1: u32 = 2;
@@ -70,17 +70,33 @@ fn bits(list: &[u32]) -> u64 {
     list.iter().fold(0, |mask, bit| mask | 1 << bit)
 }
 
-/// The mask for the `[Cancel]` section.
-pub fn allow_from(cancel: &Cancel) -> Allow {
+/// Whether `action` may cancel an animation of this group. Item is every use
+/// of an item (flasks, throwables, consumables), except the whistle, see
+/// `group_of`. Critical hits (the attacker's half of a throw) are never in
+/// `Attack`, see `group_of`.
+pub fn source_allowed(group: Group, action: &Action) -> bool {
+    match group {
+        Group::Attack => action.attack,
+        Group::Skill => action.skill,
+        Group::Cast => action.cast,
+        Group::Item => action.item,
+        _ => false,
+    }
+}
+
+/// The mask for an animation of `group`: the actions that are enabled and may
+/// cancel that group.
+pub fn allow_from(config: &Config, group: Group) -> Allow {
+    let on = |action: &Action| action.enabled && source_allowed(group, action);
     let mut allow = Allow::default();
-    if cancel.guard {
+    if on(&config.guard) {
         // Guard is L1 in game; ACTION_ARM_GUARD (24) alone queued no press.
         allow.actions |= bits(&[GUARD, L1]);
     }
-    if cancel.dodge {
+    if on(&config.dodge) {
         allow.actions |= bits(&[SP_MOVE, ROLLING, BACKSTEP, DODGE_18, EMERGENCY_STEP]);
     }
-    if cancel.weapon_swap {
+    if on(&config.weapon_swap) {
         // ACTION (4) too: on keyboard the swap key is the pouch/swap button.
         allow.actions |= bits(&[ACTION, CHANGE_WEAPON_R, CHANGE_WEAPON_L, SLOT_SWITCH]);
         allow.tae |= TAE_SLOT_SWITCH;
@@ -102,20 +118,6 @@ pub fn group_for_cancel(id: i32) -> Group {
         return Group::Cast;
     }
     group_of(id)
-}
-
-/// Whether an animation of this group may be cancelled. Item is every use of an
-/// item (flasks, throwables, consumables), except the whistle, see `group_of`.
-/// Critical hits (the
-/// attacker's half of a throw) are never in `Attack`, see `group_of`.
-pub fn source_allowed(group: Group, animations: &Animations) -> bool {
-    match group {
-        Group::Attack => animations.attack,
-        Group::Skill => animations.skill,
-        Group::Cast => animations.cast,
-        Group::Item => animations.item,
-        _ => false,
-    }
 }
 
 /// The ChrActions / TaeCancelFlags bitfield structs keep their value in a
@@ -192,13 +194,13 @@ fn open_windows(request: &mut CSChrActionRequestModule, id: i32, allow: Allow) {
 /// One tick of one stage.
 fn apply() {
     let config = config::get();
-    let allow = allow_from(&config.cancel);
     let Some(chr) = player() else {
         return;
     };
     let request = &mut chr.modules.action_request;
     let id = queue_id(request);
-    if allow.actions == 0 || id < 0 || !source_allowed(group_for_cancel(id), &config.animations) {
+    let allow = if id < 0 { Allow::default() } else { allow_from(&config, group_for_cancel(id)) };
+    if allow.actions == 0 {
         LAST.store(NOT_FORCED, Ordering::Relaxed);
         return;
     }
@@ -224,25 +226,33 @@ pub fn run() {
 mod tests {
     use super::*;
 
-    fn cancel(guard: bool, dodge: bool, weapon_swap: bool) -> Cancel {
-        Cancel { guard, dodge, weapon_swap }
+    const ALL: Action = Action { enabled: true, attack: true, skill: true, cast: true, item: true };
+    const OFF: Action = Action { enabled: false, ..ALL };
+
+    fn config(guard: Action, dodge: Action, weapon_swap: Action) -> Config {
+        Config { guard, dodge, weapon_swap, ..Config::default() }
+    }
+
+    fn only(guard: bool, dodge: bool, weapon_swap: bool) -> Config {
+        let pick = |on: bool| if on { ALL } else { OFF };
+        config(pick(guard), pick(dodge), pick(weapon_swap))
     }
 
     #[test]
     fn nothing_allowed_means_no_bits() {
-        assert_eq!(allow_from(&cancel(false, false, false)), Allow::default());
+        assert_eq!(allow_from(&only(false, false, false), Group::Attack), Allow::default());
     }
 
     #[test]
     fn guard_includes_l1() {
-        let allow = allow_from(&cancel(true, false, false));
+        let allow = allow_from(&only(true, false, false), Group::Attack);
         assert_eq!(allow.actions, 1 << GUARD | 1 << L1);
         assert_eq!(allow.tae, TAE_ACTION_GENERAL);
     }
 
     #[test]
     fn dodge_includes_the_roll_and_step_bits() {
-        let allow = allow_from(&cancel(false, true, false));
+        let allow = allow_from(&only(false, true, false), Group::Attack);
         for bit in [SP_MOVE, ROLLING, BACKSTEP, DODGE_18] {
             assert!(allow.actions & 1 << bit != 0, "bit {bit}");
         }
@@ -251,27 +261,44 @@ mod tests {
 
     #[test]
     fn weapon_swap_needs_the_queue_bit_and_the_slot_flag() {
-        let allow = allow_from(&cancel(false, false, true));
+        let allow = allow_from(&only(false, false, true), Group::Attack);
         assert!(allow.actions & 1 << SLOT_SWITCH != 0);
         assert!(allow.tae & TAE_SLOT_SWITCH != 0);
         // The others don't get the slot flag.
-        assert_eq!(allow_from(&cancel(true, true, false)).tae & TAE_SLOT_SWITCH, 0);
+        assert_eq!(allow_from(&only(true, true, false), Group::Attack).tae & TAE_SLOT_SWITCH, 0);
     }
 
     #[test]
     fn only_enabled_animation_groups_are_cancelled() {
-        let animations = Animations { attack: true, skill: false, cast: false, item: false };
-        assert!(source_allowed(Group::Attack, &animations));
-        assert!(!source_allowed(Group::Skill, &animations));
-        assert!(!source_allowed(Group::Cast, &animations));
-        assert!(!source_allowed(Group::Item, &animations));
-        let items = Animations { item: true, ..animations };
+        let action = Action { attack: true, skill: false, cast: false, item: false, ..ALL };
+        assert!(source_allowed(Group::Attack, &action));
+        assert!(!source_allowed(Group::Skill, &action));
+        assert!(!source_allowed(Group::Cast, &action));
+        assert!(!source_allowed(Group::Item, &action));
+        let items = Action { item: true, ..action };
         assert!(source_allowed(Group::Item, &items));
         // Never: a critical hit, rolls, walking.
         for group in [Group::Critical, Group::Roll, Group::Walk, Group::Run, Group::Other] {
-            let all = Animations { attack: true, skill: true, cast: true, item: true };
-            assert!(!source_allowed(group, &all), "{group:?}");
+            assert!(!source_allowed(group, &ALL), "{group:?}");
         }
+    }
+
+    /// The reported case: guard must not cut a spell, but still cuts the rest,
+    /// while dodge and weapon swap cut spells too.
+    #[test]
+    fn each_action_has_its_own_animation_set() {
+        let no_cast = Action { cast: false, ..ALL };
+        let config = config(no_cast, ALL, ALL);
+        let guard = 1 << GUARD;
+        assert_eq!(allow_from(&config, Group::Cast).actions & guard, 0);
+        assert!(allow_from(&config, Group::Cast).actions & 1 << ROLLING != 0);
+        assert!(allow_from(&config, Group::Cast).actions & 1 << SLOT_SWITCH != 0);
+        for group in [Group::Attack, Group::Skill, Group::Item] {
+            assert!(allow_from(&config, group).actions & guard != 0, "{group:?}");
+        }
+        // An action that is off cancels nothing, whatever its set says.
+        let off = self::config(OFF, ALL, ALL);
+        assert_eq!(allow_from(&off, Group::Attack).actions & guard, 0);
     }
 
     #[test]

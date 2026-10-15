@@ -4,8 +4,8 @@
 //!
 //! ```text
 //! Anim Cancel                -> opens a page with:
-//!   Cancel With              -> Guard, Dodge, Weapon swap
-//!   Cancel What              -> Attacks, Skills, Spells, Items
+//!   Guard / Dodge / Weapon swap -> each a page with: Enabled, Attacks, Skills,
+//!                                  Spells, Items
 //!   Log file                 on/off
 //! ```
 //!
@@ -21,13 +21,30 @@ use common::logger;
 
 use crate::config;
 
-static GUARD: Setting = Setting::flag("Cancel.Guard");
-static DODGE: Setting = Setting::flag("Cancel.Dodge");
-static WEAPON_SWAP: Setting = Setting::flag("Cancel.WeaponSwap");
-static ATTACK: Setting = Setting::flag("Animations.Attack");
-static SKILL: Setting = Setting::flag("Animations.Skill");
-static CAST: Setting = Setting::flag("Animations.Cast");
-static ITEM: Setting = Setting::flag("Animations.Item");
+/// The five switches of one action's page; `$section` is its TOML section.
+struct ActionSettings {
+    enabled: Setting,
+    attack: Setting,
+    skill: Setting,
+    cast: Setting,
+    item: Setting,
+}
+
+macro_rules! action_settings {
+    ($section:literal) => {
+        ActionSettings {
+            enabled: Setting::flag(concat!($section, ".Enabled")),
+            attack: Setting::flag(concat!($section, ".Attack")),
+            skill: Setting::flag(concat!($section, ".Skill")),
+            cast: Setting::flag(concat!($section, ".Cast")),
+            item: Setting::flag(concat!($section, ".Item")),
+        }
+    };
+}
+
+static GUARD: ActionSettings = action_settings!("Guard");
+static DODGE: ActionSettings = action_settings!("Dodge");
+static WEAPON_SWAP: ActionSettings = action_settings!("WeaponSwap");
 static LOG_FILE: Setting = Setting::flag("Logging.LogFile");
 
 static MENU: OnceLock<erui::Menu> = OnceLock::new();
@@ -38,23 +55,25 @@ fn saved() {
     logger::set_enabled(config::get().logging.log_file);
 }
 
+/// One action's page: the switch for the action, then the animations it may
+/// cancel. A macro because the row readers must be plain `fn`s (no captures).
+macro_rules! action_page {
+    ($b:expr, $parent:expr, $title:expr, $help:expr, $settings:expr, $field:ident) => {{
+        let page = $b.submenu($parent, $title, $help)?;
+        $b.toggle(page, "Enabled", "Turn this action's cancelling on or off.", &$settings.enabled, || config::get().$field.enabled as u8)?;
+        $b.toggle(page, "Attacks", "Can cancel normal attacks.", &$settings.attack, || config::get().$field.attack as u8)?;
+        $b.toggle(page, "Skills", "Can cancel weapon skills.", &$settings.skill, || config::get().$field.skill as u8)?;
+        $b.toggle(page, "Spells", "Can cancel casting sorceries and incantations.", &$settings.cast, || config::get().$field.cast as u8)?;
+        $b.toggle(page, "Items", "Can cancel using items such as flasks.", &$settings.item, || config::get().$field.item as u8)?;
+    }};
+}
+
 fn build(b: &mut MenuBuilder) -> Result<(), String> {
     let page = b.submenu(b.root(), "Anim Cancel", "Settings for the Anim Cancel mod.")?;
 
-    let cancel = b.submenu(page, "Cancel With", "Which actions may cut an animation short.")?;
-    b.toggle(cancel, "Guard", "Raising your guard cancels the animation.", &GUARD, || config::get().cancel.guard as u8)?;
-    b.toggle(cancel, "Dodge", "Rolling or backstepping cancels the animation.", &DODGE, || config::get().cancel.dodge as u8)?;
-    b.toggle(cancel, "Weapon swap", "Switching weapons cancels the animation.", &WEAPON_SWAP, || {
-        config::get().cancel.weapon_swap as u8
-    })?;
-
-    let animations = b.submenu(page, "Cancel What", "Which animations may be cut short.")?;
-    b.toggle(animations, "Attacks", "Normal attacks can be cancelled.", &ATTACK, || config::get().animations.attack as u8)?;
-    b.toggle(animations, "Skills", "Weapon skills can be cancelled.", &SKILL, || config::get().animations.skill as u8)?;
-    b.toggle(animations, "Spells", "Casting sorceries and incantations can be cancelled.", &CAST, || {
-        config::get().animations.cast as u8
-    })?;
-    b.toggle(animations, "Items", "Using items such as flasks can be cancelled.", &ITEM, || config::get().animations.item as u8)?;
+    action_page!(b, page, "Guard", "Raising your guard cancels the animations you pick.", GUARD, guard);
+    action_page!(b, page, "Dodge", "Rolling or backstepping cancels the animations you pick.", DODGE, dodge);
+    action_page!(b, page, "Weapon swap", "Switching weapons cancels the animations you pick.", WEAPON_SWAP, weapon_swap);
 
     b.toggle(page, "Log file", "Write a log file next to the DLL, for troubleshooting.", &LOG_FILE, || {
         config::get().logging.log_file as u8

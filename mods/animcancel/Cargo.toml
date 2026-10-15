@@ -13,6 +13,7 @@ common = { path = "../../shared" }
 eldenring.workspace = true
 fromsoftware-shared.workspace = true
 serde.workspace = true
+toml_edit.workspace = true
 
 [dev-dependencies]
 toml.workspace = true
