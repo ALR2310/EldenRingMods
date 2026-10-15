@@ -56,7 +56,7 @@
     "help": "Lượng hồi mỗi giây: HP ở kiểu HP cố định, phần trăm ở các kiểu còn lại (cho phép số lẻ). 0 = không hồi máu."
   },
   "ghost": {
-    "label": "Sắc ma quái",
+    "label": "Màu ma",
     "help": "Bật = linh hồn giữ vẻ xanh ma quái. Tắt = trông như nhân vật bình thường."
   },
   "behavior": {
