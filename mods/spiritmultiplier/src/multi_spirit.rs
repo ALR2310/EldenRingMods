@@ -524,8 +524,10 @@ fn install(name: &str, pattern: &str, offset: usize, build: impl Fn(u64) -> Vec<
         return None;
     };
     let site = unsafe { anchor.add(offset) };
-    let target = codepatch::rel32_target(site)?;
-    let Some(at) = codepatch::redirect_rel32(site, &build(target)) else {
+    // SAFETY: reads the 5 bytes of a call/jmp found in the game image.
+    let target = unsafe { codepatch::rel32_target(site) }?;
+    // SAFETY: `site` is the scanned call in the game image; the length/offset is the one its pattern matched.
+    let Some(at) = (unsafe { codepatch::redirect_rel32(site, &build(target)) }) else {
         logger::error(&format!("MultiSpirit: {name} redirect failed."));
         return None;
     };

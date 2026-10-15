@@ -286,7 +286,8 @@ fn install_band_alloc() -> bool {
 
     let found_addr = site as u64 + BAND_ALLOC_FOUND_OFFSET as u64;
     let stub = build_band_stub(band_len(), found_addr);
-    let Some(stub_addr) = codepatch::install_jmp_hook(site, BAND_ALLOC_REPLACED_LEN, &stub) else {
+    // SAFETY: `site` is the scanned site in the game image; the length/offset is the one its pattern matched.
+    let Some(stub_addr) = (unsafe { codepatch::install_jmp_hook(site, BAND_ALLOC_REPLACED_LEN, &stub) }) else {
         logger::error("Band: slot-search hook install failed.");
         return false;
     };

@@ -223,10 +223,12 @@ fn install(name: &str, pattern: &str, offset: usize, build: impl Fn(u64) -> Vec<
         return false;
     };
     let site = unsafe { anchor.add(offset) };
-    let Some(target) = codepatch::rel32_target(site) else {
+    // SAFETY: reads the 5 bytes of a call/jmp found in the game image.
+    let Some(target) = (unsafe { codepatch::rel32_target(site) }) else {
         return false;
     };
-    let Some(at) = codepatch::redirect_rel32(site, &build(target)) else {
+    // SAFETY: `site` is the scanned call in the game image; the length/offset is the one its pattern matched.
+    let Some(at) = (unsafe { codepatch::redirect_rel32(site, &build(target)) }) else {
         logger::error(&format!("SummonAnywhere: {name} redirect failed."));
         return false;
     };

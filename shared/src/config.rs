@@ -103,11 +103,11 @@ fn migrate_with_renames(ini_path: &str, default_ini: &str, renames: &[(&str, &st
     let mut existing_values = parse(&existing_content);
     let mut renamed = false;
     for (old_key, new_key) in renames {
-        if !existing_values.contains_key(*new_key) {
-            if let Some(value) = existing_values.remove(*old_key) {
-                existing_values.insert(new_key.to_string(), value);
-                renamed = true;
-            }
+        if !existing_values.contains_key(*new_key)
+            && let Some(value) = existing_values.remove(*old_key)
+        {
+            existing_values.insert(new_key.to_string(), value);
+            renamed = true;
         }
     }
     let template_values = parse(default_ini);
@@ -318,7 +318,7 @@ Fp=0
             .filter(|l| !l.trim_start().starts_with("ReloadKey="))
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(parse(&without_reload_key).get("ReloadKey").is_none());
+        assert!(!parse(&without_reload_key).contains_key("ReloadKey"));
 
         let ini = TempIni::new("adds_missing", &without_reload_key);
         let migrated = migrate(ini.path(), TEST_TEMPLATE);

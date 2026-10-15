@@ -251,7 +251,9 @@ fn install() -> bool {
     let value_addr = &WEIGHT_VALUE as *const AtomicU32 as u64;
     let stub_body = build_stub(WEIGHT_MODE.load(Ordering::Relaxed), value_addr);
 
-    let Some(stub) = codepatch::install_jmp_hook(target, TARGET_INSTRUCTION_LEN, &stub_body) else {
+    // SAFETY: `target` is the scanned instruction in the game image; the length/offset is the one its pattern matched.
+
+    let Some(stub) = (unsafe { codepatch::install_jmp_hook(target, TARGET_INSTRUCTION_LEN, &stub_body) }) else {
         logger::error("Failed to install hook (couldn't allocate stub or patch target).");
         return false;
     };
