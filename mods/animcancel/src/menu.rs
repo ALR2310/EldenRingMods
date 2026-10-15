@@ -17,6 +17,7 @@
 use std::sync::OnceLock;
 
 use common::erui::{self, MenuBuilder, Setting};
+use common::i18n::Catalog;
 use common::logger;
 
 use crate::config;
@@ -49,6 +50,17 @@ static LOG_FILE: Setting = Setting::flag("Logging.LogFile");
 
 static MENU: OnceLock<erui::Menu> = OnceLock::new();
 
+/// The menu texts, one file per language (`locales/`); English is the fallback.
+static TEXT: Catalog = Catalog::new(&[
+    ("english", include_str!("../locales/en.json")),
+    ("vietnamese", include_str!("../locales/vi.json")),
+]);
+
+/// The text of `key` in the host language.
+fn t(key: &str) -> String {
+    TEXT.tr(key)
+}
+
 /// After the file is written (and re-read): the mod reads its config every
 /// frame, so only the log switch needs following.
 fn saved() {
@@ -60,24 +72,22 @@ fn saved() {
 macro_rules! action_page {
     ($b:expr, $parent:expr, $title:expr, $help:expr, $settings:expr, $field:ident) => {{
         let page = $b.submenu($parent, $title, $help)?;
-        $b.toggle(page, "Enabled", "Turn this action's cancelling on or off.", &$settings.enabled, || config::get().$field.enabled as u8)?;
-        $b.toggle(page, "Attacks", "Can cancel normal attacks.", &$settings.attack, || config::get().$field.attack as u8)?;
-        $b.toggle(page, "Skills", "Can cancel weapon skills.", &$settings.skill, || config::get().$field.skill as u8)?;
-        $b.toggle(page, "Spells", "Can cancel casting sorceries and incantations.", &$settings.cast, || config::get().$field.cast as u8)?;
-        $b.toggle(page, "Items", "Can cancel using items such as flasks.", &$settings.item, || config::get().$field.item as u8)?;
+        $b.toggle(page, &t("enabled.label"), &t("enabled.help"), &$settings.enabled, || config::get().$field.enabled as u8)?;
+        $b.toggle(page, &t("attacks.label"), &t("attacks.help"), &$settings.attack, || config::get().$field.attack as u8)?;
+        $b.toggle(page, &t("skills.label"), &t("skills.help"), &$settings.skill, || config::get().$field.skill as u8)?;
+        $b.toggle(page, &t("spells.label"), &t("spells.help"), &$settings.cast, || config::get().$field.cast as u8)?;
+        $b.toggle(page, &t("items.label"), &t("items.help"), &$settings.item, || config::get().$field.item as u8)?;
     }};
 }
 
 fn build(b: &mut MenuBuilder) -> Result<(), String> {
-    let page = b.submenu(b.root(), "Anim Cancel", "Settings for the Anim Cancel mod.")?;
+    let page = b.submenu(b.root(), "Anim Cancel", &t("mod.help"))?;
 
-    action_page!(b, page, "Guard", "Raising your guard cancels the animations you pick.", GUARD, guard);
-    action_page!(b, page, "Dodge", "Rolling or backstepping cancels the animations you pick.", DODGE, dodge);
-    action_page!(b, page, "Weapon swap", "Switching weapons cancels the animations you pick.", WEAPON_SWAP, weapon_swap);
+    action_page!(b, page, &t("guard.title"), &t("guard.help"), GUARD, guard);
+    action_page!(b, page, &t("dodge.title"), &t("dodge.help"), DODGE, dodge);
+    action_page!(b, page, &t("weapon_swap.title"), &t("weapon_swap.help"), WEAPON_SWAP, weapon_swap);
 
-    b.toggle(page, "Log file", "Write a log file next to the DLL, for troubleshooting.", &LOG_FILE, || {
-        config::get().logging.log_file as u8
-    })
+    b.toggle(page, &t("log.label"), &t("log.help"), &LOG_FILE, || config::get().logging.log_file as u8)
 }
 
 /// Registers the menu on a worker thread. Must start early: the host closes
@@ -91,5 +101,33 @@ pub fn start(hmodule: u64) {
 pub fn sync_from_config() {
     if let Some(menu) = MENU.get() {
         menu.sync();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every key the menu passes to the lookup function is in every language
+    /// file, and the files have the same keys (nothing missing, nothing left over).
+    #[test]
+    fn language_files_match_the_menu_keys() {
+        let source = include_str!("menu.rs");
+        let mut used: Vec<String> = Vec::new();
+        for (at, _) in source.match_indices("t(\"") {
+            let before = source[..at].chars().next_back();
+            if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                continue;
+            }
+            let rest = &source[at + 3..];
+            if let Some(end) = rest.find('"') {
+                used.push(rest[..end].to_string());
+            }
+        }
+        used.sort();
+        used.dedup();
+        assert!(used.len() >= 14, "found only {} menu keys", used.len());
+        assert_eq!(used, TEXT.keys("english"), "menu.rs keys and locales/en.json differ");
+        assert_eq!(used, TEXT.keys("vietnamese"), "menu.rs keys and locales/vi.json differ");
     }
 }

@@ -1,0 +1,25 @@
+{
+  "mod": {
+    "help": "Thiết lập cho mod Weight Multiplier."
+  },
+  "mode": {
+    "label": "Chế độ",
+    "help": "Nhân hệ số: tải trọng của bạn được nhân lên. Giá trị cố định: tải trọng của bạn luôn là một con số.",
+    "options": {
+      "multiply": "Nhân hệ số",
+      "fixed": "Giá trị cố định"
+    }
+  },
+  "multiplier": {
+    "label": "Hệ số nhân",
+    "help": "Nhân tải trọng của bạn, dùng khi Chế độ là Nhân hệ số. 1 = gốc."
+  },
+  "fixed_value": {
+    "label": "Giá trị cố định",
+    "help": "Tải trọng bạn luôn có, dùng khi Chế độ là Giá trị cố định."
+  },
+  "log": {
+    "label": "Tệp log",
+    "help": "Ghi tệp log cạnh DLL để khắc phục sự cố."
+  }
+}

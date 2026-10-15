@@ -16,3 +16,4 @@ sử git của `README.md`.
 | 2026-10-05 | Version thật trong thuộc tính file DLL (`build.rs` + `winresource`) | |
 | 2026-10-07 | Đổi thư mục `crates/` thành `mods/`; tách README thành README + HISTORY + docs/; kiểm tra bằng IDA: mẫu neo duy nhất và cùng RVA `0x247C9E` trên 2.6.2.0, 2.7.0.0, 2.7.1.0 | [docs](docs/hook_point.md) |
 | 2026-10-13 | Thêm menu tùy chọn trong game qua ERNativeUI (`common::erui`): chế độ, hệ số và giá trị cố định (gõ số vào ô văn bản), log. Menu ghi ini rồi gọi đúng hàm reload sẵn có (`reload_weight_value`) từ thread của bộ lưu; thiết kế không dùng task game giữ nguyên. | [docs](../../docs/ingame_menu.md) |
+| 2026-10-15 | Chữ của menu trong game chuyển sang `common::i18n` (`locales/en.json`, `vi.json`): menu hiện tiếng Việt khi game chạy tiếng Việt, ngôn ngữ khác lùi về tiếng Anh | [docs](../../shared/docs/i18n.md) |

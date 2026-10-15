@@ -1,0 +1,29 @@
+{
+  "mod": {
+    "help": "Thiết lập cho mod Passive Runes."
+  },
+  "enabled": {
+    "label": "Bật",
+    "help": "Bật hoặc tắt phần thưởng rune thụ động."
+  },
+  "interval": {
+    "label": "Chu kỳ (ms)",
+    "help": "Bao lâu bạn nhận rune một lần, tính bằng mili giây (1000 = 1 giây). 0 là tạm dừng phần thưởng theo chu kỳ."
+  },
+  "amount": {
+    "label": "Số lượng",
+    "help": "Số rune nhận được mỗi lần. Số âm sẽ trừ rune."
+  },
+  "next_level": {
+    "label": "Cấp kế tiếp (%)",
+    "help": "Mỗi lần, nhận thêm phần trăm này của số rune cần để lên cấp kế tiếp. Số âm sẽ trừ rune."
+  },
+  "interest": {
+    "label": "Lãi (%)",
+    "help": "Mỗi lần, nhận thêm phần trăm này của số rune đang giữ. Tăng rất nhanh. Số âm sẽ trừ rune."
+  },
+  "log": {
+    "label": "Tệp log",
+    "help": "Ghi tệp log cạnh DLL để khắc phục sự cố."
+  }
+}

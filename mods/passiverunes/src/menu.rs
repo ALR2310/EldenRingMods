@@ -20,6 +20,7 @@ use std::sync::OnceLock;
 
 use common::config;
 use common::erui::{self, MenuBuilder, NumberSetting, Setting};
+use common::i18n::Catalog;
 
 static ENABLED: Setting = Setting::flag("Rune.Passive.Enabled");
 static INTERVAL: NumberSetting = NumberSetting::whole("Rune.Passive.Interval", 0.0, 3_600_000.0, None);
@@ -37,34 +38,33 @@ fn log_file_row() -> u8 {
     config::get_bool("LogFile", false) as u8
 }
 
+/// The menu texts, one file per language (`locales/`); English is the fallback.
+static TEXT: Catalog = Catalog::new(&[
+    ("english", include_str!("../locales/en.json")),
+    ("vietnamese", include_str!("../locales/vi.json")),
+]);
+
+/// The text of `key` in the host language.
+fn t(key: &str) -> String {
+    TEXT.tr(key)
+}
+
 fn build(b: &mut MenuBuilder) -> Result<(), String> {
-    let page = b.submenu(b.root(), "Passive Runes", "Settings for the Passive Runes mod.")?;
-    b.toggle(page, "Enabled", "Turns the passive rune rewards on or off.", &ENABLED, enabled_row)?;
-    b.number(
-        page,
-        "Interval (ms)",
-        "How often you get runes, in milliseconds (1000 = 1 second). 0 pauses the interval rewards.",
-        &INTERVAL,
-        || config::get_double("Rune.Passive.Interval", 10000.0),
-    )?;
-    b.number(page, "Amount", "Runes you get each time. Negative takes runes away.", &AMOUNT, || {
+    let page = b.submenu(b.root(), "Passive Runes", &t("mod.help"))?;
+    b.toggle(page, &t("enabled.label"), &t("enabled.help"), &ENABLED, enabled_row)?;
+    b.number(page, &t("interval.label"), &t("interval.help"), &INTERVAL, || {
+        config::get_double("Rune.Passive.Interval", 10000.0)
+    })?;
+    b.number(page, &t("amount.label"), &t("amount.help"), &AMOUNT, || {
         config::get_double("Rune.Passive.Amount", 50.0)
     })?;
-    b.number(
-        page,
-        "Next Level (%)",
-        "Each time, also get this percent of the runes needed for your next level. Negative takes runes away.",
-        &PERCENT,
-        || config::get_double("Rune.Passive.Percent", 0.25),
-    )?;
-    b.number(
-        page,
-        "Interest (%)",
-        "Each time, also get this percent of the runes you hold. Grows fast. Negative takes runes away.",
-        &INTEREST,
-        || config::get_double("Rune.Passive.Interest", 0.0),
-    )?;
-    b.toggle(page, "Log file", "Write a log file next to the DLL, for troubleshooting.", &LOG_FILE, log_file_row)
+    b.number(page, &t("next_level.label"), &t("next_level.help"), &PERCENT, || {
+        config::get_double("Rune.Passive.Percent", 0.25)
+    })?;
+    b.number(page, &t("interest.label"), &t("interest.help"), &INTEREST, || {
+        config::get_double("Rune.Passive.Interest", 0.0)
+    })?;
+    b.toggle(page, &t("log.label"), &t("log.help"), &LOG_FILE, log_file_row)
 }
 
 /// Registers the menu on a worker thread. Must start early: the host closes
@@ -79,5 +79,34 @@ pub fn start(hmodule: u64, ini_path: String) {
 pub fn sync_from_config() {
     if let Some(menu) = MENU.get() {
         menu.sync();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every key the menu passes to the text lookup is in every language file,
+    /// and the files have the same keys (nothing missing, nothing left over).
+    #[test]
+    fn language_files_match_the_menu_keys() {
+        let source = include_str!("menu.rs");
+        let call = "t(\"";
+        let mut used: Vec<String> = Vec::new();
+        for (at, _) in source.match_indices(call) {
+            let prev = source[..at].chars().next_back();
+            if prev.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                continue;
+            }
+            let rest = &source[at + call.len()..];
+            if let Some(end) = rest.find('"') {
+                used.push(rest[..end].to_string());
+            }
+        }
+        used.sort();
+        used.dedup();
+        assert!(used.len() >= 7, "found only {} menu keys", used.len());
+        assert_eq!(used, TEXT.keys("english"), "menu.rs keys and locales/en.json differ");
+        assert_eq!(used, TEXT.keys("vietnamese"), "menu.rs keys and locales/vi.json differ");
     }
 }

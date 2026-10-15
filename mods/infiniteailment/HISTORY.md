@@ -16,3 +16,4 @@ sử git của `README.md`.
 | 2026-10-07 | Đổi thư mục `crates/` thành `mods/`; tách README thành README + HISTORY + docs/ | |
 | 2026-10-13 | Mặc định `ReloadBanner` đổi thành `false`: nhiều mod cùng bật thì mỗi mod hiện một banner vài giây khi bấm reload | |
 | 2026-10-13 | Thêm menu tùy chọn trong game qua ERNativeUI (`common::erui`): 2 nhóm Scarlet Rot/Poison + log, các giá trị số gõ vào ô văn bản; menu ghi ini rồi tăng `RELOAD_GENERATION`. Trình reload nay giữ yêu cầu đến khi vào thế giới (trước đó chỉ cần `SoloParamRepository` có), để menu mở ở màn hình chính không ghi param quá sớm. | [docs](../../docs/ingame_menu.md) |
+| 2026-10-15 | Chữ của menu trong game chuyển sang `common::i18n`: file `locales/en.json` và `vi.json`, menu hiện tiếng Việt khi game chạy tiếng Việt, ngôn ngữ khác lùi về tiếng Anh | [docs](../../shared/docs/i18n.md) |

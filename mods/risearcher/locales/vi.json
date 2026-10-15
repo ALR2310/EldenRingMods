@@ -1,0 +1,89 @@
+{
+  "mod": {
+    "help": "Thiết lập cho mod Rise Archer."
+  },
+  "damage": {
+    "title": "Sát thương",
+    "help": "Cung, nỏ và ballista gây sát thương mạnh đến đâu."
+  },
+  "upkeep": {
+    "title": "Trọng lượng & Giá trị",
+    "help": "Mỗi vũ khí nặng bao nhiêu và bán được bao nhiêu tiền."
+  },
+  "ammo": {
+    "title": "Đạn & Phát bắn",
+    "help": "Bạn mang được bao nhiêu đạn và mũi tên, mũi nỏ bay thế nào."
+  },
+  "bow_damage": {
+    "label": "Sát thương cung",
+    "help": "Hệ số sát thương của cung và greatbow. 1x = nguyên bản."
+  },
+  "crossbow_damage": {
+    "label": "Sát thương nỏ",
+    "help": "Hệ số sát thương của nỏ. 1x = nguyên bản."
+  },
+  "ballista_damage": {
+    "label": "Sát thương ballista",
+    "help": "Hệ số sát thương của ballista. 1x = nguyên bản."
+  },
+  "bow_scaling": {
+    "label": "Scaling của cung",
+    "help": "Hệ số scaling chỉ số của cung và greatbow. 1x = nguyên bản."
+  },
+  "bow_aow": {
+    "label": "Ash of War cho cung",
+    "help": "Cho phép mọi cung gắn Ash of War."
+  },
+  "bow_weight": {
+    "label": "Trọng lượng cung",
+    "help": "Hệ số trọng lượng của cung và greatbow."
+  },
+  "crossbow_weight": {
+    "label": "Trọng lượng nỏ",
+    "help": "Hệ số trọng lượng của nỏ."
+  },
+  "ballista_weight": {
+    "label": "Trọng lượng ballista",
+    "help": "Hệ số trọng lượng của ballista."
+  },
+  "bow_sell": {
+    "label": "Giá bán cung",
+    "help": "Hệ số giá bán của cung và greatbow."
+  },
+  "crossbow_sell": {
+    "label": "Giá bán nỏ",
+    "help": "Hệ số giá bán của nỏ."
+  },
+  "ballista_sell": {
+    "label": "Giá bán ballista",
+    "help": "Hệ số giá bán của ballista."
+  },
+  "arrow_limit": {
+    "label": "Giới hạn mũi tên",
+    "help": "Số mũi tên bạn mang được. Bản gốc thấp hơn."
+  },
+  "bolt_limit": {
+    "label": "Giới hạn mũi nỏ",
+    "help": "Số mũi nỏ bạn mang được. Bản gốc thấp hơn."
+  },
+  "bullet_speed": {
+    "label": "Tốc độ đạn",
+    "help": "Mũi tên và mũi nỏ bay nhanh đến đâu. 1x = nguyên bản."
+  },
+  "rain_range": {
+    "label": "Tầm Rain of Arrows",
+    "help": "Rain of Arrows với xa đến đâu. 1x = nguyên bản."
+  },
+  "rain_spread": {
+    "label": "Độ tản Rain of Arrows",
+    "help": "Rain of Arrows tản rộng đến đâu. 1x = nguyên bản."
+  },
+  "rain_count": {
+    "label": "Số mũi tên Rain",
+    "help": "Số mũi tên Rain of Arrows bắn ra."
+  },
+  "log": {
+    "label": "Tệp log",
+    "help": "Ghi tệp log cạnh DLL để khắc phục sự cố."
+  }
+}

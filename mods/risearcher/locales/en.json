@@ -1,0 +1,89 @@
+{
+  "mod": {
+    "help": "Settings for the Rise Archer mod."
+  },
+  "damage": {
+    "title": "Damage",
+    "help": "How hard bows, crossbows and ballistae hit."
+  },
+  "upkeep": {
+    "title": "Weight & Value",
+    "help": "How heavy each weapon is and what it sells for."
+  },
+  "ammo": {
+    "title": "Ammo & Shots",
+    "help": "How much ammo you carry and how arrows and bolts fly."
+  },
+  "bow_damage": {
+    "label": "Bow Damage",
+    "help": "Damage multiplier for bows and greatbows. 1x = vanilla."
+  },
+  "crossbow_damage": {
+    "label": "Crossbow Damage",
+    "help": "Damage multiplier for crossbows. 1x = vanilla."
+  },
+  "ballista_damage": {
+    "label": "Ballista Damage",
+    "help": "Damage multiplier for ballistae. 1x = vanilla."
+  },
+  "bow_scaling": {
+    "label": "Bow Scaling",
+    "help": "Stat scaling multiplier for bows and greatbows. 1x = vanilla."
+  },
+  "bow_aow": {
+    "label": "Bow Ash of War",
+    "help": "Lets every bow take an Ash of War."
+  },
+  "bow_weight": {
+    "label": "Bow Weight",
+    "help": "Weight multiplier for bows and greatbows."
+  },
+  "crossbow_weight": {
+    "label": "Crossbow Weight",
+    "help": "Weight multiplier for crossbows."
+  },
+  "ballista_weight": {
+    "label": "Ballista Weight",
+    "help": "Weight multiplier for ballistae."
+  },
+  "bow_sell": {
+    "label": "Bow Sell Value",
+    "help": "Sell price multiplier for bows and greatbows."
+  },
+  "crossbow_sell": {
+    "label": "Crossbow Sell Value",
+    "help": "Sell price multiplier for crossbows."
+  },
+  "ballista_sell": {
+    "label": "Ballista Sell Value",
+    "help": "Sell price multiplier for ballistae."
+  },
+  "arrow_limit": {
+    "label": "Arrow Limit",
+    "help": "How many arrows you can carry. Vanilla is lower."
+  },
+  "bolt_limit": {
+    "label": "Bolt Limit",
+    "help": "How many bolts you can carry. Vanilla is lower."
+  },
+  "bullet_speed": {
+    "label": "Projectile Speed",
+    "help": "How fast arrows and bolts fly. 1x = vanilla."
+  },
+  "rain_range": {
+    "label": "Rain Range",
+    "help": "How far Rain of Arrows reaches. 1x = vanilla."
+  },
+  "rain_spread": {
+    "label": "Rain Spread",
+    "help": "How wide Rain of Arrows spreads. 1x = vanilla."
+  },
+  "rain_count": {
+    "label": "Rain Arrows",
+    "help": "How many arrows Rain of Arrows fires."
+  },
+  "log": {
+    "label": "Log file",
+    "help": "Write a log file next to the DLL, for troubleshooting."
+  }
+}
