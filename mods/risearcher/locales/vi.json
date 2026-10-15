@@ -12,7 +12,7 @@
   },
   "ammo": {
     "title": "Đạn & Phát bắn",
-    "help": "Bạn mang được bao nhiêu đạn và mũi tên, mũi nỏ bay thế nào."
+    "help": "Bạn mang được bao nhiêu đạn và mũi tên, bu lông bay thế nào."
   },
   "bow_damage": {
     "label": "Sát thương cung",
@@ -63,12 +63,12 @@
     "help": "Số mũi tên bạn mang được. Bản gốc thấp hơn."
   },
   "bolt_limit": {
-    "label": "Giới hạn mũi nỏ",
-    "help": "Số mũi nỏ bạn mang được. Bản gốc thấp hơn."
+    "label": "Giới hạn bu lông",
+    "help": "Số bu lông bạn mang được. Bản gốc thấp hơn."
   },
   "bullet_speed": {
     "label": "Tốc độ đạn",
-    "help": "Mũi tên và mũi nỏ bay nhanh đến đâu. 1x = nguyên bản."
+    "help": "Mũi tên và bu lông bay nhanh đến đâu. 1x = nguyên bản."
   },
   "rain_range": {
     "label": "Tầm Rain of Arrows",
