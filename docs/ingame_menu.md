@@ -65,7 +65,7 @@ chung + SDK C ABI (`erui.h`). Release 1.0.0 (2026-08-30), 1.1.0 (09-06), 1.1.1
   Key mod đọc bằng `config::get_int` phải dùng `NumberSetting::whole` (làm tròn, vì `1.5` làm `get_int` hỏng và rơi về mặc định); key TOML kiểu float
   dùng `NumberSetting::float` (ghi `2.0`); số hiển thị làm tròn 6 chữ số thập phân (số qua `f32` hiện `1.2`). Đã thử trong game (2026-10-14): gõ được `.`, `,`, `-`.
   `NumberSetting::stepped(bước)` biến hàng thành **Numeric Slider** native (API 1.2, ERNativeUI >= 1.2) khi phạm vi có 2..256 vị trí (bước chạm đúng `max`, tối đa 6 chữ số thập phân);
-  host cũ (API 1.1) hoặc phạm vi không hợp thì vẫn là ô gõ. `connect` xin API 1.2 trước, lùi về 1.1. Giá trị ini nằm ngoài lưới bước chỉ làm tròn khi hiển thị. SpeedMultiplier dùng bước 0.1 cho 0.1..10 (chưa thử trong game).
+  host cũ (API 1.1) hoặc phạm vi không hợp thì vẫn là ô gõ. Chữ menu tiếng Việt: `common::i18n` + `locales/vi.toml` của mod, xem [shared/docs/i18n.md](../shared/docs/i18n.md). `connect` xin API 1.2 trước, lùi về 1.1. Giá trị ini nằm ngoài lưới bước chỉ làm tròn khi hiển thị. SpeedMultiplier dùng bước 0.1 cho 0.1..10 (chưa thử trong game).
 - Mod gate "đã vào thế giới" phải giữ yêu cầu reload đến khi vào thế giới (xem `dropmultiplier/src/drop_rate.rs`).
 - Mẫu: `mods/runemultiplier/src/menu.rs` (áp ngay trong `apply`, file lưu sau), `mods/dropmultiplier/src/menu.rs` (nhóm, hàng chọn, reload).
   Bố cục mọi mod: [ingame_menu_layouts.md](ingame_menu_layouts.md).

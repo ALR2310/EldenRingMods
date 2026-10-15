@@ -160,10 +160,10 @@ mod tests {
         // movss xmm0,[rcx+18h]; ret at the end
         let own = s.len() - 6;
         assert_eq!(&s[own..], &[0xF3, 0x0F, 0x10, 0x41, 0x18, 0xC3]);
-        // both je rel8 land on it
-        for at in [s.iter().position(|&b| b == 0x74).unwrap()] {
-            assert_eq!(at + 2 + s[at + 1] as usize, own);
-        }
+        // both je rel8 land on it (the first one follows `cmp rax, [r10]`; the
+        // embedded OWN_CHRS address can itself contain a 0x74 byte)
+        let first = s.windows(4).position(|w| w == [0x49, 0x3B, 0x02, 0x74]).unwrap() + 3;
+        assert_eq!(first + 2 + s[first + 1] as usize, own);
         let second = s.windows(4).position(|w| w == [0x49, 0x3B, 0x42, 0x08]).unwrap() + 4;
         assert_eq!(s[second], 0x74);
         assert_eq!(second + 2 + s[second + 1] as usize, own);

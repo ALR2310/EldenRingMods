@@ -1,0 +1,58 @@
+# Vietnamese text of the in-game menu (ERNativeUI). Each key is the English text
+# used in src/menu.rs; the value is shown when the host language is
+# "vietnamese" (ERNativeUI.ini: Language = vietnamese). Missing keys show
+# English. A test checks that this file and menu.rs use the same texts.
+
+"Settings for the Speed Multiplier mod." = "Thiết lập cho mod Speed Multiplier."
+
+"All Player Actions" = "Mọi hành động của người chơi"
+"Speed of everything you do. Anything but 1 overrides the individual player speeds." = "Tốc độ của mọi việc bạn làm. Khác 1 thì ghi đè các tốc độ riêng của người chơi."
+
+"Player Movement" = "Di chuyển"
+"How fast you move." = "Tốc độ di chuyển của bạn."
+"Walk" = "Đi bộ"
+"Walking speed." = "Tốc độ đi bộ."
+"Run" = "Chạy"
+"Running speed." = "Tốc độ chạy."
+"Sneak" = "Đi rón rén"
+"Sneaking speed." = "Tốc độ đi rón rén."
+"Jump" = "Nhảy"
+"Jumping and landing speed." = "Tốc độ nhảy và tiếp đất."
+"Roll" = "Lăn"
+"Rolling and backstepping speed." = "Tốc độ lăn và lùi bước."
+"Ladder" = "Thang"
+"Climbing and sliding speed." = "Tốc độ leo và trượt thang."
+
+"Player Actions" = "Hành động"
+"How fast you attack, cast and use items." = "Tốc độ tấn công, niệm phép và dùng vật phẩm."
+"Attack" = "Tấn công"
+"Speed of normal attacks." = "Tốc độ đòn tấn công thường."
+"Critical" = "Đòn chí mạng"
+"Speed of critical hits." = "Tốc độ đòn chí mạng."
+"Skill" = "Kỹ năng"
+"Speed of weapon skills." = "Tốc độ kỹ năng vũ khí."
+"Cast" = "Niệm phép"
+"Speed of casting sorceries and incantations." = "Tốc độ niệm phép thuật và thần chú."
+"Item" = "Vật phẩm"
+"Speed of using items such as flasks." = "Tốc độ dùng vật phẩm như bình thuốc."
+"Other" = "Khác"
+"Speed of any action not listed here." = "Tốc độ của mọi hành động không có trong danh sách."
+
+"Torrent" = "Torrent"
+"How fast Torrent moves." = "Tốc độ của Torrent."
+"All" = "Tất cả"
+"Speed of everything Torrent does. Anything but 1 overrides the rows below." = "Tốc độ của mọi hành động của Torrent. Khác 1 thì ghi đè các hàng bên dưới."
+"Torrent's walking speed." = "Tốc độ đi bộ của Torrent."
+"Torrent's running speed." = "Tốc độ chạy của Torrent."
+"Torrent's jumping and landing speed." = "Tốc độ nhảy và tiếp đất của Torrent."
+"Speed of any other Torrent action." = "Tốc độ của các hành động khác của Torrent."
+
+"Spirit & Enemy" = "Linh hồn & Kẻ địch"
+"How fast summoned spirits and enemies act." = "Tốc độ hành động của linh hồn được triệu hồi và kẻ địch."
+"Spirit" = "Linh hồn"
+"Speed of summoned spirit ashes." = "Tốc độ của tro linh hồn được triệu hồi."
+"Enemy" = "Kẻ địch"
+"Speed of hostile enemies and bosses." = "Tốc độ của kẻ địch và trùm."
+
+"Log file" = "Tệp log"
+"Write a log file next to the DLL, for troubleshooting." = "Ghi tệp log cạnh DLL để khắc phục sự cố."

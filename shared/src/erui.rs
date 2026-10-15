@@ -172,6 +172,15 @@ struct NumericSliderDesc {
     reserved: [u32; 2],
 }
 
+/// `ERUI_GameLanguageInfo`: the host's effective language.
+#[repr(C)]
+struct GameLanguageInfo {
+    size: u32,
+    known_language: u32,
+    identifier: StringView,
+    reserved: [u32; 2],
+}
+
 /// What the host passes to a text-input callback (`ERUI_TextInputChangeContext`).
 #[repr(C)]
 pub struct TextInputChange {
@@ -258,7 +267,7 @@ struct Api {
     set_row_value: Option<unsafe extern "C" fn(ProviderHandle, RowHandle, u8) -> Status>,
     get_row_value: Option<unsafe extern "C" fn(ProviderHandle, RowHandle, *mut u8) -> Status>,
     enqueue_alert: Unused,
-    get_game_language: Unused,
+    get_game_language: Option<unsafe extern "C" fn(*mut GameLanguageInfo) -> Status>,
     add_text_input: Option<
         unsafe extern "C" fn(ProviderHandle, PageHandle, *const TextInputDesc, *mut RowHandle) -> Status,
     >,
@@ -366,6 +375,27 @@ fn version_name(version: u32) -> String {
     format!("{}.{}", version >> 16, version & 0xFFFF)
 }
 
+/// Tells [`crate::i18n`] the host's language (exact identifier, e.g.
+/// `"vietnamese"`), so menu text can be translated. Anything unavailable leaves
+/// the English default.
+fn select_language(api: &Api) {
+    let Some(get_language) = api.get_game_language else { return };
+    let mut info = GameLanguageInfo {
+        size: std::mem::size_of::<GameLanguageInfo>() as u32,
+        known_language: 0,
+        identifier: StringView { data: std::ptr::null(), length: 0, reserved: 0 },
+        reserved: [0; 2],
+    };
+    if unsafe { get_language(&mut info) } != ERUI_OK || info.identifier.data.is_null() {
+        return;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(info.identifier.data, info.identifier.length as usize) };
+    if let Ok(identifier) = std::str::from_utf8(bytes) {
+        crate::i18n::set_language(identifier);
+        logger::log(&format!("In-game menu language: {identifier}."));
+    }
+}
+
 /// Whether the negotiated table can build numeric sliders (API 1.2).
 fn has_numeric_slider(api: &Api) -> bool {
     api.api_version >= API_VERSION_1_2
@@ -413,6 +443,7 @@ pub fn connect(timeout: Duration) -> Result<Connection, String> {
             match status {
                 ERUI_OK => {
                     validate_api(&api, version)?;
+                    select_language(&api);
                     return Ok(Connection { api, numeric_slider: has_numeric_slider(&api) });
                 }
                 ERUI_HOST_FAILED => {

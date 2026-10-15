@@ -10,6 +10,7 @@ pub mod codepatch;
 pub mod config;
 pub mod diag;
 pub mod erui;
+pub mod i18n;
 pub mod input;
 pub mod logger;
 pub mod memscan;
