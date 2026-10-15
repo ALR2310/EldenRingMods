@@ -1,0 +1,41 @@
+{
+  "mod": {
+    "help": "Settings for the Anim Cancel mod."
+  },
+  "guard": {
+    "title": "Guard",
+    "help": "Raising your guard cancels the animations you pick."
+  },
+  "dodge": {
+    "title": "Dodge",
+    "help": "Rolling or backstepping cancels the animations you pick."
+  },
+  "weapon_swap": {
+    "title": "Weapon swap",
+    "help": "Switching weapons cancels the animations you pick."
+  },
+  "enabled": {
+    "label": "Enabled",
+    "help": "Turn this action's cancelling on or off."
+  },
+  "attacks": {
+    "label": "Attacks",
+    "help": "Can cancel normal attacks."
+  },
+  "skills": {
+    "label": "Skills",
+    "help": "Can cancel weapon skills."
+  },
+  "spells": {
+    "label": "Spells",
+    "help": "Can cancel casting sorceries and incantations."
+  },
+  "items": {
+    "label": "Items",
+    "help": "Can cancel using items such as flasks."
+  },
+  "log": {
+    "label": "Log file",
+    "help": "Write a log file next to the DLL, for troubleshooting."
+  }
+}

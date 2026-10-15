@@ -34,3 +34,4 @@ lịch sử git của `README.md`.
 | 2026-10-10 | `ExcludeAow`: thêm nhận diện theo prefix TAE của anim đang chạy (600-999), vì Ash dạng Stance (Unsheathe, Square-Off) vào tư thế bằng `L2` rồi chém bằng `R1`/`R2` nên latch nút bấm bị đánh lừa | [docs](docs/per_hit.md) |
 | 2026-10-13 | Mặc định `ReloadBanner` đổi thành `false`: nhiều mod cùng bật thì mỗi mod hiện một banner vài giây khi bấm reload | |
 | 2026-10-13 | Thêm menu trong game tùy chọn (ERNativeUI, `src/menu.rs`): ô nhập số (`common::erui::NumberSetting`) cho lượng hồi/chu kỳ vì slider không có số lẻ; mod đọc ini mỗi frame nên không cần đường áp lại | [docs](../../docs/ingame_menu.md) |
+| 2026-10-15 | Chữ của menu trong game đi qua `common::i18n` (`locales/en.json`, `vi.json`): hiện tiếng Việt khi game chạy tiếng Việt, ngôn ngữ khác dùng tiếng Anh | [docs](../../shared/docs/i18n.md) |

@@ -1,0 +1,13 @@
+{
+  "mod": {
+    "help": "Settings for the Rune Multiplier mod."
+  },
+  "multiplier": {
+    "label": "Multiplier",
+    "help": "Multiplies rune gains. 1 = vanilla, 2 = double, 0 = none, negative takes runes away."
+  },
+  "log": {
+    "label": "Log file",
+    "help": "Write a log file next to the DLL, for troubleshooting."
+  }
+}

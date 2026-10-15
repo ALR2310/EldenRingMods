@@ -1,0 +1,106 @@
+{
+  "mod": {
+    "help": "Thiết lập cho mod Spirit Multiplier."
+  },
+  "count": {
+    "title": "Số linh hồn",
+    "help": "Số linh hồn mỗi tro linh hồn triệu hồi ra."
+  },
+  "multiplier": {
+    "label": "Hệ số nhân",
+    "help": "Nhân với số linh hồn thường có của tro (cho phép số lẻ, vd. 1.5). Dùng khi Số cố định là 0. 1 = như gốc, 0 = tắt."
+  },
+  "fixed_count": {
+    "label": "Số cố định",
+    "help": "Số linh hồn mỗi tro triệu hồi, bất kể số thường có. 0 = dùng Hệ số nhân."
+  },
+  "max_spirits": {
+    "label": "Tối đa linh hồn",
+    "help": "Số linh hồn nhiều nhất một tro có thể triệu hồi. Trên 60 có thể giảm FPS hoặc gây crash. Có hiệu lực sau khi khởi động lại game."
+  },
+  "summoning": {
+    "title": "Triệu hồi",
+    "help": "Linh hồn được triệu hồi như thế nào và ở đâu."
+  },
+  "multi_spirit": {
+    "label": "Nhiều linh hồn",
+    "help": "Triệu hồi nhiều tro linh hồn khác nhau cùng lúc."
+  },
+  "clone_spirit": {
+    "label": "Nhân bản linh hồn",
+    "help": "Cần bật Nhiều linh hồn. Dùng lại một tro sẽ triệu hồi thêm một bản nữa thay vì thu nó về."
+  },
+  "no_rest": {
+    "label": "Triệu hồi lại không cần nghỉ",
+    "help": "Triệu hồi lại linh hồn mà không cần nghỉ tại Site of Grace."
+  },
+  "anywhere": {
+    "label": "Triệu hồi mọi nơi",
+    "help": "Triệu hồi linh hồn cả ở ngoài các khu vực triệu hồi thông thường."
+  },
+  "health": {
+    "title": "Máu và ngoại hình",
+    "help": "Linh hồn hồi máu và trông như thế nào."
+  },
+  "regen_mode": {
+    "label": "Kiểu hồi máu",
+    "help": "Ý nghĩa của lượng hồi. Cũng hồi máu cho Torrent.",
+    "options": {
+      "flat": "HP cố định",
+      "percent_max": "% HP tối đa",
+      "percent_missing": "% HP đã mất"
+    }
+  },
+  "regen_amount": {
+    "label": "Lượng hồi",
+    "help": "Lượng hồi mỗi giây: HP ở kiểu HP cố định, phần trăm ở các kiểu còn lại (cho phép số lẻ). 0 = không hồi máu."
+  },
+  "ghost": {
+    "label": "Màu ma",
+    "help": "Bật = linh hồn giữ vẻ xanh ma quái. Tắt = trông như nhân vật bình thường."
+  },
+  "behavior": {
+    "title": "Hành vi",
+    "help": "Giúp linh hồn thông minh hơn khi chiến đấu."
+  },
+  "senses": {
+    "label": "Giác quan",
+    "help": "Linh hồn phát hiện kẻ địch từ xa hơn và nhớ họ lâu hơn."
+  },
+  "aggression": {
+    "label": "Hung hăng",
+    "help": "Linh hồn vào trận sớm hơn, tấn công cùng nhau và gọi trợ giúp."
+  },
+  "follow": {
+    "label": "Bám theo",
+    "help": "Linh hồn ở gần bạn hơn và vượt gờ đá, thang, hố để theo kịp."
+  },
+  "teleport": {
+    "title": "Dịch chuyển",
+    "help": "Thử nghiệm: linh hồn dịch chuyển đến bạn sớm hơn. 0 = mặc định của game."
+  },
+  "warp_far": {
+    "label": "Dịch chuyển khi ở xa",
+    "help": "Cũng dịch chuyển linh hồn ở xa dù chúng vẫn nhìn thấy bạn."
+  },
+  "warp_distance": {
+    "label": "Khoảng cách (m)",
+    "help": "Dịch chuyển khi linh hồn ở xa hơn số mét này. 0 = mặc định của game."
+  },
+  "warp_blocked": {
+    "label": "Thời gian bị chặn (s)",
+    "help": "Dịch chuyển sau chừng này giây không nhìn thấy bạn. 0 = mặc định của game."
+  },
+  "warp_stuck_time": {
+    "label": "Thời gian kẹt (s)",
+    "help": "Dịch chuyển sau khi bị kẹt chừng này giây. 0 = mặc định của game."
+  },
+  "warp_stuck_range": {
+    "label": "Phạm vi kẹt (m)",
+    "help": "Di chuyển ít hơn số mét này thì tính là bị kẹt. 0 = mặc định của game."
+  },
+  "log": {
+    "label": "Tệp log",
+    "help": "Ghi tệp log cạnh DLL để khắc phục sự cố."
+  }
+}

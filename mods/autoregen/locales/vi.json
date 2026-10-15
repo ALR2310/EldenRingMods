@@ -1,0 +1,99 @@
+{
+  "mod": {
+    "help": "Thiết lập cho mod Auto Regen."
+  },
+  "tick": {
+    "title": "Theo chu kỳ",
+    "help": "Hồi HP, FP và SP theo thời gian."
+  },
+  "hit": {
+    "title": "Mỗi đòn đánh",
+    "help": "Hồi HP, FP và SP khi bạn trúng đòn."
+  },
+  "tick_enabled": {
+    "label": "Bật",
+    "help": "Bật hoặc tắt việc hồi theo thời gian."
+  },
+  "when": {
+    "label": "Khi nào",
+    "help": "Khi nào áp dụng. Khi làm cử chỉ dùng danh sách cử chỉ trong tệp cấu hình.",
+    "options": {
+      "always": "Luôn luôn",
+      "out_of_combat": "Ngoài giao tranh",
+      "in_combat": "Trong giao tranh",
+      "idle": "Đứng yên",
+      "during_gesture": "Khi làm cử chỉ"
+    }
+  },
+  "interval": {
+    "label": "Chu kỳ (ms)",
+    "help": "Bao lâu hồi một lần, tính bằng mili giây (1000 = 1 giây). 0 là tắt. Ngắn hơn thì mượt hơn nhưng tốn thêm một chút."
+  },
+  "value_type": {
+    "label": "Loại giá trị",
+    "help": "Ý nghĩa của các số bên dưới: điểm, phần trăm tối đa, hoặc phần trăm lượng còn thiếu.",
+    "options": {
+      "points": "Điểm",
+      "percent_of_max": "% của tối đa",
+      "percent_of_missing": "% của lượng thiếu"
+    }
+  },
+  "tick_hp": {
+    "label": "HP",
+    "help": "HP hồi mỗi chu kỳ, theo đơn vị đã chọn ở trên."
+  },
+  "tick_fp": {
+    "label": "FP",
+    "help": "FP hồi mỗi chu kỳ, theo đơn vị đã chọn ở trên."
+  },
+  "tick_sp": {
+    "label": "SP",
+    "help": "SP hồi mỗi chu kỳ, theo đơn vị đã chọn ở trên."
+  },
+  "max_fill": {
+    "label": "Mức đầy tối đa",
+    "help": "Việc hồi dừng ở phần trăm này của mức tối đa. 100 nghĩa là không giới hạn."
+  },
+  "hit_enabled": {
+    "label": "Bật",
+    "help": "Bật hoặc tắt việc hồi khi trúng đòn."
+  },
+  "mode": {
+    "label": "Chế độ",
+    "help": "Ý nghĩa của các số bên dưới: điểm, phần trăm tối đa, hoặc phần trăm sát thương bạn gây ra.",
+    "options": {
+      "points": "Điểm",
+      "percent_of_max": "% của tối đa",
+      "percent_of_damage": "% của sát thương"
+    }
+  },
+  "hit_type": {
+    "label": "Loại đòn",
+    "help": "Những đòn nào được tính.",
+    "options": {
+      "melee": "Cận chiến",
+      "ranged": "Tầm xa và phép",
+      "both": "Cả hai"
+    }
+  },
+  "skip_aow": {
+    "label": "Bỏ qua Ash of War",
+    "help": "Đòn từ Ash of War không hồi gì."
+  },
+  "hit_hp": {
+    "label": "HP",
+    "help": "HP hồi mỗi đòn, theo đơn vị đã chọn ở trên."
+  },
+  "hit_fp": {
+    "label": "FP",
+    "help": "FP hồi mỗi đòn, theo đơn vị đã chọn ở trên."
+  },
+  "hit_sp": {
+    "label": "SP",
+    "help": "SP hồi mỗi đòn, theo đơn vị đã chọn ở trên."
+  },
+  "log": {
+    "label": "Tệp log",
+    "help": "Ghi tệp log cạnh DLL để khắc phục sự cố."
+  }
+}

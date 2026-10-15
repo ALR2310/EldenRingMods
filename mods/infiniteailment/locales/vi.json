@@ -1,0 +1,29 @@
+{
+  "mod": {
+    "help": "Thiết lập cho mod Infinite Ailment."
+  },
+  "scarlet_rot": {
+    "title": "Scarlet Rot",
+    "help": "Sát thương theo thời gian của Scarlet Rot."
+  },
+  "poison": {
+    "title": "Độc",
+    "help": "Sát thương theo thời gian của độc."
+  },
+  "duration": {
+    "label": "Thời gian (giây)",
+    "help": "Sát thương kéo dài bao lâu, tính bằng giây. -1 = vô hạn. Gốc: {vanilla}."
+  },
+  "percent": {
+    "label": "Sát thương (%)",
+    "help": "Phần trăm HP tối đa mất mỗi nhịp; số âm là hồi máu. Gốc: {vanilla}."
+  },
+  "fixed": {
+    "label": "Sát thương",
+    "help": "Sát thương cố định mỗi nhịp, cộng thêm; số âm là hồi máu. Gốc: {vanilla}."
+  },
+  "log": {
+    "label": "Tệp log",
+    "help": "Ghi tệp log cạnh DLL để khắc phục sự cố."
+  }
+}

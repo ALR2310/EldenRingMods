@@ -10,7 +10,7 @@
 //!   Summoning                 -> Multi Spirit, Clone Spirit, Resummon Without Rest,
 //!                                Summon Anywhere (toggles)
 //!   Health and Look           -> Regen Mode (choice), Regen Amount (number 0..1000,
-//!                                0 = no healing), Ghostly Tint (toggle)
+//!                                0 = no healing), Ghost Color (toggle)
 //!   Behavior                  -> Senses, Aggression, Follow (toggles)
 //!   Teleport                  -> Warp When Far (toggle), Distance, Blocked Time,
 //!                                Stuck Time, Stuck Range (numbers, 0 = game default)
@@ -33,16 +33,17 @@ use std::time::Duration;
 
 use common::erui::{self, MenuBuilder, NumberSetting, Setting};
 use common::config;
+use common::i18n::Catalog;
 
-/// `(label, ini text)` of one choice; the ini text is also what `nearest` compares.
-type Table = [(&'static str, &'static str)];
+/// The ini text of each choice, in row order (the labels come from the language files).
+type Table = [&'static str];
 
-const REGEN_MODE_CHOICES: &Table = &[("Flat HP", "1"), ("% of max HP", "2"), ("% of missing HP", "3")];
+const REGEN_MODE_CHOICES: &Table = &["1", "2", "3"];
 
 /// Index of the table entry closest to `value`.
 fn nearest(table: &Table, value: f64) -> u8 {
     let mut best = (0usize, f64::MAX);
-    for (i, (_, text)) in table.iter().enumerate() {
+    for (i, text) in table.iter().enumerate() {
         let distance = (text.parse::<f64>().unwrap_or(0.0) - value).abs();
         if distance < best.1 {
             best = (i, distance);
@@ -57,7 +58,18 @@ fn regen_mode_row() -> u8 {
 
 static MENU: OnceLock<erui::Menu> = OnceLock::new();
 
-static MULTIPLIER: NumberSetting = NumberSetting::new("Multiplier", 0.0, 1000.0, None);
+/// The menu texts, one file per language (`locales/`); English is the fallback.
+static TEXT: Catalog = Catalog::new(&[
+    ("english", include_str!("../locales/en.json")),
+    ("vietnamese", include_str!("../locales/vi.json")),
+]);
+
+/// The text of `key` in the host language.
+fn t(key: &str) -> String {
+    TEXT.tr(key)
+}
+
+static MULTIPLIER: NumberSetting = NumberSetting::new("Multiplier", 0.0, 1000.0, None).slider(0.0, 10.0, 0.25);
 static AMOUNT: NumberSetting = NumberSetting::whole("Amount", 0.0, 1000.0, None);
 static MAX_SPIRITS: NumberSetting = NumberSetting::whole("MaxSpirits", 60.0, 1000.0, None);
 static MULTI_SPIRIT: Setting = Setting::flag("MultiSpirit");
@@ -66,7 +78,7 @@ static NO_REST: Setting = Setting::flag("NoRestResummon");
 static ANYWHERE: Setting = Setting::flag("SummonAnywhere");
 static REGEN_MODE: Setting = Setting {
     key: "RegenMode",
-    format: |index| REGEN_MODE_CHOICES[(index as usize).min(REGEN_MODE_CHOICES.len() - 1)].1.to_string(),
+    format: |index| REGEN_MODE_CHOICES[(index as usize).min(REGEN_MODE_CHOICES.len() - 1)].to_string(),
     apply: None,
 };
 static REGEN_VALUE: NumberSetting = NumberSetting::new("RegenValue", 0.0, 1000.0, None);
@@ -78,147 +90,148 @@ static WARP_WHEN_FAR: Setting = Setting::flag("WarpWhenFar");
 static WARP_DISTANCE: NumberSetting = NumberSetting::new("WarpDistance", 0.0, 1000.0, None);
 static WARP_BLOCKED: NumberSetting = NumberSetting::new("WarpBlockedTime", 0.0, 600.0, None);
 static WARP_STUCK_TIME: NumberSetting = NumberSetting::new("WarpStuckTime", 0.0, 600.0, None);
-static WARP_STUCK_RANGE: NumberSetting = NumberSetting::new("WarpStuckRange", 0.0, 100.0, None);
+static WARP_STUCK_RANGE: NumberSetting = NumberSetting::new("WarpStuckRange", 0.0, 100.0, None).slider(0.0, 100.0, 1.0);
 static LOG_FILE: Setting = Setting::flag("LogFile");
 
 fn build(b: &mut MenuBuilder) -> Result<(), String> {
-    let page = b.submenu(b.root(), "Spirit Multiplier", "Settings for the Spirit Multiplier mod.")?;
+    let page = b.submenu(b.root(), "Spirit Multiplier", &t("mod.help"))?;
 
-    let count = b.submenu(page, "Spirit Count", "How many spirits each Spirit Ash summons.")?;
+    let count = b.submenu(page, &t("count.title"), &t("count.help"))?;
     b.number(
         count,
-        "Multiplier",
-        "Times an Ash's usual spirit count (decimals allowed, e.g. 1.5). Used when Fixed Count is 0. 1 = vanilla, 0 = off.",
+        &t("multiplier.label"),
+        &t("multiplier.help"),
         &MULTIPLIER,
         || config::get_double("Multiplier", 2.0),
     )?;
     b.number(
         count,
-        "Fixed Count",
-        "Spirits every Ash summons, whatever its usual count. 0 = use the Multiplier instead.",
+        &t("fixed_count.label"),
+        &t("fixed_count.help"),
         &AMOUNT,
         || config::get_double("Amount", 0.0),
     )?;
     b.number(
         count,
-        "Max Spirits",
-        "Most spirits one Ash can summon. Above 60 may lower FPS or crash. Applies after restarting the game.",
+        &t("max_spirits.label"),
+        &t("max_spirits.help"),
         &MAX_SPIRITS,
         || config::get_double("MaxSpirits", 60.0),
     )?;
 
-    let summoning = b.submenu(page, "Summoning", "How and where spirits can be summoned.")?;
+    let summoning = b.submenu(page, &t("summoning.title"), &t("summoning.help"))?;
     b.toggle(
         summoning,
-        "Multi Spirit",
-        "Summon several different Spirit Ashes at the same time.",
+        &t("multi_spirit.label"),
+        &t("multi_spirit.help"),
         &MULTI_SPIRIT,
         || config::get_bool("MultiSpirit", true) as u8,
     )?;
     b.toggle(
         summoning,
-        "Clone Spirit",
-        "Needs Multi Spirit. Using an Ash again summons another copy instead of sending it back.",
+        &t("clone_spirit.label"),
+        &t("clone_spirit.help"),
         &CLONE_SPIRIT,
         || config::get_bool("CloneSpirit", false) as u8,
     )?;
     b.toggle(
         summoning,
-        "Resummon Without Rest",
-        "Summon your spirits again without resting at a Site of Grace.",
+        &t("no_rest.label"),
+        &t("no_rest.help"),
         &NO_REST,
         || config::get_bool("NoRestResummon", true) as u8,
     )?;
     b.toggle(
         summoning,
-        "Summon Anywhere",
-        "Summon spirits outside the usual summoning pool areas.",
+        &t("anywhere.label"),
+        &t("anywhere.help"),
         &ANYWHERE,
         || config::get_bool("SummonAnywhere", true) as u8,
     )?;
 
-    let health = b.submenu(page, "Health and Look", "How spirits heal and how they look.")?;
-    let labels: Vec<&str> = REGEN_MODE_CHOICES.iter().map(|(label, _)| *label).collect();
-    b.choice(health, "Regen Mode", "What the healing amount means. Also heals Torrent.", &labels, &REGEN_MODE, regen_mode_row)?;
+    let health = b.submenu(page, &t("health.title"), &t("health.help"))?;
+    let options = [t("regen_mode.options.flat"), t("regen_mode.options.percent_max"), t("regen_mode.options.percent_missing")];
+    let labels: Vec<&str> = options.iter().map(String::as_str).collect();
+    b.choice(health, &t("regen_mode.label"), &t("regen_mode.help"), &labels, &REGEN_MODE, regen_mode_row)?;
     b.number(
         health,
-        "Regen Amount",
-        "Healing per second: HP in Flat HP mode, a percent in the other modes (decimals allowed). 0 = no healing.",
+        &t("regen_amount.label"),
+        &t("regen_amount.help"),
         &REGEN_VALUE,
         || config::get_double("RegenValue", 0.5),
     )?;
     b.toggle(
         health,
-        "Ghostly Tint",
-        "On = spirits keep their ghostly blue look. Off = they look like normal characters.",
+        &t("ghost.label"),
+        &t("ghost.help"),
         &GHOST_COLOR,
         || config::get_bool("GhostColor", true) as u8,
     )?;
 
-    let behavior = b.submenu(page, "Behavior", "Make spirits smarter in a fight.")?;
+    let behavior = b.submenu(page, &t("behavior.title"), &t("behavior.help"))?;
     b.toggle(
         behavior,
-        "Senses",
-        "Spirits notice enemies from farther away and remember them longer.",
+        &t("senses.label"),
+        &t("senses.help"),
         &SENSES,
         || config::get_bool("ImproveSenses", true) as u8,
     )?;
     b.toggle(
         behavior,
-        "Aggression",
-        "Spirits start fighting sooner, attack together and call for help.",
+        &t("aggression.label"),
+        &t("aggression.help"),
         &AGGRESSION,
         || config::get_bool("ImproveAggression", true) as u8,
     )?;
     b.toggle(
         behavior,
-        "Follow",
-        "Spirits stay closer to you and cross ledges, ladders and holes to keep up.",
+        &t("follow.label"),
+        &t("follow.help"),
         &FOLLOW,
         || config::get_bool("ImproveFollow", true) as u8,
     )?;
 
-    let teleport = b.submenu(page, "Teleport", "Experimental: spirits teleport to you sooner. 0 = game default.")?;
+    let teleport = b.submenu(page, &t("teleport.title"), &t("teleport.help"))?;
     b.toggle(
         teleport,
-        "Warp When Far",
-        "Also teleport spirits that are far away even if they can see you.",
+        &t("warp_far.label"),
+        &t("warp_far.help"),
         &WARP_WHEN_FAR,
         || config::get_bool("WarpWhenFar", false) as u8,
     )?;
     b.number(
         teleport,
-        "Distance (m)",
-        "Teleport when a spirit is farther than this many metres. 0 = game default.",
+        &t("warp_distance.label"),
+        &t("warp_distance.help"),
         &WARP_DISTANCE,
         || config::get_double("WarpDistance", 0.0),
     )?;
     b.number(
         teleport,
-        "Blocked Time (s)",
-        "Teleport after this many seconds without line of sight. 0 = game default.",
+        &t("warp_blocked.label"),
+        &t("warp_blocked.help"),
         &WARP_BLOCKED,
         || config::get_double("WarpBlockedTime", 0.0),
     )?;
     b.number(
         teleport,
-        "Stuck Time (s)",
-        "Teleport after being stuck this many seconds. 0 = game default.",
+        &t("warp_stuck_time.label"),
+        &t("warp_stuck_time.help"),
         &WARP_STUCK_TIME,
         || config::get_double("WarpStuckTime", 0.0),
     )?;
     b.number(
         teleport,
-        "Stuck Range (m)",
-        "Moving less than this many metres counts as stuck. 0 = game default.",
+        &t("warp_stuck_range.label"),
+        &t("warp_stuck_range.help"),
         &WARP_STUCK_RANGE,
         || config::get_double("WarpStuckRange", 0.0),
     )?;
 
     b.toggle(
         page,
-        "Log file",
-        "Write a log file next to the DLL, for troubleshooting.",
+        &t("log.label"),
+        &t("log.help"),
         &LOG_FILE,
         || config::get_bool("LogFile", false) as u8,
     )?;
@@ -249,5 +262,42 @@ pub fn start(hmodule: u64, ini_path: String) {
 pub fn sync_from_config() {
     if let Some(menu) = MENU.get() {
         menu.sync();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every key the menu passes to the text lookup is in every language file,
+    /// and the files have the same keys (nothing missing, nothing left over).
+    #[test]
+    fn language_files_match_the_menu_keys() {
+        let source = include_str!("menu.rs");
+        let mut used: Vec<String> = Vec::new();
+        for (at, _) in source.match_indices("t(\"") {
+            let before = source[..at].chars().next_back();
+            if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                continue;
+            }
+            let rest = &source[at + 3..];
+            if let Some(end) = rest.find('"') {
+                used.push(rest[..end].to_string());
+            }
+        }
+        used.sort();
+        used.dedup();
+        assert!(used.len() > 30, "found only {} menu keys", used.len());
+        assert_eq!(used, TEXT.keys("english"), "menu.rs keys and locales/en.json differ");
+        assert_eq!(used, TEXT.keys("vietnamese"), "menu.rs keys and locales/vi.json differ");
+    }
+
+    /// Every row meant to be a native slider has a valid range and step (else
+    /// it silently stays a typed row).
+    #[test]
+    fn slider_rows_have_a_valid_range() {
+        for setting in [&MULTIPLIER, &WARP_STUCK_RANGE] {
+            assert!(setting.has_slider(), "{} would not be a slider", setting.key);
+        }
     }
 }
