@@ -1,5 +1,5 @@
-//! Text of the in-game menu in more than one language. A mod keeps one TOML
-//! file per language (`locales/en.toml`, `locales/vi.toml`), each with the same
+//! Text of the in-game menu in more than one language. A mod keeps one JSON
+//! file per language (`locales/en.json`, `locales/vi.json`), each with the same
 //! keys; the menu code only names a key, e.g. `t("walk.label")`. A key missing
 //! in the selected language falls back to English, then to the key itself.
 //! Layout and conventions: `shared/docs/i18n.md`.
@@ -26,24 +26,28 @@ pub fn language() -> String {
     LANGUAGE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
 }
 
-/// Flattens a TOML file into `dotted.key -> text`: `[walk]` with `label = "x"`
+/// Flattens a JSON file into `dotted.key -> text`: `{"walk": {"label": "x"}}`
 /// becomes `walk.label = "x"`. Only strings are texts.
 pub fn parse_texts(text: &str) -> Result<HashMap<String, String>, String> {
-    fn collect(prefix: &str, table: &toml::Table, out: &mut HashMap<String, String>) {
-        for (key, value) in table {
+    use serde_json::Value;
+
+    fn collect(prefix: &str, object: &serde_json::Map<String, Value>, out: &mut HashMap<String, String>) {
+        for (key, value) in object {
             let name = if prefix.is_empty() { key.clone() } else { format!("{prefix}.{key}") };
             match value {
-                toml::Value::String(text) => {
+                Value::String(text) => {
                     out.insert(name, text.clone());
                 }
-                toml::Value::Table(inner) => collect(&name, inner, out),
+                Value::Object(inner) => collect(&name, inner, out),
                 _ => {}
             }
         }
     }
-    let table: toml::Table = text.parse().map_err(|e: toml::de::Error| e.to_string())?;
+    let Value::Object(root) = serde_json::from_str(text).map_err(|e| e.to_string())? else {
+        return Err("the file must hold one JSON object".to_string());
+    };
     let mut texts = HashMap::new();
-    collect("", &table, &mut texts);
+    collect("", &root, &mut texts);
     Ok(texts)
 }
 
@@ -51,8 +55,8 @@ pub fn parse_texts(text: &str) -> Result<HashMap<String, String>, String> {
 ///
 /// ```ignore
 /// static TEXT: Catalog = Catalog::new(&[
-///     ("english", include_str!("../locales/en.toml")),
-///     ("vietnamese", include_str!("../locales/vi.toml")),
+///     ("english", include_str!("../locales/en.json")),
+///     ("vietnamese", include_str!("../locales/vi.json")),
 /// ]);
 /// ```
 pub struct Catalog {
@@ -61,7 +65,7 @@ pub struct Catalog {
 }
 
 impl Catalog {
-    /// `files`: `(host language identifier, TOML text)`, English included.
+    /// `files`: `(host language identifier, JSON text)`, English included.
     pub const fn new(files: &'static [(&'static str, &'static str)]) -> Self {
         Catalog { files, parsed: OnceLock::new() }
     }
@@ -105,8 +109,8 @@ mod tests {
     use super::*;
 
     static CATALOG: Catalog = Catalog::new(&[
-        ("english", "[log]\nlabel = \"Log file\"\nhelp = \"Write a log.\"\n[only_en]\nlabel = \"English only\"\n"),
-        ("vietnamese", "[log]\nlabel = \"Tệp log\"\nhelp = \"Ghi tệp log.\"\n"),
+        ("english", r#"{"log": {"label": "Log file", "help": "Write a log."}, "only_en": {"label": "English only"}}"#),
+        ("vietnamese", r#"{"log": {"label": "Tệp log", "help": "Ghi tệp log."}}"#),
     ]);
 
     // One test: the language is process-wide state.
@@ -130,12 +134,13 @@ mod tests {
 
     #[test]
     fn tables_are_flattened_and_a_broken_file_is_an_error() {
-        let texts = parse_texts("top = \"a\"\n[x]\ny = \"b\"\n[x.z]\nw = \"c\"\nnumber = 3\n").unwrap();
+        let texts = parse_texts(r#"{"top": "a", "x": {"y": "b", "z": {"w": "c"}}, "number": 3}"#).unwrap();
         assert_eq!(texts.len(), 3);
         assert_eq!(texts["top"], "a");
         assert_eq!(texts["x.y"], "b");
         assert_eq!(texts["x.z.w"], "c");
-        assert!(parse_texts("not toml =").is_err());
-        assert!(Catalog::new(&[("english", "bad =")]).keys("english").is_empty());
+        assert!(parse_texts("not json").is_err());
+        assert!(parse_texts("[1, 2]").is_err());
+        assert!(Catalog::new(&[("english", "{bad")]).keys("english").is_empty());
     }
 }
