@@ -19,3 +19,5 @@ sử git của `README.md`.
 | 2026-10-07 | Đổi thư mục `crates/` thành `mods/`; tách README thành README + HISTORY + docs/ | |
 | 2026-10-13 | Mặc định `ReloadBanner` đổi thành `false`: nhiều mod cùng bật thì mỗi mod hiện một banner vài giây khi bấm reload | |
 | 2026-10-13 | Thêm menu trong game tùy chọn (ERNativeUI, `src/menu.rs`): hàng nhập số (gõ số lẻ) cho các hệ số, slider cho giới hạn đạn và số mũi tên Rain; đổi trong menu đi qua `RELOAD_GENERATION` nên vẫn tính lại từ baseline, không cộng dồn | [docs](../../docs/ingame_menu.md) |
+| 2026-10-15 | Chữ của menu trong game chuyển sang `common::i18n` (`locales/en.json`, `vi.json`); host để tiếng Việt thì menu hiện tiếng Việt, ngôn ngữ khác lùi về tiếng Anh | [docs](../../shared/docs/i18n.md) |
+| 2026-10-15 | Menu trong game: các hàng Damage, Scaling, Weight, Sell Value, Projectile Speed, Rain Range/Spread (0..10 hoặc 0..5) thành slider native khi host có API 1.2 (ERNativeUI >= 1.2), phạm vi slider hẹp hơn phạm vi mod chấp nhận (ô gõ và tệp cấu hình vẫn nhận số lớn); chưa thử trong game | [docs](../../docs/ingame_menu.md) |

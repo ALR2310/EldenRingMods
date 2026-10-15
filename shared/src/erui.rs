@@ -1,21 +1,22 @@
 //! Client for ERNativeUI (https://github.com/Flammrock/ERNativeUI, MIT), the
 //! shared native in-game settings menu host. Mirrors the part of its C ABI
-//! (`erui.h`, API 1.1) that mods here need. The host is an optional
+//! (`erui.h`, API 1.1, plus the API 1.2 numeric slider) that mods here need. The host is an optional
 //! dependency: [`connect`] fails cleanly when it is not loaded and the mod
 //! keeps working from its config file.
 //!
 //! Host rules that shape this module (registration window, byte-only values,
 //! callback threads, supported game versions): `docs/ingame_menu.md`. In
 //! short: register early from a worker thread, keep callbacks short, never
-//! panic across the ABI, and type decimals or negatives into a text row
-//! ([`NumberSetting`]).
+//! panic across the ABI. A number row ([`NumberSetting`]) is a native slider
+//! when the setting has a step and the host has API 1.2, else a text row where
+//! the number is typed (decimals and negatives work in both).
 //!
 //! A mod normally needs only [`spawn_menu`] + [`MenuBuilder`], with
 //! [`Setting`] / [`NumberSetting`] rows and [`start_saver`] to persist them.
 
 use std::ffi::c_void;
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
@@ -26,10 +27,13 @@ type Status = u32;
 const ERUI_OK: u32 = 0;
 const ERUI_HOST_NOT_READY: u32 = 2;
 const ERUI_HOST_FAILED: u32 = 3;
+const ERUI_UNSUPPORTED_VERSION: u32 = 4;
 
 const API_VERSION_1_1: u32 = (1 << 16) | 1;
+const API_VERSION_1_2: u32 = (1 << 16) | 2;
 const CAP_TOGGLE: u64 = 1 << 0;
 const CAP_SLIDER: u64 = 1 << 1;
+const CAP_NUMERIC_SLIDER: u64 = 1 << 16;
 
 pub type RowHandle = u64;
 type ProviderHandle = u64;
@@ -124,6 +128,59 @@ struct ChoiceDesc {
     reserved8: [u8; 3],
 }
 
+/// `ERUI_DecimalValue`: `scaled_value / 10^decimal_places`.
+#[repr(C)]
+struct DecimalValue {
+    scaled_value: i64,
+    decimal_places: u32,
+    reserved: u32,
+}
+
+/// What the host passes to a numeric-slider callback
+/// (`ERUI_NumericSliderChangeContext`).
+#[repr(C)]
+pub struct NumericSliderChange {
+    size: u32,
+    flags: u32,
+    provider: u64,
+    row: u64,
+    value: DecimalValue,
+    index: u32,
+    value_count: u32,
+    reserved: [u32; 2],
+}
+
+/// Called when the player moves a numeric slider (host worker thread).
+pub type NumericChangedCallback = unsafe extern "C" fn(user_data: *mut c_void, change: *const NumericSliderChange);
+
+#[repr(C)]
+struct NumericSliderDesc {
+    size: u32,
+    flags: u32,
+    label: Utf16View,
+    help: Utf16View,
+    changed_callback: Option<NumericChangedCallback>,
+    user_data: *mut c_void,
+    minimum_scaled_value: i64,
+    maximum_scaled_value: i64,
+    step_scaled_value: i64,
+    initial_scaled_value: i64,
+    decimal_places: u32,
+    enabled: u32,
+    prefix: Utf16View,
+    suffix: Utf16View,
+    reserved: [u32; 2],
+}
+
+/// `ERUI_GameLanguageInfo`: the host's effective language.
+#[repr(C)]
+struct GameLanguageInfo {
+    size: u32,
+    known_language: u32,
+    identifier: StringView,
+    reserved: [u32; 2],
+}
+
 /// What the host passes to a text-input callback (`ERUI_TextInputChangeContext`).
 #[repr(C)]
 pub struct TextInputChange {
@@ -133,6 +190,13 @@ pub struct TextInputChange {
     row: u64,
     value: Utf16View,
     reserved: [u32; 2],
+}
+
+impl NumericSliderChange {
+    /// The slider's new value.
+    fn value(&self) -> f64 {
+        self.value.scaled_value as f64 / 10f64.powi(self.value.decimal_places as i32)
+    }
 }
 
 impl TextInputChange {
@@ -164,9 +228,10 @@ struct TextInputDesc {
 
 type Unused = Option<unsafe extern "C" fn()>;
 
-/// `ERUI_Api` (API 1.1). Field order is the ABI; entries this module does not
+/// `ERUI_Api` (API 1.2). Field order is the ABI; entries this module does not
 /// call are kept as opaque [`Unused`] pointers so the table has the exact size
-/// the host expects (`ERUI_API_V1_1_SIZE`).
+/// the host expects (`ERUI_API_V1_2_SIZE`; an API 1.1 host only fills the first
+/// `ERUI_API_V1_1_SIZE` bytes).
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct Api {
@@ -202,7 +267,7 @@ struct Api {
     set_row_value: Option<unsafe extern "C" fn(ProviderHandle, RowHandle, u8) -> Status>,
     get_row_value: Option<unsafe extern "C" fn(ProviderHandle, RowHandle, *mut u8) -> Status>,
     enqueue_alert: Unused,
-    get_game_language: Unused,
+    get_game_language: Option<unsafe extern "C" fn(*mut GameLanguageInfo) -> Status>,
     add_text_input: Option<
         unsafe extern "C" fn(ProviderHandle, PageHandle, *const TextInputDesc, *mut RowHandle) -> Status,
     >,
@@ -229,10 +294,20 @@ struct Api {
     storage_set_action_inputs: Unused,
     storage_apply_assignment_changes: Unused,
     storage_get_info: Unused,
+    add_numeric_slider: Option<
+        unsafe extern "C" fn(ProviderHandle, PageHandle, *const NumericSliderDesc, *mut RowHandle) -> Status,
+    >,
+    set_numeric_slider_value: Option<unsafe extern "C" fn(ProviderHandle, RowHandle, *const DecimalValue) -> Status>,
+    get_numeric_slider_value: Unused,
+    add_custom_slider: Unused,
+    set_custom_slider_index: Unused,
+    get_custom_slider_index: Unused,
 }
 
-// ERUI_API_V1_1_SIZE: 16-byte header + 38 function pointers.
-const _: () = assert!(std::mem::size_of::<Api>() == 16 + 38 * 8);
+// ERUI_API_V1_1_SIZE: 16-byte header + 38 function pointers; API 1.2 adds 6.
+const API_V1_1_SIZE: u32 = 16 + 38 * 8;
+const API_V1_2_SIZE: u32 = 16 + 44 * 8;
+const _: () = assert!(std::mem::size_of::<Api>() == API_V1_2_SIZE as usize);
 
 type GetApiFn = unsafe extern "C" fn(u32, *mut Api) -> Status;
 
@@ -268,13 +343,15 @@ fn check(status: Status, what: &str) -> Result<(), String> {
 
 /// The checks the host's docs ask a strict-C client to make on the table it
 /// returned: exact version and size, the capability bits, and every function
-/// pointer this module calls (they are `unwrap`ped later).
-fn validate_api(api: &Api) -> Result<(), String> {
-    if api.api_version != API_VERSION_1_1
-        || api.size != std::mem::size_of::<Api>() as u32
+/// pointer this module calls (they are `unwrap`ped later). `version` is the one
+/// requested.
+fn validate_api(api: &Api, version: u32) -> Result<(), String> {
+    let size = if version == API_VERSION_1_2 { API_V1_2_SIZE } else { API_V1_1_SIZE };
+    if api.api_version != version
+        || api.size != size
         || api.capabilities & (CAP_TOGGLE | CAP_SLIDER) != (CAP_TOGGLE | CAP_SLIDER)
     {
-        return Err("ERNativeUI returned an incompatible API 1.1 table".into());
+        return Err(format!("ERNativeUI returned an incompatible API {} table", version_name(version)));
     }
     let complete = api.register_provider.is_some()
         && api.add_slider.is_some()
@@ -287,16 +364,55 @@ fn validate_api(api: &Api) -> Result<(), String> {
         && api.abort_provider.is_some()
         && api.set_row_value.is_some()
         && api.get_row_value.is_some();
-    if complete { Ok(()) } else { Err("ERNativeUI returned an incomplete API 1.1 table".into()) }
+    if complete {
+        Ok(())
+    } else {
+        Err(format!("ERNativeUI returned an incomplete API {} table", version_name(version)))
+    }
+}
+
+fn version_name(version: u32) -> String {
+    format!("{}.{}", version >> 16, version & 0xFFFF)
+}
+
+/// Tells [`crate::i18n`] the host's language (exact identifier, e.g.
+/// `"vietnamese"`), so menu text can be translated. Anything unavailable leaves
+/// the English default.
+fn select_language(api: &Api) {
+    let Some(get_language) = api.get_game_language else { return };
+    let mut info = GameLanguageInfo {
+        size: std::mem::size_of::<GameLanguageInfo>() as u32,
+        known_language: 0,
+        identifier: StringView { data: std::ptr::null(), length: 0, reserved: 0 },
+        reserved: [0; 2],
+    };
+    if unsafe { get_language(&mut info) } != ERUI_OK || info.identifier.data.is_null() {
+        return;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(info.identifier.data, info.identifier.length as usize) };
+    if let Ok(identifier) = std::str::from_utf8(bytes) {
+        crate::i18n::set_language(identifier);
+        logger::log(&format!("In-game menu language: {identifier}."));
+    }
+}
+
+/// Whether the negotiated table can build numeric sliders (API 1.2).
+fn has_numeric_slider(api: &Api) -> bool {
+    api.api_version >= API_VERSION_1_2
+        && api.capabilities & CAP_NUMERIC_SLIDER != 0
+        && api.add_numeric_slider.is_some()
+        && api.set_numeric_slider_value.is_some()
 }
 
 /// A live connection to the ERNativeUI host.
 #[derive(Clone, Copy)]
 pub struct Connection {
     api: Api,
+    numeric_slider: bool,
 }
 
-/// Polls for the already-loaded `ERNativeUI.dll` and negotiates API 1.1.
+/// Polls for the already-loaded `ERNativeUI.dll` and negotiates API 1.2,
+/// falling back to 1.1 (no numeric slider: [`NumberSetting`] rows are typed).
 /// Returns `Err` with a human-readable reason when the host is missing, failed
 /// or does not become ready within `timeout`; callers should log it and carry
 /// on without a menu.
@@ -313,19 +429,28 @@ pub fn connect(timeout: Duration) -> Result<Connection, String> {
                 return Err("ERNativeUI.dll does not export ERUI_GetApi".into());
             }
             let get_api: GetApiFn = unsafe { std::mem::transmute(symbol) };
+            let mut version = API_VERSION_1_2;
             let mut api: Api = unsafe { std::mem::zeroed() };
-            api.size = std::mem::size_of::<Api>() as u32;
-            let status = unsafe { get_api(API_VERSION_1_1, &mut api) };
+            api.size = API_V1_2_SIZE;
+            let mut status = unsafe { get_api(version, &mut api) };
+            if status == ERUI_UNSUPPORTED_VERSION {
+                // An API 1.1 host (ERNativeUI before 1.2).
+                version = API_VERSION_1_1;
+                api = unsafe { std::mem::zeroed() };
+                api.size = API_V1_1_SIZE;
+                status = unsafe { get_api(version, &mut api) };
+            }
             match status {
                 ERUI_OK => {
-                    validate_api(&api)?;
-                    return Ok(Connection { api });
+                    validate_api(&api, version)?;
+                    select_language(&api);
+                    return Ok(Connection { api, numeric_slider: has_numeric_slider(&api) });
                 }
                 ERUI_HOST_FAILED => {
                     return Err("ERNativeUI host initialization failed (see ERNativeUI.log)".into());
                 }
                 ERUI_HOST_NOT_READY => {}
-                other => return Err(format!("ERNativeUI API 1.1 negotiation failed: {}", result_name(other))),
+                other => return Err(format!("ERNativeUI API negotiation failed: {}", result_name(other))),
             }
         }
         if Instant::now() >= deadline {
@@ -346,6 +471,7 @@ pub struct Provider {
     api: Api,
     provider: ProviderHandle,
     root: PageHandle,
+    numeric_slider: bool,
     committed: bool,
 }
 
@@ -368,7 +494,7 @@ impl Connection {
         let mut root: PageHandle = 0;
         let status = unsafe { (self.api.register_provider.unwrap())(&desc, &mut provider, &mut root) };
         check(status, "register_provider")?;
-        Ok(Provider { api: self.api, provider, root, committed: false })
+        Ok(Provider { api: self.api, provider, root, numeric_slider: self.numeric_slider, committed: false })
     }
 }
 
@@ -519,10 +645,12 @@ impl Provider {
         Ok(row)
     }
 
-    /// Adds a text row for a number, kept in range and written to the config
-    /// like any other [`Setting`]: the player types `1.5` (a comma works too),
-    /// out-of-range values are clamped and bad text is put back to the last
-    /// good value. `initial` is the number the row starts with.
+    /// Adds a number row, kept in range and written to the config like any
+    /// other [`Setting`]. A setting with a step ([`NumberSetting::stepped`]) is a
+    /// native slider when the host has API 1.2; otherwise it is a text row: the
+    /// player types `1.5` (a comma works too), out-of-range values are clamped
+    /// and bad text is put back to the last good value. `initial` is the number
+    /// the row starts with.
     pub fn add_number(
         &self,
         page: PageHandle,
@@ -533,6 +661,14 @@ impl Provider {
     ) -> Result<RowHandle, String> {
         let initial = setting.normalize(initial);
         setting.last.store(initial.to_bits(), Ordering::Relaxed);
+        if self.numeric_slider
+            && let Some(plan) = setting.slider_plan()
+        {
+            let row = self.add_numeric_slider(page, label, help, &plan, plan.snap(initial), setting)?;
+            setting.slider.store(plan.places + 1, Ordering::Relaxed);
+            let _ = setting.row.set(row);
+            return Ok(row);
+        }
         let row = self.add_text_input(
             page,
             label,
@@ -544,6 +680,41 @@ impl Provider {
             setting as *const NumberSetting as *mut c_void,
         )?;
         let _ = setting.row.set(row);
+        Ok(row)
+    }
+
+    fn add_numeric_slider(
+        &self,
+        page: PageHandle,
+        label: &str,
+        help: &str,
+        plan: &SliderPlan,
+        initial_scaled: i64,
+        setting: &'static NumberSetting,
+    ) -> Result<RowHandle, String> {
+        let label = wide(label);
+        let help = wide(help);
+        let none: [u16; 0] = [];
+        let desc = NumericSliderDesc {
+            size: std::mem::size_of::<NumericSliderDesc>() as u32,
+            flags: 0,
+            label: Utf16View::of(&label),
+            help: Utf16View::of(&help),
+            changed_callback: Some(number_slider_changed),
+            user_data: setting as *const NumberSetting as *mut c_void,
+            minimum_scaled_value: plan.min,
+            maximum_scaled_value: plan.max,
+            step_scaled_value: plan.step,
+            initial_scaled_value: initial_scaled,
+            decimal_places: plan.places,
+            enabled: 1,
+            prefix: Utf16View::of(&none),
+            suffix: Utf16View::of(&none),
+            reserved: [0; 2],
+        };
+        let mut row: RowHandle = 0;
+        let status = unsafe { (self.api.add_numeric_slider.unwrap())(self.provider, page, &desc, &mut row) };
+        check(status, "add_numeric_slider")?;
         Ok(row)
     }
 
@@ -617,6 +788,13 @@ impl Registration {
         let view = Utf16View::of(&units);
         let status = unsafe { (self.api.set_text_input_value.unwrap())(self.provider, row, &view) };
         check(status, "set_text_input_value")
+    }
+
+    /// Moves a numeric slider to `scaled / 10^places` (no callback).
+    fn set_numeric(&self, row: RowHandle, scaled: i64, places: u32) -> Result<(), String> {
+        let value = DecimalValue { scaled_value: scaled, decimal_places: places, reserved: 0 };
+        let status = unsafe { (self.api.set_numeric_slider_value.unwrap())(self.provider, row, &value) };
+        check(status, "set_numeric_slider_value")
     }
 
     pub fn set_row_value(&self, row: RowHandle, value: u8) -> Result<(), String> {
@@ -948,11 +1126,99 @@ pub struct NumberSetting {
     /// decimals are rounded, since `1.5` would not parse and the mod would
     /// fall back to its default.
     pub integer: bool,
+    /// Step of the native slider (`0` = text row only, see [`NumberSetting::stepped`]).
+    pub step: f64,
+    /// Range of the native slider when it is narrower than `min..max`
+    /// ([`NumberSetting::slider`]); `None` = the slider covers `min..max`.
+    pub slider_range: Option<(f64, f64)>,
+    /// Set by `add_number`: `0` for a text row, else the slider's decimal
+    /// places plus one.
+    slider: AtomicU32,
+}
+
+/// A numeric slider's range as exact base-10 integers (`value * 10^places`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct SliderPlan {
+    places: u32,
+    min: i64,
+    max: i64,
+    step: i64,
+}
+
+impl SliderPlan {
+    /// `value` as the scaled integer of the nearest slider position.
+    fn snap(&self, value: f64) -> i64 {
+        let scale = 10f64.powi(self.places as i32);
+        let last = (self.max - self.min) / self.step;
+        let index = (((value * scale) - self.min as f64) / self.step as f64).round().clamp(0.0, last as f64) as i64;
+        self.min + index * self.step
+    }
 }
 
 impl NumberSetting {
     const fn make(key: &'static str, min: f64, max: f64, apply: Option<fn(f64)>, decimal_point: bool, integer: bool) -> Self {
-        NumberSetting { key, min, max, apply, row: OnceLock::new(), last: AtomicU64::new(0), decimal_point, integer }
+        NumberSetting {
+            key,
+            min,
+            max,
+            apply,
+            row: OnceLock::new(),
+            last: AtomicU64::new(0),
+            decimal_point,
+            integer,
+            step: 0.0,
+            slider_range: None,
+            slider: AtomicU32::new(0),
+        }
+    }
+
+    /// Makes the row a native slider from `min` to `max` in steps of `step`
+    /// when the host has API 1.2 (a text row otherwise). The range must hold
+    /// 2 to 256 positions and `step` at most six decimals; if not, the row
+    /// stays a text row.
+    pub const fn stepped(mut self, step: f64) -> Self {
+        self.step = step;
+        self
+    }
+
+    /// Like [`NumberSetting::stepped`] for a setting whose accepted range
+    /// (`min..max`, used by the typed text row and for clamping) is much wider
+    /// than what a slider can show: the slider covers `from..=to` in steps of
+    /// `step`. A value outside it is shown at the nearest end; the config is
+    /// only changed when the player moves the slider.
+    pub const fn slider(mut self, from: f64, to: f64, step: f64) -> Self {
+        self.step = step;
+        self.slider_range = Some((from, to));
+        self
+    }
+
+    /// Whether this setting is shown as a native slider on an API 1.2 host (it
+    /// has a step and a range of 2 to 256 positions that the step reaches).
+    pub fn has_slider(&self) -> bool {
+        self.slider_plan().is_some()
+    }
+
+    /// The slider's exact range, or `None` when this setting has no step or the
+    /// range cannot be a native slider.
+    fn slider_plan(&self) -> Option<SliderPlan> {
+        if self.step <= 0.0 {
+            return None;
+        }
+        let places = (0..=6u32).find(|p| {
+            let scaled = self.step * 10f64.powi(*p as i32);
+            (scaled - scaled.round()).abs() < 1e-9
+        })?;
+        let scale = 10f64.powi(places as i32);
+        let (low, high) = self.slider_range.unwrap_or((self.min, self.max));
+        let plan = SliderPlan {
+            places,
+            min: (low * scale).round() as i64,
+            max: (high * scale).round() as i64,
+            step: (self.step * scale).round() as i64,
+        };
+        let span = plan.max - plan.min;
+        let positions = span / plan.step + 1;
+        (plan.step > 0 && span % plan.step == 0 && (2..=256).contains(&positions)).then_some(plan)
     }
 
     pub const fn new(key: &'static str, min: f64, max: f64, apply: Option<fn(f64)>) -> Self {
@@ -987,9 +1253,10 @@ impl NumberSetting {
     pub fn show(&'static self, registration: &Registration, value: f64) -> Result<(), String> {
         let value = self.normalize(value);
         self.last.store(value.to_bits(), Ordering::Relaxed);
-        match self.row.get() {
-            Some(row) => registration.set_text(*row, &self.text(value)),
-            None => Ok(()),
+        let Some(row) = self.row.get() else { return Ok(()) };
+        match self.slider_plan().filter(|_| self.slider.load(Ordering::Relaxed) != 0) {
+            Some(plan) => registration.set_numeric(*row, plan.snap(value), plan.places),
+            None => registration.set_text(*row, &self.text(value)),
         }
     }
 }
@@ -1031,19 +1298,62 @@ unsafe extern "C" fn number_changed(user_data: *mut c_void, change: *const TextI
         if accepted.is_none() {
             return;
         }
-        setting.last.store(value.to_bits(), Ordering::Relaxed);
-        if let Some(apply) = setting.apply {
-            apply(value);
+        accept_number(setting, value);
+    });
+}
+
+/// A number the row now holds: remember it, apply it and queue it for saving.
+fn accept_number(setting: &NumberSetting, value: f64) {
+    setting.last.store(value.to_bits(), Ordering::Relaxed);
+    if let Some(apply) = setting.apply {
+        apply(value);
+    }
+    if let Some(tx) = SAVER.get() {
+        let _ = tx.send((setting.key, setting.text(value)));
+    }
+}
+
+unsafe extern "C" fn number_slider_changed(user_data: *mut c_void, change: *const NumericSliderChange) {
+    let _ = std::panic::catch_unwind(|| {
+        if user_data.is_null() || change.is_null() {
+            return;
         }
-        if let Some(tx) = SAVER.get() {
-            let _ = tx.send((setting.key, shown));
-        }
+        let setting = unsafe { &*(user_data as *const NumberSetting) };
+        let value = unsafe { &*change }.value();
+        accept_number(setting, setting.normalize(value));
     });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stepped_settings_describe_an_exact_slider() {
+        let speed = NumberSetting::float("A", 0.1, 10.0, None).stepped(0.1);
+        let plan = speed.slider_plan().unwrap();
+        assert_eq!(plan, SliderPlan { places: 1, min: 1, max: 100, step: 1 });
+        assert_eq!(plan.snap(1.2), 12);
+        assert_eq!(plan.snap(1.23), 12);
+        assert_eq!(plan.snap(99.0), 100);
+        assert_eq!(plan.snap(-5.0), 1);
+
+        let fine = NumberSetting::new("B", -1.0, 1.0, None).stepped(0.25);
+        assert_eq!(fine.slider_plan().unwrap(), SliderPlan { places: 2, min: -100, max: 100, step: 25 });
+
+        // A slider narrower than the accepted range: values outside snap to the ends.
+        let wide = NumberSetting::new("W", 0.0, 1000.0, None).slider(0.0, 10.0, 0.5);
+        let plan = wide.slider_plan().unwrap();
+        assert_eq!(plan, SliderPlan { places: 1, min: 0, max: 100, step: 5 });
+        assert_eq!(plan.snap(2.0), 20);
+        assert_eq!(plan.snap(500.0), 100);
+        assert_eq!(wide.normalize(500.0), 500.0); // the typed row still accepts it
+
+        // Not a slider: no step, too many positions, a step that misses the max.
+        assert!(NumberSetting::new("C", 0.0, 10.0, None).slider_plan().is_none());
+        assert!(NumberSetting::new("D", 0.0, 1000.0, None).stepped(1.0).slider_plan().is_none());
+        assert!(NumberSetting::new("E", 0.0, 1.0, None).stepped(0.3).slider_plan().is_none());
+    }
 
     #[test]
     fn numbers_are_parsed_leniently() {

@@ -1,0 +1,99 @@
+{
+  "mod": {
+    "help": "Settings for the Auto Regen mod."
+  },
+  "tick": {
+    "title": "Per Tick",
+    "help": "Restore HP, FP and SP over time."
+  },
+  "hit": {
+    "title": "Per Hit",
+    "help": "Restore HP, FP and SP when you land a hit."
+  },
+  "tick_enabled": {
+    "label": "Enabled",
+    "help": "Turns regeneration over time on or off."
+  },
+  "when": {
+    "label": "When",
+    "help": "When it applies. During gesture uses the gesture list in the config file.",
+    "options": {
+      "always": "Always",
+      "out_of_combat": "Out of combat",
+      "in_combat": "In combat",
+      "idle": "Idle",
+      "during_gesture": "During gesture"
+    }
+  },
+  "interval": {
+    "label": "Interval (ms)",
+    "help": "How often it restores, in milliseconds (1000 = 1 second). 0 turns it off. Shorter is smoother but costs a little more."
+  },
+  "value_type": {
+    "label": "Value Type",
+    "help": "What the amounts below mean: points, percent of max, or percent of what is missing.",
+    "options": {
+      "points": "Points",
+      "percent_of_max": "Percent of max",
+      "percent_of_missing": "Percent of missing"
+    }
+  },
+  "tick_hp": {
+    "label": "HP",
+    "help": "HP restored each interval, in the unit chosen above."
+  },
+  "tick_fp": {
+    "label": "FP",
+    "help": "FP restored each interval, in the unit chosen above."
+  },
+  "tick_sp": {
+    "label": "SP",
+    "help": "SP restored each interval, in the unit chosen above."
+  },
+  "max_fill": {
+    "label": "Max Fill",
+    "help": "Regeneration stops at this percent of the maximum. 100 means no limit."
+  },
+  "hit_enabled": {
+    "label": "Enabled",
+    "help": "Turns regeneration on hit on or off."
+  },
+  "mode": {
+    "label": "Mode",
+    "help": "What the amounts below mean: points, percent of max, or percent of the damage you dealt.",
+    "options": {
+      "points": "Points",
+      "percent_of_max": "Percent of max",
+      "percent_of_damage": "Percent of damage"
+    }
+  },
+  "hit_type": {
+    "label": "Hit Type",
+    "help": "Which hits count.",
+    "options": {
+      "melee": "Melee",
+      "ranged": "Ranged and spells",
+      "both": "Both"
+    }
+  },
+  "skip_aow": {
+    "label": "Skip Ash of War",
+    "help": "Hits from an Ash of War restore nothing."
+  },
+  "hit_hp": {
+    "label": "HP",
+    "help": "HP restored per hit, in the unit chosen above."
+  },
+  "hit_fp": {
+    "label": "FP",
+    "help": "FP restored per hit, in the unit chosen above."
+  },
+  "hit_sp": {
+    "label": "SP",
+    "help": "SP restored per hit, in the unit chosen above."
+  },
+  "log": {
+    "label": "Log file",
+    "help": "Write a log file next to the DLL, for troubleshooting."
+  }
+}

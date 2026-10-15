@@ -1,0 +1,29 @@
+{
+  "mod": {
+    "help": "Settings for the Infinite Ailment mod."
+  },
+  "scarlet_rot": {
+    "title": "Scarlet Rot",
+    "help": "Scarlet Rot damage over time."
+  },
+  "poison": {
+    "title": "Poison",
+    "help": "Poison damage over time."
+  },
+  "duration": {
+    "label": "Duration (s)",
+    "help": "How long the damage lasts, in seconds. -1 = infinite. Vanilla: {vanilla}."
+  },
+  "percent": {
+    "label": "Damage (%)",
+    "help": "Percent of your max HP lost each tick; negative heals. Vanilla: {vanilla}."
+  },
+  "fixed": {
+    "label": "Damage",
+    "help": "Flat damage each tick, added on top; negative heals. Vanilla: {vanilla}."
+  },
+  "log": {
+    "label": "Log file",
+    "help": "Write a log file next to the DLL, for troubleshooting."
+  }
+}

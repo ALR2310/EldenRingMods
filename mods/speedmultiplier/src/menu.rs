@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! Speed Multiplier           -> opens a page with:
-//!   All Player Actions       number 0.1..10  (overrides the rows below)
+//!   All Player Actions       slider 0.1..10  (overrides the rows below)
 //!   Player Movement          -> Walk, Run, Sneak, Jump, Roll, Ladder
 //!   Player Actions           -> Attack, Critical, Skill, Cast, Item, Other
 //!   Torrent                  -> All, Walk, Run, Jump, Other
@@ -12,9 +12,10 @@
 //!   Log file                 on/off
 //! ```
 //!
-//! Every speed row is a text row where the multiplier is typed (`1.5` or
-//! `1,5`); the bounds 0.1..10 are the ones the mod clamps to when it applies a
-//! speed. Typed numbers are saved as TOML floats (`2` becomes `2.0`).
+//! Every speed row is a native slider in steps of 0.1 (ERNativeUI 1.2 or newer;
+//! older hosts get a text row where the multiplier is typed, `1.5` or `1,5`).
+//! The bounds 0.1..10 are the ones the mod clamps to when it applies a speed.
+//! Values are saved as TOML floats (`2` becomes `2.0`).
 //! Changes are written to `SpeedMultiplier.toml` (comments kept) once the
 //! player stops for a second, and the mod applies them when it re-reads the
 //! file right after (about a second after the player stops): it reads its
@@ -24,6 +25,7 @@
 use std::sync::OnceLock;
 
 use common::erui::{self, MenuBuilder, NumberSetting, Setting};
+use common::i18n::Catalog;
 use common::logger;
 
 use crate::config;
@@ -31,10 +33,12 @@ use crate::config;
 /// The bounds `speed.rs` clamps every multiplier to.
 const MIN_SPEED: f64 = 0.1;
 const MAX_SPEED: f64 = 10.0;
+/// Slider step: 100 positions from 0.1 to 10.
+const SPEED_STEP: f64 = 0.1;
 
 macro_rules! speed {
     ($name:ident, $key:expr) => {
-        static $name: NumberSetting = NumberSetting::float($key, MIN_SPEED, MAX_SPEED, None);
+        static $name: NumberSetting = NumberSetting::float($key, MIN_SPEED, MAX_SPEED, None).stepped(SPEED_STEP);
     };
 }
 
@@ -62,6 +66,17 @@ static LOG_FILE: Setting = Setting::flag("Logging.LogFile");
 
 static MENU: OnceLock<erui::Menu> = OnceLock::new();
 
+/// The menu texts, one file per language (`locales/`); English is the fallback.
+static TEXT: Catalog = Catalog::new(&[
+    ("english", include_str!("../locales/en.json")),
+    ("vietnamese", include_str!("../locales/vi.json")),
+]);
+
+/// The text of `key` in the host language.
+fn t(key: &str) -> String {
+    TEXT.tr(key)
+}
+
 /// After the file is written (and re-read): the mod reads its config every
 /// frame, so only the log switch needs following.
 fn saved() {
@@ -69,52 +84,50 @@ fn saved() {
 }
 
 fn build(b: &mut MenuBuilder) -> Result<(), String> {
-    let page = b.submenu(b.root(), "Speed Multiplier", "Settings for the Speed Multiplier mod.")?;
+    let page = b.submenu(b.root(), "Speed Multiplier", &t("mod.help"))?;
 
     b.number(
         page,
-        "All Player Actions",
-        "Speed of everything you do. Anything but 1 overrides the individual player speeds.",
+        &t("all.label"),
+        &t("all.help"),
         &PLAYER_ALL,
         || f64::from(config::get().player.all),
     )?;
 
-    let movement = b.submenu(page, "Player Movement", "How fast you move.")?;
-    b.number(movement, "Walk", "Walking speed.", &PLAYER_WALK, || f64::from(config::get().player.walk))?;
-    b.number(movement, "Run", "Running speed.", &PLAYER_RUN, || f64::from(config::get().player.run))?;
-    b.number(movement, "Sneak", "Sneaking speed.", &PLAYER_SNEAK, || f64::from(config::get().player.sneak))?;
-    b.number(movement, "Jump", "Jumping and landing speed.", &PLAYER_JUMP, || f64::from(config::get().player.jump))?;
-    b.number(movement, "Roll", "Rolling and backstepping speed.", &PLAYER_ROLL, || f64::from(config::get().player.roll))?;
-    b.number(movement, "Ladder", "Climbing and sliding speed.", &PLAYER_LADDER, || f64::from(config::get().player.ladder))?;
+    let movement = b.submenu(page, &t("movement.title"), &t("movement.help"))?;
+    b.number(movement, &t("walk.label"), &t("walk.help"), &PLAYER_WALK, || f64::from(config::get().player.walk))?;
+    b.number(movement, &t("run.label"), &t("run.help"), &PLAYER_RUN, || f64::from(config::get().player.run))?;
+    b.number(movement, &t("sneak.label"), &t("sneak.help"), &PLAYER_SNEAK, || f64::from(config::get().player.sneak))?;
+    b.number(movement, &t("jump.label"), &t("jump.help"), &PLAYER_JUMP, || f64::from(config::get().player.jump))?;
+    b.number(movement, &t("roll.label"), &t("roll.help"), &PLAYER_ROLL, || f64::from(config::get().player.roll))?;
+    b.number(movement, &t("ladder.label"), &t("ladder.help"), &PLAYER_LADDER, || f64::from(config::get().player.ladder))?;
 
-    let actions = b.submenu(page, "Player Actions", "How fast you attack, cast and use items.")?;
-    b.number(actions, "Attack", "Speed of normal attacks.", &PLAYER_ATTACK, || f64::from(config::get().player.attack))?;
-    b.number(actions, "Critical", "Speed of critical hits.", &PLAYER_CRITICAL, || f64::from(config::get().player.critical))?;
-    b.number(actions, "Skill", "Speed of weapon skills.", &PLAYER_SKILL, || f64::from(config::get().player.skill))?;
-    b.number(actions, "Cast", "Speed of casting sorceries and incantations.", &PLAYER_CAST, || f64::from(config::get().player.cast))?;
-    b.number(actions, "Item", "Speed of using items such as flasks.", &PLAYER_ITEM, || f64::from(config::get().player.item))?;
-    b.number(actions, "Other", "Speed of any action not listed here.", &PLAYER_OTHER, || f64::from(config::get().player.other))?;
+    let actions = b.submenu(page, &t("actions.title"), &t("actions.help"))?;
+    b.number(actions, &t("attack.label"), &t("attack.help"), &PLAYER_ATTACK, || f64::from(config::get().player.attack))?;
+    b.number(actions, &t("critical.label"), &t("critical.help"), &PLAYER_CRITICAL, || f64::from(config::get().player.critical))?;
+    b.number(actions, &t("skill.label"), &t("skill.help"), &PLAYER_SKILL, || f64::from(config::get().player.skill))?;
+    b.number(actions, &t("cast.label"), &t("cast.help"), &PLAYER_CAST, || f64::from(config::get().player.cast))?;
+    b.number(actions, &t("item.label"), &t("item.help"), &PLAYER_ITEM, || f64::from(config::get().player.item))?;
+    b.number(actions, &t("other.label"), &t("other.help"), &PLAYER_OTHER, || f64::from(config::get().player.other))?;
 
-    let torrent = b.submenu(page, "Torrent", "How fast Torrent moves.")?;
+    let torrent = b.submenu(page, &t("torrent.title"), &t("torrent.help"))?;
     b.number(
         torrent,
-        "All",
-        "Speed of everything Torrent does. Anything but 1 overrides the rows below.",
+        &t("torrent_all.label"),
+        &t("torrent_all.help"),
         &TORRENT_ALL,
         || f64::from(config::get().torrent.all),
     )?;
-    b.number(torrent, "Walk", "Torrent's walking speed.", &TORRENT_WALK, || f64::from(config::get().torrent.walk))?;
-    b.number(torrent, "Run", "Torrent's running speed.", &TORRENT_RUN, || f64::from(config::get().torrent.run))?;
-    b.number(torrent, "Jump", "Torrent's jumping and landing speed.", &TORRENT_JUMP, || f64::from(config::get().torrent.jump))?;
-    b.number(torrent, "Other", "Speed of any other Torrent action.", &TORRENT_OTHER, || f64::from(config::get().torrent.other))?;
+    b.number(torrent, &t("torrent_walk.label"), &t("torrent_walk.help"), &TORRENT_WALK, || f64::from(config::get().torrent.walk))?;
+    b.number(torrent, &t("torrent_run.label"), &t("torrent_run.help"), &TORRENT_RUN, || f64::from(config::get().torrent.run))?;
+    b.number(torrent, &t("torrent_jump.label"), &t("torrent_jump.help"), &TORRENT_JUMP, || f64::from(config::get().torrent.jump))?;
+    b.number(torrent, &t("torrent_other.label"), &t("torrent_other.help"), &TORRENT_OTHER, || f64::from(config::get().torrent.other))?;
 
-    let others = b.submenu(page, "Spirit & Enemy", "How fast summoned spirits and enemies act.")?;
-    b.number(others, "Spirit", "Speed of summoned spirit ashes.", &SPIRIT_ALL, || f64::from(config::get().spirit.all))?;
-    b.number(others, "Enemy", "Speed of hostile enemies and bosses.", &ENEMY_ALL, || f64::from(config::get().enemy.all))?;
+    let others = b.submenu(page, &t("others.title"), &t("others.help"))?;
+    b.number(others, &t("spirit.label"), &t("spirit.help"), &SPIRIT_ALL, || f64::from(config::get().spirit.all))?;
+    b.number(others, &t("enemy.label"), &t("enemy.help"), &ENEMY_ALL, || f64::from(config::get().enemy.all))?;
 
-    b.toggle(page, "Log file", "Write a log file next to the DLL, for troubleshooting.", &LOG_FILE, || {
-        config::get().logging.log_file as u8
-    })
+    b.toggle(page, &t("log.label"), &t("log.help"), &LOG_FILE, || config::get().logging.log_file as u8)
 }
 
 /// Registers the menu on a worker thread. Must start early: the host closes
@@ -146,5 +159,23 @@ mod tests {
     #[test]
     fn bounds_match_the_speed_clamp() {
         assert_eq!((PLAYER_ALL.min, PLAYER_ALL.max), (MIN_SPEED, MAX_SPEED));
+    }
+
+    /// Every key the menu passes to `t` is in every language file, and the files
+    /// have the same keys (nothing missing, nothing left over).
+    #[test]
+    fn language_files_match_the_menu_keys() {
+        let source = include_str!("menu.rs");
+        let mut used: Vec<String> = Vec::new();
+        for part in source.split("&t(\"").skip(1) {
+            if let Some(end) = part.find("\")") {
+                used.push(part[..end].to_string());
+            }
+        }
+        used.sort();
+        used.dedup();
+        assert!(used.len() > 40, "found only {} menu keys", used.len());
+        assert_eq!(used, TEXT.keys("english"), "menu.rs keys and locales/en.json differ");
+        assert_eq!(used, TEXT.keys("vietnamese"), "menu.rs keys and locales/vi.json differ");
     }
 }

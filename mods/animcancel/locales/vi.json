@@ -1,0 +1,41 @@
+{
+  "mod": {
+    "help": "Thiết lập cho mod Anim Cancel."
+  },
+  "guard": {
+    "title": "Đỡ đòn",
+    "help": "Giơ khiên đỡ đòn sẽ huỷ các animation bạn chọn."
+  },
+  "dodge": {
+    "title": "Né",
+    "help": "Lăn hoặc lùi bước sẽ huỷ các animation bạn chọn."
+  },
+  "weapon_swap": {
+    "title": "Đổi vũ khí",
+    "help": "Đổi vũ khí sẽ huỷ các animation bạn chọn."
+  },
+  "enabled": {
+    "label": "Bật",
+    "help": "Bật hoặc tắt việc huỷ animation cho hành động này."
+  },
+  "attacks": {
+    "label": "Tấn công",
+    "help": "Có thể huỷ đòn tấn công thường."
+  },
+  "skills": {
+    "label": "Kỹ năng",
+    "help": "Có thể huỷ kỹ năng vũ khí."
+  },
+  "spells": {
+    "label": "Phép",
+    "help": "Có thể huỷ việc niệm phép thuật và thần chú."
+  },
+  "items": {
+    "label": "Vật phẩm",
+    "help": "Có thể huỷ việc dùng vật phẩm như bình thuốc."
+  },
+  "log": {
+    "label": "Tệp log",
+    "help": "Ghi tệp log cạnh DLL để khắc phục sự cố."
+  }
+}

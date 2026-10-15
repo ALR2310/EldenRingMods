@@ -1,0 +1,106 @@
+{
+  "mod": {
+    "help": "Settings for the Spirit Multiplier mod."
+  },
+  "count": {
+    "title": "Spirit Count",
+    "help": "How many spirits each Spirit Ash summons."
+  },
+  "multiplier": {
+    "label": "Multiplier",
+    "help": "Times an Ash's usual spirit count (decimals allowed, e.g. 1.5). Used when Fixed Count is 0. 1 = vanilla, 0 = off."
+  },
+  "fixed_count": {
+    "label": "Fixed Count",
+    "help": "Spirits every Ash summons, whatever its usual count. 0 = use the Multiplier instead."
+  },
+  "max_spirits": {
+    "label": "Max Spirits",
+    "help": "Most spirits one Ash can summon. Above 60 may lower FPS or crash. Applies after restarting the game."
+  },
+  "summoning": {
+    "title": "Summoning",
+    "help": "How and where spirits can be summoned."
+  },
+  "multi_spirit": {
+    "label": "Multi Spirit",
+    "help": "Summon several different Spirit Ashes at the same time."
+  },
+  "clone_spirit": {
+    "label": "Clone Spirit",
+    "help": "Needs Multi Spirit. Using an Ash again summons another copy instead of sending it back."
+  },
+  "no_rest": {
+    "label": "Resummon Without Rest",
+    "help": "Summon your spirits again without resting at a Site of Grace."
+  },
+  "anywhere": {
+    "label": "Summon Anywhere",
+    "help": "Summon spirits outside the usual summoning pool areas."
+  },
+  "health": {
+    "title": "Health and Look",
+    "help": "How spirits heal and how they look."
+  },
+  "regen_mode": {
+    "label": "Regen Mode",
+    "help": "What the healing amount means. Also heals Torrent.",
+    "options": {
+      "flat": "Flat HP",
+      "percent_max": "% of max HP",
+      "percent_missing": "% of missing HP"
+    }
+  },
+  "regen_amount": {
+    "label": "Regen Amount",
+    "help": "Healing per second: HP in Flat HP mode, a percent in the other modes (decimals allowed). 0 = no healing."
+  },
+  "ghost": {
+    "label": "Ghost Color",
+    "help": "On = spirits keep their ghostly blue look. Off = they look like normal characters."
+  },
+  "behavior": {
+    "title": "Behavior",
+    "help": "Make spirits smarter in a fight."
+  },
+  "senses": {
+    "label": "Senses",
+    "help": "Spirits notice enemies from farther away and remember them longer."
+  },
+  "aggression": {
+    "label": "Aggression",
+    "help": "Spirits start fighting sooner, attack together and call for help."
+  },
+  "follow": {
+    "label": "Follow",
+    "help": "Spirits stay closer to you and cross ledges, ladders and holes to keep up."
+  },
+  "teleport": {
+    "title": "Teleport",
+    "help": "Experimental: spirits teleport to you sooner. 0 = game default."
+  },
+  "warp_far": {
+    "label": "Warp When Far",
+    "help": "Also teleport spirits that are far away even if they can see you."
+  },
+  "warp_distance": {
+    "label": "Distance (m)",
+    "help": "Teleport when a spirit is farther than this many metres. 0 = game default."
+  },
+  "warp_blocked": {
+    "label": "Blocked Time (s)",
+    "help": "Teleport after this many seconds without line of sight. 0 = game default."
+  },
+  "warp_stuck_time": {
+    "label": "Stuck Time (s)",
+    "help": "Teleport after being stuck this many seconds. 0 = game default."
+  },
+  "warp_stuck_range": {
+    "label": "Stuck Range (m)",
+    "help": "Moving less than this many metres counts as stuck. 0 = game default."
+  },
+  "log": {
+    "label": "Log file",
+    "help": "Write a log file next to the DLL, for troubleshooting."
+  }
+}

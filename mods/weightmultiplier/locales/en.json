@@ -1,0 +1,25 @@
+{
+  "mod": {
+    "help": "Settings for the Weight Multiplier mod."
+  },
+  "mode": {
+    "label": "Mode",
+    "help": "Multiply: your equip load is multiplied. Fixed value: your equip load is always one number.",
+    "options": {
+      "multiply": "Multiply",
+      "fixed": "Fixed value"
+    }
+  },
+  "multiplier": {
+    "label": "Multiplier",
+    "help": "Multiplies your equip load, used when Mode is Multiply. 1 = vanilla."
+  },
+  "fixed_value": {
+    "label": "Fixed Value",
+    "help": "The equip load you always have, used when Mode is Fixed value."
+  },
+  "log": {
+    "label": "Log file",
+    "help": "Write a log file next to the DLL, for troubleshooting."
+  }
+}
