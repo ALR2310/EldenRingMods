@@ -10,7 +10,7 @@
 //!   Summoning                 -> Multi Spirit, Clone Spirit, Resummon Without Rest,
 //!                                Summon Anywhere (toggles)
 //!   Health and Look           -> Regen Mode (choice), Regen Amount (number 0..1000,
-//!                                0 = no healing), Ghostly Tint (toggle)
+//!                                0 = no healing), Ghost Color (toggle)
 //!   Behavior                  -> Senses, Aggression, Follow (toggles)
 //!   Teleport                  -> Warp When Far (toggle), Distance, Blocked Time,
 //!                                Stuck Time, Stuck Range (numbers, 0 = game default)

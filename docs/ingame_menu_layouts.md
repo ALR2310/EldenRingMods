@@ -162,7 +162,7 @@ Mọi mod đều có công tắc **Log file** ở trang đầu và hàng gốc �
   ├─ ▷ Health and Look
   │     Regen Mode      ◄ % of max HP ►
   │     Regen Amount    [ 0.75 ]   ⟨0 … 1000⟩             (0 = không hồi)
-  │     Ghostly Tint    ◄ Off ►
+  │     Ghost Color     ◄ Off ►
   ├─ ▷ Behavior
   │     Senses ◄ On ►   Aggression ◄ On ►   Follow ◄ On ►
   ├─ ▷ Teleport

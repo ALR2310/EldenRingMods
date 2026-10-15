@@ -56,7 +56,7 @@
     "help": "Healing per second: HP in Flat HP mode, a percent in the other modes (decimals allowed). 0 = no healing."
   },
   "ghost": {
-    "label": "Ghostly Tint",
+    "label": "Ghost Color",
     "help": "On = spirits keep their ghostly blue look. Off = they look like normal characters."
   },
   "behavior": {
