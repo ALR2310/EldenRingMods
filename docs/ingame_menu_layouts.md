@@ -1,6 +1,6 @@
 # Bố cục menu trong game của từng mod
 
-**Status 2026-10-13: bố cục hiện tại của 10 mod có menu (ERNativeUI), chưa kiểm trong game.** Hình vẽ lấy giá trị mặc định của
+**Status 2026-10-15: bố cục hiện tại của 10 mod có menu (ERNativeUI); các slider số thập phân của SpeedMultiplier đã thử trong game, còn lại chưa.** Hình vẽ lấy giá trị mặc định của
 ini mẫu từng mod. Nguồn: `mods/<mod>/src/menu.rs`. Quy ước chung và giới hạn của host: [ingame_menu.md](ingame_menu.md).
 
 ## Cách đọc hình
@@ -10,7 +10,9 @@ ini mẫu từng mod. Nguồn: `mods/<mod>/src/menu.rs`. Quy ước chung và gi
  ▷ Nhóm               hàng nút mở trang con
  ◄ On ►               công tắc bật / tắt
  ◄ Giá trị ►          hàng chọn: bấm trái/phải đổi giữa vài lựa chọn
- ━━━━●━━━━━━━  30     thanh trượt, số nguyên
+ ━━━━●━━━━━━━  30     thanh trượt, số nguyên (slider 0..255)
+ ━━●━━━━━━━━━  1.5    thanh trượt số thập phân (ERNativeUI 1.2; host cũ: ô gõ số)
+ ⟨0 … 10 · bước 0.5⟩  phạm vi của slider (ô gõ và tệp vẫn nhận số lớn hơn)
  [ 1.5 ]              ô gõ số: bấm để mở bàn phím, gõ rồi xác nhận
  ⟨ 0 … 100 ⟩         phạm vi hợp lệ: nhỏ nhất … lớn nhất (giá trị ngoài phạm vi bị kẹp về mép)
  ℤ                    chỉ nhận số nguyên (gõ 1.5 sẽ thành 2)
@@ -32,12 +34,12 @@ Mọi mod đều có công tắc **Log file** ở trang đầu và hàng gốc �
 ▶ Drop Multiplier
   ├─ ▷ Drop Chance
   │     Mode          ◄ Multiply chance ►
-  │     Multiplier    [ 3 ]   ⟨0 … 1000⟩
+  │     Multiplier    ━━━●━━━━━━━━  3   ⟨0 … 10 · bước 0.5⟩
   │     Percentage    ━━━●━━━━━━━━━━  30   ⟨0 … 100⟩     (khi Mode = Fixed chance)
   ├─ ▷ Materials
-  │     Crafting      [ 2 ]   ⟨0 … 1000⟩
-  │     Upgrade       [ 2 ]   ⟨0 … 1000⟩
-  │     Unique        [ 1 ]   ⟨0 … 1000⟩
+  │     Crafting      ━━●━━━━━━━━━  2   ⟨0 … 10 · bước 0.5⟩
+  │     Upgrade       ━━●━━━━━━━━━  2   ⟨0 … 10 · bước 0.5⟩
+  │     Unique        ━●━━━━━━━━━━  1   ⟨0 … 10 · bước 0.5⟩
   └─ Log file         ◄ On ►
 ```
 
@@ -45,7 +47,7 @@ Mọi mod đều có công tắc **Log file** ở trang đầu và hàng gốc �
 
 ```
 ▶ Rune Multiplier
-  ├─ Multiplier       [ 2 ]   ⟨-1000 … 1000⟩                  (âm = bị trừ rune)
+  ├─ Multiplier       ━━━━━━━●━━━━  2   ⟨-10 … 10 · bước 0.5⟩                  (âm = bị trừ rune)
   └─ Log file         ◄ Off ►
 ```
 
@@ -105,24 +107,24 @@ Mọi mod đều có công tắc **Log file** ở trang đầu và hàng gốc �
 ```
 ▶ Rise Archer
   ├─ ▷ Damage
-  │     Bow Damage          [ 1.5 ]   ⟨-1000 … 1000⟩
-  │     Crossbow Damage     [ 3 ]   ⟨-1000 … 1000⟩
-  │     Ballista Damage     [ 4 ]   ⟨-1000 … 1000⟩
-  │     Bow Scaling         [ 2 ]   ⟨-1000 … 1000⟩
+  │     Bow Damage          ━━●━━━━━━━━━  1.5   ⟨0 … 10 · bước 0.1⟩
+  │     Crossbow Damage     ━━━●━━━━━━━━  3   ⟨0 … 10 · bước 0.1⟩
+  │     Ballista Damage     ━━━━●━━━━━━━  4   ⟨0 … 10 · bước 0.1⟩
+  │     Bow Scaling         ━━●━━━━━━━━━  2   ⟨0 … 10 · bước 0.1⟩
   │     Bow Ash of War      ◄ On ►
   ├─ ▷ Weight & Value
-  │     Bow Weight          [ 0.5 ]   ⟨-1000 … 1000⟩
-  │     Crossbow Weight     [ 0.5 ]   ⟨-1000 … 1000⟩
-  │     Ballista Weight     [ 0.5 ]   ⟨-1000 … 1000⟩
-  │     Bow Sell Value      [ 2 ]   ⟨-1000 … 1000⟩
-  │     Crossbow Sell Value [ 2 ]   ⟨-1000 … 1000⟩
-  │     Ballista Sell Value [ 2 ]   ⟨-1000 … 1000⟩
+  │     Bow Weight          ━●━━━━━━━━━━  0.5   ⟨0 … 5 · bước 0.1⟩
+  │     Crossbow Weight     ━●━━━━━━━━━━  0.5   ⟨0 … 5 · bước 0.1⟩
+  │     Ballista Weight     ━●━━━━━━━━━━  0.5   ⟨0 … 5 · bước 0.1⟩
+  │     Bow Sell Value      ━━●━━━━━━━━━  2   ⟨0 … 10 · bước 0.5⟩
+  │     Crossbow Sell Value ━━●━━━━━━━━━  2   ⟨0 … 10 · bước 0.5⟩
+  │     Ballista Sell Value ━━●━━━━━━━━━  2   ⟨0 … 10 · bước 0.5⟩
   ├─ ▷ Ammo & Shots
   │     Arrow Limit         ━━━━━━━━━━━●  255   ⟨0 … 255⟩
   │     Bolt Limit          ━━━━━━━━━━━●  255   ⟨0 … 255⟩
-  │     Projectile Speed    [ 3.5 ]   ⟨-1000 … 1000⟩
-  │     Rain Range          [ 2 ]   ⟨-1000 … 1000⟩
-  │     Rain Spread         [ 2 ]   ⟨-1000 … 1000⟩
+  │     Projectile Speed    ━━━━●━━━━━━━  3.5   ⟨0 … 10 · bước 0.1⟩
+  │     Rain Range          ━━●━━━━━━━━━  2   ⟨0 … 10 · bước 0.1⟩
+  │     Rain Spread         ━━●━━━━━━━━━  2   ⟨0 … 10 · bước 0.1⟩
   │     Rain Arrows         [ 6 ]   ⟨ℤ 0 … 1000⟩
   └─ Log file               ◄ On ►
 ```
@@ -130,28 +132,28 @@ Mọi mod đều có công tắc **Log file** ở trang đầu và hàng gốc �
 ## Speed Multiplier  ⚡
 
 ```
-▶ Speed Multiplier                           (mọi ô: ⟨0.1 … 10⟩, số thập phân)
-  ├─ All Player Actions   [ 1.0 ]            (khác 1 thì ghi đè các hàng riêng)
+▶ Speed Multiplier                           (mọi ô tốc độ là slider ⟨0.1 … 10 · bước 0.1⟩)
+  ├─ All Player Actions   ━●━ 1.0            (khác 1 thì ghi đè các hàng riêng)
   ├─ ▷ Player Movement
-  │     Walk  [ 1.1 ]   Run  [ 1.2 ]   Sneak [ 1.1 ]
-  │     Jump  [ 1.0 ]   Roll [ 1.1 ]   Ladder [ 1.2 ]
+  │     Walk  ━●━ 1.1   Run  ━●━ 1.2   Sneak ━●━ 1.1
+  │     Jump  ━●━ 1.0   Roll ━●━ 1.1   Ladder ━●━ 1.2
   ├─ ▷ Player Actions
-  │     Attack [ 1.2 ]  Critical [ 1.0 ]  Skill [ 1.2 ]
-  │     Cast   [ 1.2 ]  Item     [ 1.0 ]  Other [ 1.0 ]
+  │     Attack ━●━ 1.2  Critical ━●━ 1.0  Skill ━●━ 1.2
+  │     Cast   ━●━ 1.2  Item     ━●━ 1.0  Other ━●━ 1.0
   ├─ ▷ Torrent
-  │     All [ 1.0 ]  Walk [ 1.1 ]  Run [ 1.3 ]  Jump [ 1.0 ]  Other [ 1.0 ]
+  │     All ━●━ 1.0  Walk ━●━ 1.1  Run ━●━ 1.3  Jump ━●━ 1.0  Other ━●━ 1.0
   ├─ ▷ Spirit & Enemy
-  │     Spirit [ 1.0 ]   Enemy [ 1.0 ]
+  │     Spirit ━●━ 1.0   Enemy ━●━ 1.0
   └─ Log file             ◄ On ►
 ```
-(mỗi giá trị là một hàng riêng; xếp ngang ở đây cho gọn; tất cả cùng phạm vi ⟨0.1 … 10⟩)
+(mỗi giá trị là một hàng riêng; xếp ngang ở đây cho gọn; tất cả cùng slider ⟨0.1 … 10 · bước 0.1⟩)
 
 ## Spirit Multiplier  ⚡  (Max Spirits: ⟲)
 
 ```
 ▶ Spirit Multiplier
   ├─ ▷ Spirit Count
-  │     Multiplier      [ 2 ]   ⟨0 … 1000⟩
+  │     Multiplier      ━━●━━━━━━━━━  2   ⟨0 … 10 · bước 0.25⟩
   │     Fixed Count     [ 0 ]   ⟨ℤ 0 … 1000⟩                (0 = dùng Multiplier)
   │     Max Spirits     [ 60 ]   ⟨ℤ 60 … 1000⟩               ⟲
   ├─ ▷ Summoning
@@ -170,7 +172,7 @@ Mọi mod đều có công tắc **Log file** ở trang đầu và hàng gốc �
   │     Distance (m)    [ 25 ]   ⟨0 … 1000⟩
   │     Blocked Time (s) [ 1 ]   ⟨0 … 600⟩
   │     Stuck Time (s)  [ 2 ]   ⟨0 … 600⟩
-  │     Stuck Range (m)  [ 3 ]   ⟨0 … 100⟩
+  │     Stuck Range (m)  ●━━━━━━━━━━━  3   ⟨0 … 100 · bước 1⟩
   └─ Log file           ◄ On ►
 ```
 Lưu ý: nhóm Teleport hiện không có tác dụng theo ini mẫu (chú thích cuối dòng làm parse lỗi), chờ quyết định.
@@ -180,7 +182,7 @@ Lưu ý: nhóm Teleport hiện không có tác dụng theo ini mẫu (chú thíc
 ```
 ▶ Weight Multiplier
   ├─ Mode             ◄ Multiply ►
-  ├─ Multiplier       [ 0.5 ]   ⟨-1000 … 1000⟩                (khi Mode = Multiply)
+  ├─ Multiplier       ━●━━━━━━━━━━  0.5   ⟨0 … 5 · bước 0.05⟩                (khi Mode = Multiply)
   ├─ Fixed Value      [ 0 ]   ⟨-1000 … 1000⟩                  (khi Mode = Fixed value)
   └─ Log file         ◄ On ►
 ```
