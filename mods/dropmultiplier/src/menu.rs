@@ -31,11 +31,11 @@ const MAX_MULTIPLIER: f64 = 1000.0;
 static MENU: OnceLock<erui::Menu> = OnceLock::new();
 
 static MODE: Setting = Setting::int("Mode");
-static MULTIPLIER: NumberSetting = NumberSetting::new("Multiplier", 0.0, MAX_MULTIPLIER, None);
+static MULTIPLIER: NumberSetting = NumberSetting::new("Multiplier", 0.0, MAX_MULTIPLIER, None).slider(0.0, 10.0, 0.5);
 static PERCENTAGE: Setting = Setting::int("Percentage");
-static CRAFTING: NumberSetting = NumberSetting::new("Crafting", 0.0, MAX_MULTIPLIER, None);
-static UPGRADE: NumberSetting = NumberSetting::new("Upgrade", 0.0, MAX_MULTIPLIER, None);
-static UNIQUE: NumberSetting = NumberSetting::new("Unique", 0.0, MAX_MULTIPLIER, None);
+static CRAFTING: NumberSetting = NumberSetting::new("Crafting", 0.0, MAX_MULTIPLIER, None).slider(0.0, 10.0, 0.5);
+static UPGRADE: NumberSetting = NumberSetting::new("Upgrade", 0.0, MAX_MULTIPLIER, None).slider(0.0, 10.0, 0.5);
+static UNIQUE: NumberSetting = NumberSetting::new("Unique", 0.0, MAX_MULTIPLIER, None).slider(0.0, 10.0, 0.5);
 static LOG_FILE: Setting = Setting::flag("LogFile");
 
 /// The menu texts, one file per language (`locales/`); English is the fallback.
@@ -151,5 +151,14 @@ mod tests {
         assert!(used.len() >= 10, "found only {} menu keys", used.len());
         assert_eq!(used, TEXT.keys("english"), "menu.rs keys and locales/en.json differ");
         assert_eq!(used, TEXT.keys("vietnamese"), "menu.rs keys and locales/vi.json differ");
+    }
+
+    /// Every row meant to be a native slider has a valid range and step (else
+    /// it silently stays a typed row).
+    #[test]
+    fn slider_rows_have_a_valid_range() {
+        for setting in [&MULTIPLIER, &CRAFTING, &UPGRADE, &UNIQUE] {
+            assert!(setting.has_slider(), "{} would not be a slider", setting.key);
+        }
     }
 }

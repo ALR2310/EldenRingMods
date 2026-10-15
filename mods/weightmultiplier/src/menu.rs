@@ -23,7 +23,7 @@ use common::erui::{self, MenuBuilder, NumberSetting, Setting};
 use common::i18n::Catalog;
 
 static MODE: Setting = Setting::int("Mode");
-static MULTIPLIER: NumberSetting = NumberSetting::new("Multiplier", -1000.0, 1000.0, None);
+static MULTIPLIER: NumberSetting = NumberSetting::new("Multiplier", -1000.0, 1000.0, None).slider(0.0, 5.0, 0.05);
 static FIXED_VALUE: NumberSetting = NumberSetting::new("FixedValue", -1000.0, 1000.0, None);
 static LOG_FILE: Setting = Setting::flag("LogFile");
 
@@ -112,5 +112,14 @@ mod tests {
         assert!(used.len() >= 9, "found only {} menu keys", used.len());
         assert_eq!(used, TEXT.keys("english"), "menu.rs keys and locales/en.json differ");
         assert_eq!(used, TEXT.keys("vietnamese"), "menu.rs keys and locales/vi.json differ");
+    }
+
+    /// Every row meant to be a native slider has a valid range and step (else
+    /// it silently stays a typed row).
+    #[test]
+    fn slider_rows_have_a_valid_range() {
+        for setting in [&MULTIPLIER] {
+            assert!(setting.has_slider(), "{} would not be a slider", setting.key);
+        }
     }
 }

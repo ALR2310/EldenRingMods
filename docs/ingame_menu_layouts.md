@@ -212,6 +212,24 @@ Lưu ý: nhóm Teleport hiện không có tác dụng theo ini mẫu (chú thíc
 
 ---
 
+## Hàng số là slider (ERNativeUI 1.2)
+
+Các ô số dưới đây là **slider native** khi host có API 1.2; host cũ thì vẫn là ô gõ số với phạm vi `⟨ … ⟩` đã vẽ ở trên. Phạm vi slider hẹp hơn phạm vi mod chấp nhận (ô gõ và tệp vẫn nhận số lớn); giá trị ngoài slider hiện ở mép gần nhất.
+
+| Mod | Ô | Slider | Vị trí |
+|---|---|---|---|
+| Speed Multiplier | mọi ô tốc độ | 0.1 … 10, bước 0.1 | 100 |
+| Drop Multiplier | Multiplier, Crafting, Upgrade, Unique | 0 … 10, bước 0.5 | 21 |
+| Rune Multiplier | Multiplier | -10 … 10, bước 0.5 | 41 |
+| Weight Multiplier | Multiplier | 0 … 5, bước 0.05 | 101 |
+| Spirit Multiplier | Multiplier | 0 … 10, bước 0.25 | 41 |
+| Spirit Multiplier | Stuck Range (m) | 0 … 100, bước 1 | 101 |
+| Rise Archer | Bow/Crossbow/Ballista Damage, Bow Scaling, Projectile Speed, Rain Range, Rain Spread | 0 … 10, bước 0.1 | 101 |
+| Rise Archer | Bow/Crossbow/Ballista Weight | 0 … 5, bước 0.1 | 51 |
+| Rise Archer | Bow/Crossbow/Ballista Sell Value | 0 … 10, bước 0.5 | 21 |
+
+---
+
 ## Không có menu
 
 FasterRevival (không có thiết lập đáng chỉnh), SoulsTeleport (đã có giao diện riêng), SomeTweaks (đã dừng), WindowResize (mod nội bộ, không đăng).

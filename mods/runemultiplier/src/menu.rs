@@ -25,7 +25,8 @@ const MIN_MULTIPLIER: f64 = -1000.0;
 const MAX_MULTIPLIER: f64 = 1000.0;
 
 static MULTIPLIER: NumberSetting =
-    NumberSetting::new("Multiplier", MIN_MULTIPLIER, MAX_MULTIPLIER, Some(crate::hook::set_multiplier));
+    NumberSetting::new("Multiplier", MIN_MULTIPLIER, MAX_MULTIPLIER, Some(crate::hook::set_multiplier))
+        .slider(-10.0, 10.0, 0.5);
 static LOG_FILE: Setting = Setting::flag("LogFile");
 
 static MENU: OnceLock<erui::Menu> = OnceLock::new();
@@ -90,5 +91,14 @@ mod tests {
         assert!(used.len() >= 5, "found only {} menu keys", used.len());
         assert_eq!(used, TEXT.keys("english"), "menu.rs keys and locales/en.json differ");
         assert_eq!(used, TEXT.keys("vietnamese"), "menu.rs keys and locales/vi.json differ");
+    }
+
+    /// Every row meant to be a native slider has a valid range and step (else
+    /// it silently stays a typed row).
+    #[test]
+    fn slider_rows_have_a_valid_range() {
+        for setting in [&MULTIPLIER] {
+            assert!(setting.has_slider(), "{} would not be a slider", setting.key);
+        }
     }
 }
