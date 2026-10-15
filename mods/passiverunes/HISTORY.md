@@ -24,3 +24,4 @@ sử git của `README.md`.
 | 2026-10-07 | Đổi thư mục `crates/` thành `mods/`; tách README thành README + HISTORY + docs/ | |
 | 2026-10-13 | Mặc định `ReloadBanner` đổi thành `false`: nhiều mod cùng bật thì mỗi mod hiện một banner vài giây khi bấm reload | |
 | 2026-10-13 | Thêm menu tùy chọn trong game qua ERNativeUI (`common::erui`): bật/tắt, chu kỳ, lượng rune, phần trăm, lãi (số gõ vào ô văn bản), log. Mod đọc ini mỗi tick nên chỉ cần lưu ini, không cần reload; danh sách milestone giữ ở ini. | [docs](../../docs/ingame_menu.md) |
+| 2026-10-15 | Chữ của menu trong game chuyển sang hệ đa ngôn ngữ (`locales/en.json`, `vi.json`): hiện tiếng Việt khi game chạy tiếng Việt, ngôn ngữ khác dùng tiếng Anh | [docs](../../shared/docs/i18n.md) |

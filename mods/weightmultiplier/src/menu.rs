@@ -20,6 +20,7 @@ use std::sync::OnceLock;
 
 use common::config;
 use common::erui::{self, MenuBuilder, NumberSetting, Setting};
+use common::i18n::Catalog;
 
 static MODE: Setting = Setting::int("Mode");
 static MULTIPLIER: NumberSetting = NumberSetting::new("Multiplier", -1000.0, 1000.0, None);
@@ -45,31 +46,31 @@ fn apply_saved() {
     crate::hook::reload_from_config();
 }
 
+/// The menu texts, one file per language (`locales/`); English is the fallback.
+static TEXT: Catalog = Catalog::new(&[
+    ("english", include_str!("../locales/en.json")),
+    ("vietnamese", include_str!("../locales/vi.json")),
+]);
+
+/// The text of `key` in the host language.
+fn t(key: &str) -> String {
+    TEXT.tr(key)
+}
+
 fn build(b: &mut MenuBuilder) -> Result<(), String> {
-    let page = b.submenu(b.root(), "Weight Multiplier", "Settings for the Weight Multiplier mod.")?;
-    b.choice(
-        page,
-        "Mode",
-        "Multiply: your equip load is multiplied. Fixed value: your equip load is always one number.",
-        &["Multiply", "Fixed value"],
-        &MODE,
-        mode_row,
-    )?;
+    let page = b.submenu(b.root(), "Weight Multiplier", &t("mod.help"))?;
+    let options = [t("mode.options.multiply"), t("mode.options.fixed")];
+    let refs: Vec<&str> = options.iter().map(String::as_str).collect();
+    b.choice(page, &t("mode.label"), &t("mode.help"), &refs, &MODE, mode_row)?;
     b.number(
         page,
-        "Multiplier",
-        "Multiplies your equip load, used when Mode is Multiply. 1 = vanilla.",
+        &t("multiplier.label"),
+        &t("multiplier.help"),
         &MULTIPLIER,
         crate::hook::configured_multiplier,
     )?;
-    b.number(
-        page,
-        "Fixed Value",
-        "The equip load you always have, used when Mode is Fixed value.",
-        &FIXED_VALUE,
-        fixed_value,
-    )?;
-    b.toggle(page, "Log file", "Write a log file next to the DLL, for troubleshooting.", &LOG_FILE, log_file_row)
+    b.number(page, &t("fixed_value.label"), &t("fixed_value.help"), &FIXED_VALUE, fixed_value)?;
+    b.toggle(page, &t("log.label"), &t("log.help"), &LOG_FILE, log_file_row)
 }
 
 /// Registers the menu on a worker thread. Must start early: the host closes
@@ -83,5 +84,33 @@ pub fn start(hmodule: u64, ini_path: String) {
 pub fn sync_from_config() {
     if let Some(menu) = MENU.get() {
         menu.sync();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every key the menu passes to the text lookup is in every language file,
+    /// and the files have the same keys (nothing missing, nothing left over).
+    #[test]
+    fn language_files_match_the_menu_keys() {
+        let source = include_str!("menu.rs");
+        let mut used: Vec<String> = Vec::new();
+        for (at, _) in source.match_indices("t(\"") {
+            let before = source[..at].chars().next_back();
+            if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                continue;
+            }
+            let rest = &source[at + 3..];
+            if let Some(end) = rest.find('"') {
+                used.push(rest[..end].to_string());
+            }
+        }
+        used.sort();
+        used.dedup();
+        assert!(used.len() >= 9, "found only {} menu keys", used.len());
+        assert_eq!(used, TEXT.keys("english"), "menu.rs keys and locales/en.json differ");
+        assert_eq!(used, TEXT.keys("vietnamese"), "menu.rs keys and locales/vi.json differ");
     }
 }

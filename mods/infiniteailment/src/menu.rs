@@ -20,6 +20,7 @@ use std::sync::OnceLock;
 
 use common::config;
 use common::erui::{self, MenuBuilder, NumberSetting, PageHandle, Setting};
+use common::i18n::Catalog;
 
 static ROT_DURATION: NumberSetting = NumberSetting::new("ScarletRot.Duration", -1.0, 86_400.0, None);
 static ROT_PERCENT: NumberSetting = NumberSetting::new("ScarletRot.PercentDamage", -100.0, 100.0, None);
@@ -30,6 +31,17 @@ static POISON_FIXED: NumberSetting = NumberSetting::whole("Poison.FixedDamage", 
 static LOG_FILE: Setting = Setting::flag("LogFile");
 
 static MENU: OnceLock<erui::Menu> = OnceLock::new();
+
+/// The menu texts, one file per language (`locales/`); English is the fallback.
+static TEXT: Catalog = Catalog::new(&[
+    ("english", include_str!("../locales/en.json")),
+    ("vietnamese", include_str!("../locales/vi.json")),
+]);
+
+/// The text of `key` in the host language.
+fn t(key: &str) -> String {
+    TEXT.tr(key)
+}
 
 fn log_file_row() -> u8 {
     config::get_bool("LogFile", false) as u8
@@ -47,9 +59,9 @@ fn add_ailment_page(
 ) -> Result<(), String> {
     let page = b.submenu(parent, name, help)?;
     let rows = [
-        ("Duration (s)", format!("How long the damage lasts, in seconds. -1 = infinite. Vanilla: {}.", vanilla[0])),
-        ("Damage (%)", format!("Percent of your max HP lost each tick; negative heals. Vanilla: {}.", vanilla[1])),
-        ("Damage", format!("Flat damage each tick, added on top; negative heals. Vanilla: {}.", vanilla[2])),
+        (t("duration.label"), t("duration.help").replace("{vanilla}", vanilla[0])),
+        (t("percent.label"), t("percent.help").replace("{vanilla}", vanilla[1])),
+        (t("fixed.label"), t("fixed.help").replace("{vanilla}", vanilla[2])),
     ];
     for (i, (label, help)) in rows.iter().enumerate() {
         b.number(page, label, help, settings[i], reads[i])?;
@@ -58,12 +70,12 @@ fn add_ailment_page(
 }
 
 fn build(b: &mut MenuBuilder) -> Result<(), String> {
-    let page = b.submenu(b.root(), "Infinite Ailment", "Settings for the Infinite Ailment mod.")?;
+    let page = b.submenu(b.root(), "Infinite Ailment", &t("mod.help"))?;
     add_ailment_page(
         b,
         page,
-        "Scarlet Rot",
-        "Scarlet Rot damage over time.",
+        &t("scarlet_rot.title"),
+        &t("scarlet_rot.help"),
         [&ROT_DURATION, &ROT_PERCENT, &ROT_FIXED],
         [
             || config::get_double("ScarletRot.Duration", -1.0),
@@ -75,8 +87,8 @@ fn build(b: &mut MenuBuilder) -> Result<(), String> {
     add_ailment_page(
         b,
         page,
-        "Poison",
-        "Poison damage over time.",
+        &t("poison.title"),
+        &t("poison.help"),
         [&POISON_DURATION, &POISON_PERCENT, &POISON_FIXED],
         [
             || config::get_double("Poison.Duration", -1.0),
@@ -85,7 +97,7 @@ fn build(b: &mut MenuBuilder) -> Result<(), String> {
         ],
         ["90", "0.07", "7"],
     )?;
-    b.toggle(page, "Log file", "Write a log file next to the DLL, for troubleshooting.", &LOG_FILE, log_file_row)
+    b.toggle(page, &t("log.label"), &t("log.help"), &LOG_FILE, log_file_row)
 }
 
 /// Registers the menu on a worker thread. Must start early: the host closes
@@ -99,5 +111,33 @@ pub fn start(hmodule: u64, ini_path: String) {
 pub fn sync_from_config() {
     if let Some(menu) = MENU.get() {
         menu.sync();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every key the menu passes to the text lookup is in every language file,
+    /// and the files have the same keys (nothing missing, nothing left over).
+    #[test]
+    fn language_files_match_the_menu_keys() {
+        let source = include_str!("menu.rs");
+        let mut used: Vec<String> = Vec::new();
+        for (at, _) in source.match_indices("t(\"") {
+            let before = source[..at].chars().next_back();
+            if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                continue;
+            }
+            let rest = &source[at + 3..];
+            if let Some(end) = rest.find('"') {
+                used.push(rest[..end].to_string());
+            }
+        }
+        used.sort();
+        used.dedup();
+        assert!(used.len() >= 10, "found only {} menu keys", used.len());
+        assert_eq!(used, TEXT.keys("english"), "menu.rs keys and locales/en.json differ");
+        assert_eq!(used, TEXT.keys("vietnamese"), "menu.rs keys and locales/vi.json differ");
     }
 }

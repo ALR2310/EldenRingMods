@@ -1,0 +1,29 @@
+{
+  "mod": {
+    "help": "Settings for the Passive Runes mod."
+  },
+  "enabled": {
+    "label": "Enabled",
+    "help": "Turns the passive rune rewards on or off."
+  },
+  "interval": {
+    "label": "Interval (ms)",
+    "help": "How often you get runes, in milliseconds (1000 = 1 second). 0 pauses the interval rewards."
+  },
+  "amount": {
+    "label": "Amount",
+    "help": "Runes you get each time. Negative takes runes away."
+  },
+  "next_level": {
+    "label": "Next Level (%)",
+    "help": "Each time, also get this percent of the runes needed for your next level. Negative takes runes away."
+  },
+  "interest": {
+    "label": "Interest (%)",
+    "help": "Each time, also get this percent of the runes you hold. Grows fast. Negative takes runes away."
+  },
+  "log": {
+    "label": "Log file",
+    "help": "Write a log file next to the DLL, for troubleshooting."
+  }
+}

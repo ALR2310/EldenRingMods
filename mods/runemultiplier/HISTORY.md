@@ -22,3 +22,4 @@ sử git của `README.md`.
 | 2026-10-07 | Đổi thư mục `crates/` thành `mods/`; tách README thành README + HISTORY + docs/; kiểm tra bằng IDA: mẫu AOB neo duy nhất trên 2.6.2.0, 2.7.0.0, 2.7.1.0 | [docs](docs/addsoul_hook.md) |
 | 2026-10-13 | Menu trong game tùy chọn qua ERNativeUI (`common::erui`, `src/menu.rs`): hàng "Rune Multiplier" ở System > Game Options mở trang với hàng nhập số cho hệ số (-1000..1000) và công tắc ghi log; đổi trong menu áp ngay và ghi lại ini; thiếu host thì mod chạy như cũ | [docs](../../docs/ingame_menu.md) |
 | 2026-10-13 | Mặc định `ReloadBanner` đổi thành `false`: nhiều mod cùng bật thì mỗi mod hiện một banner vài giây khi bấm reload | |
+| 2026-10-15 | Chữ của menu trong game chuyển sang `common::i18n` (`locales/en.json`, `vi.json`): menu hiện tiếng Việt khi game chạy ngôn ngữ Việt, còn lại lùi về tiếng Anh | [docs](../../shared/docs/i18n.md) |
