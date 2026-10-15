@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! Speed Multiplier           -> opens a page with:
-//!   All Player Actions       number 0.1..10  (overrides the rows below)
+//!   All Player Actions       slider 0.1..10  (overrides the rows below)
 //!   Player Movement          -> Walk, Run, Sneak, Jump, Roll, Ladder
 //!   Player Actions           -> Attack, Critical, Skill, Cast, Item, Other
 //!   Torrent                  -> All, Walk, Run, Jump, Other
@@ -12,9 +12,10 @@
 //!   Log file                 on/off
 //! ```
 //!
-//! Every speed row is a text row where the multiplier is typed (`1.5` or
-//! `1,5`); the bounds 0.1..10 are the ones the mod clamps to when it applies a
-//! speed. Typed numbers are saved as TOML floats (`2` becomes `2.0`).
+//! Every speed row is a native slider in steps of 0.1 (ERNativeUI 1.2 or newer;
+//! older hosts get a text row where the multiplier is typed, `1.5` or `1,5`).
+//! The bounds 0.1..10 are the ones the mod clamps to when it applies a speed.
+//! Values are saved as TOML floats (`2` becomes `2.0`).
 //! Changes are written to `SpeedMultiplier.toml` (comments kept) once the
 //! player stops for a second, and the mod applies them when it re-reads the
 //! file right after (about a second after the player stops): it reads its
@@ -31,10 +32,12 @@ use crate::config;
 /// The bounds `speed.rs` clamps every multiplier to.
 const MIN_SPEED: f64 = 0.1;
 const MAX_SPEED: f64 = 10.0;
+/// Slider step: 100 positions from 0.1 to 10.
+const SPEED_STEP: f64 = 0.1;
 
 macro_rules! speed {
     ($name:ident, $key:expr) => {
-        static $name: NumberSetting = NumberSetting::float($key, MIN_SPEED, MAX_SPEED, None);
+        static $name: NumberSetting = NumberSetting::float($key, MIN_SPEED, MAX_SPEED, None).stepped(SPEED_STEP);
     };
 }
 
