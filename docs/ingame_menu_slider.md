@@ -1,6 +1,13 @@
 # Thanh trượt native: số âm và số thập phân
 
-**Status 2026-10-13: nghiên cứu tĩnh xong (IDA, exe 2.7.1.0, và đọc `mod-settings-menu.dll`), CHƯA thử nghiệm trong game. Kết luận: số âm và thập phân làm được bằng ánh xạ hiển thị
+**Status 2026-10-15: ĐÃ CÓ SẴN trong ERNativeUI 1.2.0/1.2.1 (API 1.2): Numeric Slider (số âm, thập phân, tiền tố/hậu tố như `x0.6`, `3.0s`) và Custom Slider (nhãn tuỳ ý cho từng vị trí). Không cần fork hay vá game. Cách tác giả làm trùng với phân tích bên dưới (hook `0x74FA20`, ghi đè `Text_0`/`Text_1` sau khi gọi hàm gốc, giá trị nền vẫn là một byte chỉ số). Phần dưới giữ lại làm bằng chứng nghiên cứu; chưa thử bản 1.2.x trong game.**
+
+Tóm tắt API 1.2 (tài liệu `docs/guides/controls/numeric-slider.md`, `custom-slider.md`, `docs/migrations/1.1-to-1.2.md` của ERNativeUI):
+- `add_numeric_slider`: min/max/step/giá trị đầu kiểu số nguyên đã nhân `10^decimal_places` (`ERUI_NumericSliderDesc`, `ERUI_DecimalValue { scaled_value, decimal_places }`), `decimal_places` 0..9, tiền tố/hậu tố UTF-16;
+  callback nhận `value`/`scaled_value`/`index`/`value_count`; `set/get_numeric_slider_value`. **2 đến 256 vị trí** (vd. -1000..1000 phải bước >= 8).
+- `add_custom_slider`: `values[]` nhãn UTF-16 (2..256, mỗi nhãn tối đa 64), callback nhận chỉ số; `set/get_custom_slider_index`.
+- Client phải xin **API 1.2** (`ERUI_API_V1_2_SIZE`, `ERUI_CAP_NUMERIC_SLIDER` bit 16, `ERUI_CAP_CUSTOM_SLIDER` bit 17); client 1.1 vẫn chạy với host 1.2 nhưng client 1.2 cần host >= 1.2.
+- Hỗ trợ exe 2.7.0.0 và 2.7.1.0 như trước.
 (`min + chỉ_số x step`) với một hook ghi đè chữ của slider (`0x74FA20`), đã có tiền lệ; cũng có đường sửa 1 byte nếu muốn lưu thẳng số âm trong byte. Hiện tại menu dùng ô nhập số cho số âm/thập phân, nên chưa cần làm.**
 
 Bối cảnh: ERNativeUI (xem [ingame_menu.md](ingame_menu.md)) giới hạn slider ở một byte 0..255. Câu hỏi: giới hạn đó nằm ở game hay ở thư viện?

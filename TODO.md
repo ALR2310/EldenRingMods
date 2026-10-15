@@ -9,7 +9,7 @@ Quy ước đầy đủ: `CLAUDE.md`, mục "Viết `TODO.md` gọn".
 Chi tiết: `docs/ingame_menu.md`
 
 - [ ] [research] Slider số âm/thập phân: hook `0x74FA20` ánh xạ `min + chỉ_số x step` (tiền lệ `mod-settings-menu.dll`), thử bản fork ERNativeUI (`docs/ingame_menu_slider.md`)
-- [ ] [research] Menu cuộn / vượt giới hạn 15 hàng của trang con (`docs/ingame_menu_scroll.md`)
+- [ ] [research] Menu cuộn / vượt giới hạn 15 hàng của trang con: trang Options là ánh xạ 1:1 widget-clip, cuộn thật cần tự gán lại controller khi cuộn (`docs/ingame_menu_newpage.md`, probe `scratch/menuprobe`)
 - [ ] Phát hành lần lượt các mod đã có menu (bullet có sẵn ở `[Unreleased]`); ghi trên trang Nexus rằng ERNativeUI là phụ thuộc tùy chọn (exe 2.7.0.0 / 2.7.1.0)
 
 ## InfiniteAilment
