@@ -45,3 +45,5 @@ lịch sử git của `README.md`.
 
 | 2026-10-15 | Menu trong game: Multiplier (0..10, bước 0.25) và Stuck Range (0..100, bước 1) thành slider native khi host có API 1.2 (ERNativeUI >= 1.2), phạm vi slider hẹp hơn phạm vi mod chấp nhận (ô gõ và tệp cấu hình vẫn nhận số lớn); chưa thử trong game | [docs](../../docs/ingame_menu.md) |
 | 2026-10-16 | Log gọn lại theo kiểu ngắn, kỹ thuật cho dev: bỏ dòng lặp ý, địa chỉ patch, câu dài; chỉ ghi 1 lần khi chờ thế giới | |
+| 2026-10-16 | `Amount` không đếm spirit tạm (Mimic Tear - Blob): `Amount=10` ra 10 Mimic thay vì 5; chưa test trong game | [docs](docs/mimic_tear.md) |
+| 2026-10-16 | Điều tra báo cáo Mimic Tear/Seamless: thêm `common::crash` (log lỗi nghiêm trọng); crash khi gọi nhiều Mimic là lỗi bộ vẽ của game, không phải mod; `Amount` đếm spirit thật thay vì cả Blob | [docs](docs/mimic_tear.md) |

@@ -21,12 +21,12 @@
 //! - Re-checked on a periodic tick (cheap and idempotent), which also
 //!   picks up ini changes after a hot reload.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::time::Duration;
 
 use eldenring::ChainingMapBucketEntry;
-use eldenring::cs::{CSTaskGroupIndex, WorldChrMan};
+use eldenring::cs::{BuddyParam, CSTaskGroupIndex, SoloParamRepository, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
 use common::{config, logger};
@@ -34,6 +34,40 @@ use common::{config, logger};
 const TICK_INTERVAL_MS: f64 = 1000.0;
 
 static ORIGINAL_CHAIN_IDS: Mutex<Option<HashMap<i32, Vec<i32>>>> = Mutex::new(None);
+
+/// NpcParam IDs of spirits that only exist for a few seconds before the game
+/// replaces them: "Mimic Tear - Blob" spawns next to the real Mimic Tear and
+/// vanishes (`docs/mimic_tear.md`). They sit in the chain but are not
+/// spirits the player counts, so `Amount` must not count them.
+const TRANSIENT_NPCS: [i32; 1] = [133201000];
+
+/// BuddyParam IDs whose NPC is in [TRANSIENT_NPCS]; built once, kept only
+/// when the row IDs could be read.
+static TRANSIENT_BUDDIES: Mutex<Option<HashSet<i32>>> = Mutex::new(None);
+
+fn transient_buddies() -> HashSet<i32> {
+    let mut guard = TRANSIENT_BUDDIES.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(set) = guard.as_ref() {
+        return set.clone();
+    }
+    let Ok(repo) = (unsafe { SoloParamRepository::instance_mut() }) else {
+        return HashSet::new();
+    };
+    let Some(ids) = common::params::row_ids::<BuddyParam>(repo) else {
+        logger::warn("Chain: BuddyParam row ids unreadable, Amount counts every chain entry");
+        return HashSet::new();
+    };
+    let mut set = HashSet::new();
+    common::params::for_each_row_mut::<BuddyParam>(repo, |index, row| {
+        if TRANSIENT_NPCS.contains(&row.npc_param_id())
+            && let Some(&id) = ids.get(index)
+        {
+            set.insert(id as i32);
+        }
+    });
+    *guard = Some(set.clone());
+    set
+}
 
 enum Mode {
     /// `Amount` - every Ash summons exactly this many.
@@ -54,12 +88,22 @@ fn read_mode() -> Option<Mode> {
     None
 }
 
-fn target_count(mode: &Mode, original_len: usize) -> usize {
-    let raw = match mode {
-        Mode::Fixed(amount) => *amount,
+fn target_count(mode: &Mode, original_ids: &[i32], transient: &HashSet<i32>) -> usize {
+    raw_count(mode, original_ids, transient).clamp(1, crate::band::band_len() as usize)
+}
+
+/// How many chain entries `mode` asks for, before the `MaxSpirits` cap.
+fn raw_count(mode: &Mode, original_ids: &[i32], transient: &HashSet<i32>) -> usize {
+    let original_len = original_ids.len();
+    match mode {
+        // `Amount` counts real spirits: with a transient entry in the chain
+        // (Mimic Tear: Blob + Mimic) each one needs the whole group.
+        Mode::Fixed(amount) => {
+            let real = original_ids.iter().filter(|id| !transient.contains(id)).count().max(1);
+            (amount * original_len).div_ceil(real)
+        }
         Mode::Multiplier(factor) => ((original_len as f64) * factor).round() as usize,
-    };
-    raw.clamp(1, crate::band::band_len() as usize)
+    }
 }
 
 /// Builds a `target_len - 1` node extension cycling through `original_ids`
@@ -107,6 +151,8 @@ fn apply(mode: Option<&Mode>) -> usize {
     let mut snapshot_guard = ORIGINAL_CHAIN_IDS.lock().unwrap();
     let snapshot = snapshot_guard.get_or_insert_with(HashMap::new);
 
+    let transient = if matches!(mode, Some(Mode::Fixed(_))) { transient_buddies() } else { HashSet::new() };
+
     let mut changed = 0;
     for (speffect_id, head) in manager.trigger_speffect_to_buddy_map.iter_chains_mut() {
         let original_ids = snapshot
@@ -116,7 +162,7 @@ fn apply(mode: Option<&Mode>) -> usize {
             continue;
         }
         let target = match mode {
-            Some(mode) => target_count(mode, original_ids.len()),
+            Some(mode) => target_count(mode, original_ids, &transient),
             None => original_ids.len(),
         };
         if head.chain_len() == target {
@@ -156,5 +202,21 @@ pub fn run() {
 
     loop {
         std::thread::sleep(Duration::from_secs(60));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn amount_counts_real_spirits_not_transient_entries() {
+        let transient = HashSet::from([7]);
+        // Mimic Tear: [Blob, Mimic] -> 10 Mimics need 10 pairs.
+        assert_eq!(raw_count(&Mode::Fixed(10), &[7, 8], &transient), 20);
+        // A plain 3-spirit Ash: Amount is the entry count.
+        assert_eq!(raw_count(&Mode::Fixed(10), &[1, 2, 3], &transient), 10);
+        // Multiplier already scales the whole chain.
+        assert_eq!(raw_count(&Mode::Multiplier(5.0), &[7, 8], &transient), 10);
     }
 }
