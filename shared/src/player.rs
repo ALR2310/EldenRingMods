@@ -89,7 +89,7 @@ pub fn wait_for_solo_param_repository() -> &'static mut SoloParamRepository {
         }
         if Instant::now() >= next_reminder {
             next_reminder += REMINDER_EVERY;
-            crate::logger::log("SoloParamRepository not found yet, waiting for player to join world...");
+            crate::logger::log("SoloParamRepository: waiting for world");
         }
         std::thread::sleep(Duration::from_millis(200));
     }

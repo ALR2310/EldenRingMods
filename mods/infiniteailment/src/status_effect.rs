@@ -81,11 +81,6 @@ use fromsoftware_shared::FromStatic;
 use common::config;
 use common::logger;
 
-/// The vanilla duration (seconds) shared by both ailments' targeted rows -
-/// also part of the filter signature itself (see the module doc comment
-/// for why `EffectEndurance == 90` is required, not just `!= 0`).
-const VANILLA_DURATION: f32 = 90.0;
-
 /// One status ailment's own `SpCategory`/`StateInfo` values, ini key
 /// prefix, and vanilla `ChangeHpRate`/`ChangeHpPoint` defaults - see the
 /// module doc comment for where each of these came from. `StateInfo`
@@ -94,18 +89,37 @@ const VANILLA_DURATION: f32 = 90.0;
 /// matched 0 Poison rows.
 struct Ailment {
     name: &'static str,
-    sp_category: u16,
+    /// The vanilla `EffectEndurance` of the targeted rows - also part of the
+    /// filter signature itself (see the module doc comment for why it is
+    /// required, not just `!= 0`).
+    vanilla_duration: f32,
+    /// `None` = any category (Black Flame rows come in categories 10 and 20).
+    sp_category: Option<u16>,
     state_info: u16,
+    /// `Some` = only these row IDs, and only if they still have the signature
+    /// (Black Flame has no field signature of its own: its DoT rows look like
+    /// Destined Death's and the NPC burns, see `docs/black_flame.md`).
+    only_ids: Option<&'static [u32]>,
+    /// `false` = a Max HP debuff row: only `EffectEndurance` is written (these
+    /// rows have no `ChangeHpRate`), and the vanilla duration varies per row.
+    damage: bool,
+    duration_key: &'static str,
+    default_duration: f64,
     ini_prefix: &'static str,
     default_percent_damage: f64,
     default_fixed_damage: i32,
-    matched_row_ids: Mutex<Option<Vec<u32>>>,
+    matched_row_ids: Mutex<Option<Vec<(u32, usize)>>>,
 }
 
 static SCARLET_ROT: Ailment = Ailment {
     name: "Scarlet Rot",
-    sp_category: 10005,
+    vanilla_duration: 90.0,
+    sp_category: Some(10005),
     state_info: 5,
+    only_ids: None,
+    damage: true,
+    duration_key: "ScarletRot.Duration",
+    default_duration: -1.0,
     ini_prefix: "ScarletRot",
     default_percent_damage: 0.18,
     default_fixed_damage: 15,
@@ -114,11 +128,76 @@ static SCARLET_ROT: Ailment = Ailment {
 
 static POISON: Ailment = Ailment {
     name: "Poison",
-    sp_category: 10004,
+    vanilla_duration: 90.0,
+    sp_category: Some(10004),
     state_info: 2,
+    only_ids: None,
+    damage: true,
+    duration_key: "Poison.Duration",
+    default_duration: -1.0,
     ini_prefix: "Poison",
     default_percent_damage: 0.07,
     default_fixed_damage: 7,
+    matched_row_ids: Mutex::new(None),
+};
+
+/// Black Flame's burn rows the player inflicts (names from the SmithBox export):
+/// Black Flame Tornado (835), Godslayer's Greatsword (855), Gargoyle's Blackblade
+/// (860), and the incantations Black Flame (1621000), Scouring Black Flame
+/// (1623000), Noble Presence (1624010), Black Flame Ritual (1625000) and Black
+/// Flame Blade (1626001). NPC burns (29000...) and Destined Death are left out.
+const BLACK_FLAME_ROWS: [u32; 8] = [835, 855, 860, 1621000, 1623000, 1624010, 1625000, 1626001];
+
+static BLACK_FLAME: Ailment = Ailment {
+    name: "Black Flame",
+    vanilla_duration: 2.0,
+    sp_category: None,
+    state_info: 0,
+    only_ids: Some(&BLACK_FLAME_ROWS),
+    damage: true,
+    duration_key: "BlackFlame.Duration",
+    default_duration: 10.0,
+    ini_prefix: "BlackFlame",
+    default_percent_damage: 0.1,
+    default_fixed_damage: 1,
+    matched_row_ids: Mutex::new(None),
+};
+
+/// Destined Death's burn rows: "DoT Main" (6850) and its variants (6840, 6841,
+/// 6851), same numbers as Black Flame's (see `docs/black_flame.md`).
+const DESTINED_DEATH_ROWS: [u32; 4] = [6840, 6841, 6850, 6851];
+
+static DESTINED_DEATH: Ailment = Ailment {
+    name: "Destined Death",
+    vanilla_duration: 2.0,
+    sp_category: None,
+    state_info: 0,
+    only_ids: Some(&DESTINED_DEATH_ROWS),
+    damage: true,
+    duration_key: "DestinedDeath.Duration",
+    default_duration: 10.0,
+    ini_prefix: "DestinedDeath",
+    default_percent_damage: 0.1,
+    default_fixed_damage: 1,
+    matched_row_ids: Mutex::new(None),
+};
+
+/// Destined Death's "Max HP Debuff" rows: 6860 (15 s) and 6865 (45 s), which
+/// lower max HP to 90% instead of ticking damage.
+const DESTINED_DEATH_DEBUFF_ROWS: [u32; 2] = [6860, 6865];
+
+static DESTINED_DEATH_MAX_HP: Ailment = Ailment {
+    name: "Destined Death max HP loss",
+    vanilla_duration: 0.0,
+    sp_category: None,
+    state_info: 0,
+    only_ids: Some(&DESTINED_DEATH_DEBUFF_ROWS),
+    damage: false,
+    duration_key: "DestinedDeath.MaxHpDuration",
+    default_duration: -1.0,
+    ini_prefix: "DestinedDeath",
+    default_percent_damage: 0.0,
+    default_fixed_damage: 0,
     matched_row_ids: Mutex::new(None),
 };
 
@@ -132,7 +211,7 @@ struct Settings {
 
 fn build_settings(ailment: &Ailment) -> Settings {
     Settings {
-        duration: config::get_double(&format!("{}.Duration", ailment.ini_prefix), -1.0) as f32,
+        duration: config::get_double(ailment.duration_key, ailment.default_duration) as f32,
         percent_damage: config::get_double(
             &format!("{}.PercentDamage", ailment.ini_prefix),
             ailment.default_percent_damage,
@@ -150,8 +229,11 @@ fn build_settings(ailment: &Ailment) -> Settings {
 /// its vanilla `EffectEndurance` (each ailment's first scan) - see
 /// [Ailment::matched_row_ids].
 fn matches(ailment: &Ailment, row: &SP_EFFECT_PARAM_ST) -> bool {
-    row.effect_endurance() == VANILLA_DURATION
-        && row.sp_category() == ailment.sp_category
+    if !ailment.damage {
+        return row.effect_endurance() > 0.0;
+    }
+    row.effect_endurance() == ailment.vanilla_duration
+        && ailment.sp_category.is_none_or(|category| row.sp_category() == category)
         && row.state_info() == ailment.state_info
         && row.change_hp_rate() != 0.0
 }
@@ -163,19 +245,39 @@ fn matches(ailment: &Ailment, row: &SP_EFFECT_PARAM_ST) -> bool {
 /// logging.
 fn apply(ailment: &Ailment, repo: &mut SoloParamRepository, settings: &Settings) -> Vec<u32> {
     let mut cache = ailment.matched_row_ids.lock().unwrap();
-    let ids = cache.get_or_insert_with(|| {
-        repo.rows::<SpEffectParam>()
-            .filter(|(_, row)| matches(ailment, row))
-            .map(|(id, _)| id)
-            .collect()
-    });
+    if cache.is_none() {
+        // Matched by row index (not `rows()`, which panics on some modded
+        // regulations - see `common::params`); the ID is kept for logging.
+        // A failed scan is not cached, so the next reload tries again.
+        let row_ids = match common::params::row_ids_or_reason::<SpEffectParam>(repo) {
+            Ok(ids) => ids,
+            Err(reason) => {
+                logger::warn(&format!("{}: couldn't read the SpEffectParam row ids: {reason}", ailment.name));
+                return Vec::new();
+            }
+        };
+        let mut found = Vec::new();
+        common::params::for_each_row_mut::<SpEffectParam>(repo, |index, row| {
+            let Some(&id) = row_ids.get(index) else {
+                return;
+            };
+            let listed = ailment.only_ids.is_none_or(|ids| ids.contains(&id));
+            if listed && matches(ailment, row) {
+                found.push((id, index));
+            }
+        });
+        *cache = Some(found);
+    }
+    let ids = cache.as_ref().expect("filled above");
 
     let mut touched = Vec::new();
-    for &id in ids.iter() {
-        if let Some(row) = repo.get_mut::<SpEffectParam>(id) {
+    for &(id, index) in ids.iter() {
+        if let Some(row) = repo.get_row_by_index_mut::<SpEffectParam>(index) {
             row.set_effect_endurance(settings.duration);
-            row.set_change_hp_rate(settings.percent_damage);
-            row.set_change_hp_point(settings.fixed_damage);
+            if ailment.damage {
+                row.set_change_hp_rate(settings.percent_damage);
+                row.set_change_hp_point(settings.fixed_damage);
+            }
             touched.push(id);
         }
     }
@@ -183,9 +285,18 @@ fn apply(ailment: &Ailment, repo: &mut SoloParamRepository, settings: &Settings)
 }
 
 fn log_result(ailment: &Ailment, settings: &Settings, touched: &[u32], suffix: &str) {
+    if !ailment.damage {
+        logger::log(&format!(
+            "SpEffectParam: EffectEndurance={} set on {} {} row(s){suffix}",
+            settings.duration,
+            touched.len(),
+            ailment.name,
+        ));
+        return;
+    }
     logger::log(&format!(
         "SpEffectParam: EffectEndurance={}, ChangeHpRate={}, ChangeHpPoint={} set on {} {} \
-         row(s){suffix}: {touched:?}",
+         row(s){suffix}",
         settings.duration,
         settings.percent_damage,
         settings.fixed_damage,
@@ -200,47 +311,6 @@ fn apply_and_log(ailment: &'static Ailment, repo: &mut SoloParamRepository, suff
     log_result(ailment, &settings, &touched, suffix);
 }
 
-/// Verification-only: logs every field of every row `ailment` matched (as
-/// currently cached in [Ailment::matched_row_ids]), one line per row, so
-/// the found row set can be checked by eye against SmithBox instead of
-/// just trusting the ID list in [log_result]. Meant to be called once,
-/// right after the first [apply_and_log] - not on every reload.
-fn log_matched_rows_detail(ailment: &Ailment, repo: &SoloParamRepository) {
-    let cache = ailment.matched_row_ids.lock().unwrap();
-    let Some(ids) = cache.as_ref() else {
-        logger::warn(&format!(
-            "{}: no matched rows cached yet - call after apply_and_log.",
-            ailment.name
-        ));
-        return;
-    };
-
-    logger::log(&format!(
-        "{}: detailed dump of {} matched row(s):",
-        ailment.name,
-        ids.len()
-    ));
-    for &id in ids {
-        let Some(row) = repo.get::<SpEffectParam>(id) else {
-            logger::warn(&format!("  - ID {id}: not found (unexpected)."));
-            continue;
-        };
-        logger::log(&format!(
-            "  - ID {id}: EffectEndurance={}, ChangeHpRate={}, ChangeHpPoint={}, \
-             PoizonAtkPower={}, DiseaseAtkPower={}, TargetEnemy={}, TargetPlayer={}, \
-             CycleOccSpEffectId={}",
-            row.effect_endurance(),
-            row.change_hp_rate(),
-            row.change_hp_point(),
-            row.poizon_attack_power(),
-            row.disease_attack_power(),
-            row.effect_target_enemy(),
-            row.effect_target_player(),
-            row.cycle_occurrence_sp_effect_id(),
-        ));
-    }
-}
-
 /// Applies both ailments' settings once, waiting (forever) for
 /// `SoloParamRepository` to actually be populated, then watches
 /// `General.ReloadKey` (via [`common::reload`]) on the game's own
@@ -253,7 +323,9 @@ pub fn run() {
     let repo = common::player::wait_for_solo_param_repository();
     apply_and_log(&SCARLET_ROT, repo, "");
     apply_and_log(&POISON, repo, "");
-    log_matched_rows_detail(&POISON, repo);
+    apply_and_log(&BLACK_FLAME, repo, "");
+    apply_and_log(&DESTINED_DEATH, repo, "");
+    apply_and_log(&DESTINED_DEATH_MAX_HP, repo, "");
 
     let mut waiting_logged = false;
     let cs_task = common::task::wait_for_cs_task();
@@ -270,7 +342,7 @@ pub fn run() {
             // menu): keep the request and apply it once the world is loaded.
             if common::player::main_player_chr_ins_ptr().is_none() {
                 if !waiting_logged {
-                    logger::warn("not in-world yet, reload deferred until the world is loaded.");
+                    logger::warn("Reload: deferred, not in world");
                     waiting_logged = true;
                 }
                 return;
@@ -280,11 +352,14 @@ pub fn run() {
             crate::menu::sync_from_config();
 
             let Ok(repo) = (unsafe { SoloParamRepository::instance_mut() }) else {
-                logger::warn("SoloParamRepository not available on reload, skipped.");
+                logger::warn("Reload: SoloParamRepository unavailable, skipped");
                 return;
             };
             apply_and_log(&SCARLET_ROT, repo, " (hotkey pressed)");
             apply_and_log(&POISON, repo, " (hotkey pressed)");
+            apply_and_log(&BLACK_FLAME, repo, " (hotkey pressed)");
+            apply_and_log(&DESTINED_DEATH, repo, " (hotkey pressed)");
+            apply_and_log(&DESTINED_DEATH_MAX_HP, repo, " (hotkey pressed)");
         },
     );
 

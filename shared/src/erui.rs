@@ -392,7 +392,7 @@ fn select_language(api: &Api) {
     let bytes = unsafe { std::slice::from_raw_parts(info.identifier.data, info.identifier.length as usize) };
     if let Ok(identifier) = std::str::from_utf8(bytes) {
         crate::i18n::set_language(identifier);
-        logger::log(&format!("In-game menu language: {identifier}."));
+        logger::log(&format!("Menu: language {identifier}"));
     }
 }
 
@@ -885,7 +885,7 @@ pub fn start_saver(ini_path: String, on_saved: Option<fn()>) {
             // until the game closes.
             let saved = config::set_values(&ini_path, changes);
             if !saved {
-                logger::log("In-game menu: couldn't write the ini; the change applies until the game closes.");
+                logger::log("Menu: ini write failed, change kept in memory only");
             }
             saved
         },
@@ -920,9 +920,9 @@ pub fn start_saver_with(mut write: impl FnMut(&[(&'static str, String)]) -> bool
                 }
             }
             if write(&changes) {
-                logger::log(&format!("In-game menu: saved {changes:?}."));
+                logger::log(&format!("Menu: saved {changes:?}"));
             } else {
-                logger::log("In-game menu: couldn't save the config.");
+                logger::log("Menu: config save failed");
             }
             changes.clear();
             if let Some(on_saved) = on_saved {
@@ -978,12 +978,12 @@ impl Menu {
         }
         for (row, read) in &self.rows {
             if let Err(reason) = self.registration.set_row_value(*row, read()) {
-                logger::log(&format!("In-game menu: couldn't update a row ({reason})."));
+                logger::log(&format!("Menu: row update failed ({reason})"));
             }
         }
         for (setting, read) in &self.numbers {
             if let Err(reason) = setting.show(&self.registration, read()) {
-                logger::log(&format!("In-game menu: couldn't update a row ({reason})."));
+                logger::log(&format!("Menu: row update failed ({reason})"));
             }
         }
     }
@@ -1077,7 +1077,7 @@ pub fn spawn_menu(
         let connection = match connect(Duration::from_secs(10)) {
             Ok(connection) => connection,
             Err(reason) => {
-                logger::log(&format!("In-game menu unavailable ({reason}); using the config file only."));
+                logger::log(&format!("Menu: unavailable ({reason}), config file only"));
                 return;
             }
         };
@@ -1092,9 +1092,9 @@ pub fn spawn_menu(
         match result {
             Ok(menu) => {
                 let _ = slot.set(menu);
-                logger::log("In-game menu: registered.");
+                logger::log("Menu: registered");
             }
-            Err(reason) => logger::log(&format!("In-game menu registration failed: {reason}")),
+            Err(reason) => logger::log(&format!("Menu: registration failed ({reason})")),
         }
     });
 }

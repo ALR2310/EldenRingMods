@@ -1,6 +1,6 @@
 # params: đọc và ghi param không qua `rows()` / `rows_mut()`
 
-**Status 2026-10-13: hoạt động, dùng bởi dropmultiplier, fasterrevival, speedmultiplier, spiritmultiplier (`for_each_row_mut`, `row_ids`, `check`). `risearcher` và `infiniteailment` chưa chuyển (xem TODO.md). Code ở `shared/src/params.rs`. Không có test tự động: mọi hàm cần `SoloParamRepository` thật của game, nên kiểm bằng log trong game.**
+**Status 2026-10-13: hoạt động, dùng bởi dropmultiplier, fasterrevival, speedmultiplier, spiritmultiplier, risearcher, infiniteailment (`for_each_row_mut`, `row_ids`, `check`). Chỉ `sometweaks` (đã bỏ) còn dùng `rows_mut()`. Code ở `shared/src/params.rs`. Không có test tự động: mọi hàm cần `SoloParamRepository` thật của game, nên kiểm bằng log trong game.**
 
 ## Vì sao không dùng `rows()` / `rows_mut()`
 
@@ -36,6 +36,10 @@ nằm ngay sau header. Bố cục (phản chiếu `RowDescriptor<T>` của nó):
 Mỗi `data_offset` được đối chiếu với con trỏ dòng mà `get_row_by_index` trả về.
 Lệch ở bất kỳ dòng nào (giả định bố cục sai trên một phiên bản game tương lai)
 thì hàm trả `None`, không trả ID sai.
+
+## Bẫy: `OwnedPtr<ParamFile>`
+
+`ParamResCap::param_res_cap.data` là `OwnedPtr<ParamFile>`, không phải `ParamFile`. Trong `row_ids`, `let file = &...data;` rồi `file as *const _ as *const u8` lấy địa chỉ của chính con trỏ, nên mọi offset đọc ra là rác (log 2026-10-16: `format 0x0`, offset `0x7ff6`, mọi ailment tìm được 0 dòng). Phải khai báo `let file: &ParamFile` để deref. `row_ids_or_reason` trả lý do thất bại để log.
 
 ## Số dòng runtime
 

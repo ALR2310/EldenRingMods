@@ -8,6 +8,8 @@
 //!                               Damage (%)     number -100..100 (% of max HP per tick, negative heals)
 //!                               Damage         number -1000..1000 (flat, per tick, negative heals)
 //!   Poison                   -> same three rows
+//!   Black Flame              -> same three rows
+//!   Destined Death           -> same three rows, plus Max HP Loss (s) number -1..86400
 //!   Log file                 on/off
 //! ```
 //!
@@ -28,6 +30,13 @@ static ROT_FIXED: NumberSetting = NumberSetting::whole("ScarletRot.FixedDamage",
 static POISON_DURATION: NumberSetting = NumberSetting::new("Poison.Duration", -1.0, 86_400.0, None);
 static POISON_PERCENT: NumberSetting = NumberSetting::new("Poison.PercentDamage", -100.0, 100.0, None);
 static POISON_FIXED: NumberSetting = NumberSetting::whole("Poison.FixedDamage", -1000.0, 1000.0, None);
+static FLAME_DURATION: NumberSetting = NumberSetting::new("BlackFlame.Duration", -1.0, 86_400.0, None);
+static FLAME_PERCENT: NumberSetting = NumberSetting::new("BlackFlame.PercentDamage", -100.0, 100.0, None);
+static FLAME_FIXED: NumberSetting = NumberSetting::whole("BlackFlame.FixedDamage", -1000.0, 1000.0, None);
+static DESTINED_DURATION: NumberSetting = NumberSetting::new("DestinedDeath.Duration", -1.0, 86_400.0, None);
+static DESTINED_PERCENT: NumberSetting = NumberSetting::new("DestinedDeath.PercentDamage", -100.0, 100.0, None);
+static DESTINED_FIXED: NumberSetting = NumberSetting::whole("DestinedDeath.FixedDamage", -1000.0, 1000.0, None);
+static DESTINED_MAX_HP: NumberSetting = NumberSetting::new("DestinedDeath.MaxHpDuration", -1.0, 86_400.0, None);
 static LOG_FILE: Setting = Setting::flag("LogFile");
 
 static MENU: OnceLock<erui::Menu> = OnceLock::new();
@@ -56,7 +65,7 @@ fn add_ailment_page(
     settings: [&'static NumberSetting; 3],
     reads: [fn() -> f64; 3],
     vanilla: [&str; 3],
-) -> Result<(), String> {
+) -> Result<PageHandle, String> {
     let page = b.submenu(parent, name, help)?;
     let rows = [
         (t("duration.label"), t("duration.help").replace("{vanilla}", vanilla[0])),
@@ -66,7 +75,7 @@ fn add_ailment_page(
     for (i, (label, help)) in rows.iter().enumerate() {
         b.number(page, label, help, settings[i], reads[i])?;
     }
-    Ok(())
+    Ok(page)
 }
 
 fn build(b: &mut MenuBuilder) -> Result<(), String> {
@@ -96,6 +105,39 @@ fn build(b: &mut MenuBuilder) -> Result<(), String> {
             || config::get_double("Poison.FixedDamage", 7.0),
         ],
         ["90", "0.07", "7"],
+    )?;
+    add_ailment_page(
+        b,
+        page,
+        &t("black_flame.title"),
+        &t("black_flame.help"),
+        [&FLAME_DURATION, &FLAME_PERCENT, &FLAME_FIXED],
+        [
+            || config::get_double("BlackFlame.Duration", 10.0),
+            || config::get_double("BlackFlame.PercentDamage", 0.1),
+            || config::get_double("BlackFlame.FixedDamage", 1.0),
+        ],
+        ["2", "0.1", "1"],
+    )?;
+    let destined = add_ailment_page(
+        b,
+        page,
+        &t("destined_death.title"),
+        &t("destined_death.help"),
+        [&DESTINED_DURATION, &DESTINED_PERCENT, &DESTINED_FIXED],
+        [
+            || config::get_double("DestinedDeath.Duration", 10.0),
+            || config::get_double("DestinedDeath.PercentDamage", 0.1),
+            || config::get_double("DestinedDeath.FixedDamage", 1.0),
+        ],
+        ["2", "0.1", "1"],
+    )?;
+    b.number(
+        destined,
+        &t("max_hp_loss.label"),
+        &t("max_hp_loss.help"),
+        &DESTINED_MAX_HP,
+        || config::get_double("DestinedDeath.MaxHpDuration", -1.0),
     )?;
     b.toggle(page, &t("log.label"), &t("log.help"), &LOG_FILE, log_file_row)
 }

@@ -17,3 +17,7 @@ sử git của `README.md`.
 | 2026-10-13 | Mặc định `ReloadBanner` đổi thành `false`: nhiều mod cùng bật thì mỗi mod hiện một banner vài giây khi bấm reload | |
 | 2026-10-13 | Thêm menu tùy chọn trong game qua ERNativeUI (`common::erui`): 2 nhóm Scarlet Rot/Poison + log, các giá trị số gõ vào ô văn bản; menu ghi ini rồi tăng `RELOAD_GENERATION`. Trình reload nay giữ yêu cầu đến khi vào thế giới (trước đó chỉ cần `SoloParamRepository` có), để menu mở ở màn hình chính không ghi param quá sớm. | [docs](../../docs/ingame_menu.md) |
 | 2026-10-15 | Chữ của menu trong game chuyển sang `common::i18n`: file `locales/en.json` và `vi.json`, menu hiện tiếng Việt khi game chạy tiếng Việt, ngôn ngữ khác lùi về tiếng Anh | [docs](../../shared/docs/i18n.md) |
+| 2026-10-15 | Tìm và ghi dòng `SpEffectParam` theo index qua `common::params` thay cho `rows()` / `get_mut()` (panic trên regulation bị mod) | [docs](../../shared/docs/params.md) |
+| 2026-10-15 | Thêm Black Flame và Destined Death làm ailment (`BlackFlame.*`, `DestinedDeath.*`, mỗi cái một trang menu): dòng DoT xác định theo danh sách ID vì không có chữ ký riêng; Destined Death có thêm thời gian giảm máu tối đa (`MaxHpDuration`); test trong game ổn | [docs](docs/black_flame.md) |
+| 2026-10-16 | Log gọn: chỉ ghi số dòng đã sửa của mỗi ailment, bỏ danh sách ID và bản dump chi tiết 200 dòng của Poison | |
+| 2026-10-16 | Mặc định `BlackFlame.Duration` và `DestinedDeath.Duration` đổi từ -1 (mãi) thành 10 giây vì cháy mãi quá mạnh; trang Nexus nói lại cho đúng | [docs](docs/black_flame.md) |
