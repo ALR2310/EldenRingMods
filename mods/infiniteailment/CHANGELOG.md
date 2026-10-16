@@ -6,6 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-17
+
 - Added Black Flame and Destined Death options.
 - Added in-game settings menu support (requires the ERNativeUI mod).
 
