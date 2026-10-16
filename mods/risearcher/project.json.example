@@ -1,6 +1,6 @@
 {
   "ProjectName": "RiseArcher",
-  "GameRoot": "E:\\SteamLibrary\\steamapps\\common\\ELDEN RING\\Game",
+  "GameRoot": "C:\\path\\to\\ELDEN RING\\Game",
   "GameType": 8,
   "PinnedParams": [],
   "PinnedRows": {},

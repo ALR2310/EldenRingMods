@@ -188,8 +188,6 @@ pub fn run() {
         },
     );
 
-    logger::log("EnemyProbe: tick registered on CSTaskGroupIndex::FrameBegin.");
-
     loop {
         std::thread::sleep(Duration::from_secs(60));
     }

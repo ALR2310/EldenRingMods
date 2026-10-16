@@ -76,18 +76,16 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
 fn run() {
     let mut last_seen_generation = common::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
 
-    logger::log("RiseArcher: waiting for the player to be in the game world (regulation.bin)...");
     let repo = common::player::wait_for_solo_param_repository();
-    logger::log("RiseArcher: SoloParamRepository ready, applying weapon buffs...");
 
     let Some((weapon_changed, bullet_changed)) = apply_with_retry(repo, Duration::from_secs(30)) else {
         logger::error(
-            "weapon/bullet apply kept panicking for 30s (regulation.bin param resource never finished loading) - RiseArcher disabled for this session.",
+            "apply kept panicking for 30s, disabled for this session",
         );
         return;
     };
     logger::log(&format!(
-        "Applied to {weapon_changed} EquipParamWeapon row(s) and {bullet_changed} Bullet row(s)."
+        "Applied: {weapon_changed} weapon, {bullet_changed} bullet row(s)"
     ));
 
     let cs_task = common::task::wait_for_cs_task();
@@ -104,13 +102,13 @@ fn run() {
             menu::sync_from_config();
 
             let Ok(repo) = (unsafe { SoloParamRepository::instance_mut() }) else {
-                logger::warn("RiseArcher: SoloParamRepository not available on reload, skipped.");
+                logger::warn("Reload: SoloParamRepository unavailable, skipped");
                 return;
             };
             let weapon_changed = weapon::apply(repo);
             let bullet_changed = bullet::apply(repo);
             logger::log(&format!(
-                "Reload: reapplied to {weapon_changed} EquipParamWeapon row(s) and {bullet_changed} Bullet row(s) (reload)."
+                "Reload: {weapon_changed} weapon, {bullet_changed} bullet row(s)"
             ));
         },
     );
@@ -135,7 +133,7 @@ fn apply_with_retry(repo: &mut SoloParamRepository, timeout: Duration) -> Option
         let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (weapon::apply(repo), bullet::apply(repo))));
         match attempt {
             Ok(counts) => return Some(counts),
-            Err(_) => logger::warn("RiseArcher: apply panicked (regulation.bin param not loaded yet?), retrying..."),
+            Err(_) => logger::warn("apply panicked, retrying"),
         }
         if waited >= timeout {
             return None;

@@ -22,3 +22,5 @@ lịch sử git của `README.md`.
 | 2026-10-15 | Chữ của menu trong game chuyển sang hệ đa ngôn ngữ (`locales/en.json`, `vi.json`, `common::i18n`): hiện tiếng Việt khi game chạy tiếng Việt, ngôn ngữ khác dùng tiếng Anh; thêm test khoá khớp giữa `menu.rs` và 2 file ngôn ngữ | [docs](../../shared/docs/i18n.md) |
 
 | 2026-10-15 | Menu trong game: các hệ số Multiplier/Crafting/Upgrade/Unique (0..10, bước 0.5) thành slider native khi host có API 1.2 (ERNativeUI >= 1.2), phạm vi slider hẹp hơn phạm vi mod chấp nhận (ô gõ và tệp cấu hình vẫn nhận số lớn); chưa thử trong game | [docs](../../docs/ingame_menu.md) |
+| 2026-10-15 | Bỏ việc nhân đồ hái Erdleaf Flower, Trina's Lily (LordSoulOfNito, 2026-10-02): không có thêm phản hồi từ người báo; `[Materials]` vẫn chỉ nhận goodsType 2 và 14 | [docs](docs/materials.md) |
+| 2026-10-16 | Log gọn lại theo kiểu ngắn, kỹ thuật cho dev: bỏ dòng lặp ý, địa chỉ patch, câu dài; chỉ ghi 1 lần khi chờ thế giới | |

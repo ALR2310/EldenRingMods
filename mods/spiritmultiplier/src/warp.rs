@@ -562,8 +562,6 @@ pub fn run() {
             }
         },
     );
-    logger::log("Warp: tick registered on CSTaskGroupIndex::FrameBegin.");
-
     loop {
         std::thread::sleep(Duration::from_secs(60));
     }

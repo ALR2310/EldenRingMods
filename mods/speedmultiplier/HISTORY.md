@@ -27,3 +27,4 @@ sử git của `README.md`.
 | 2026-10-13 | Thêm menu trong game tùy chọn (ERNativeUI, `common::erui`): hàng tốc độ là ô gõ số 0.1-10 (slider không có số lẻ), ghi về TOML qua `TomlConfig::save_values`; `[[Override]]` và probe vẫn chỉ ở file | [docs](../../docs/ingame_menu.md) |
 | 2026-10-15 | Menu trong game: hàng tốc độ thành slider native bước 0.1 (ERNativeUI 1.2, `NumberSetting::stepped`), lùi về ô gõ số nếu host cũ; chưa thử trong game | [docs](../../docs/ingame_menu.md) |
 | 2026-10-15 | Chữ menu theo ngôn ngữ: `locales/en.json` + `locales/vi.json` nhúng vào DLL qua `common::i18n` (host báo `vietnamese`), `menu.rs` chỉ nêu khoá, ngôn ngữ khác tiếng Anh; test khớp khoá menu với các tệp; sửa test `seamless` hỏng ngẫu nhiên (địa chỉ nhúng có byte `0x74`) | [docs](../../shared/docs/i18n.md) |
+| 2026-10-16 | Log gọn lại theo kiểu ngắn, kỹ thuật cho dev: bỏ dòng lặp ý, địa chỉ patch, câu dài; chỉ ghi 1 lần khi chờ thế giới | |

@@ -12,7 +12,7 @@ Rain of Arrows.
 - **DLL (`src/`, khuyến nghị):** patch sống param trong bộ nhớ lúc chạy qua
   `SoloParamRepository`, cấu hình bằng `RiseArcher.ini`, không đụng
   `regulation.bin` trên đĩa nên không xung đột với mod `regulation.bin` khác.
-- **Sửa tĩnh `regulation.bin` qua Smithbox (`csv/`, `project.json`):** cách làm
+- **Sửa tĩnh `regulation.bin` qua Smithbox (`csv/`, `project.json.example`: chép thành `project.json` rồi sửa `GameRoot`; file thật bị git-ignore):** cách làm
   gốc, giữ nguyên. `csv/RiseArcher.MASSEDIT` và các file CSV để dán vào Smithbox
   Mass Edit. Hữu ích khi cần merge tay với một mod `regulation.bin` cụ thể hoặc
   không muốn cài DLL. `.smithbox/` là cache project (machine-specific, bị

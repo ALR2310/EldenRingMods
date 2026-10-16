@@ -32,13 +32,17 @@ pub fn wait_for_cs_task() -> &'static CSTaskImp {
 fn poll_cs_task() -> &'static CSTaskImp {
     let start = Instant::now();
     let mut warned = false;
+    let mut waiting_logged = false;
     loop {
         if let Ok(instance) = unsafe { CSTaskImp::instance() } {
-            logger::log("CSTaskImp found.");
+            logger::log("CSTaskImp: ready");
             return instance;
         }
         if start.elapsed() < WARN_AFTER {
-            logger::log("CSTaskImp: waiting");
+            if !waiting_logged {
+                waiting_logged = true;
+                logger::log("CSTaskImp: waiting");
+            }
         } else if !warned {
             warned = true;
             logger::error(&format!(

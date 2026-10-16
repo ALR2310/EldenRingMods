@@ -64,7 +64,7 @@ where
             Duration::from_millis(500),
             Duration::from_secs(60),
         )?;
-        logger::log("register_task AOB found.");
+        logger::log("register_task: ready");
         Some(addr as usize)
     }) else {
         logger::error("Could not locate the game's task-registration function (AOB pattern not found) - task NOT installed.");

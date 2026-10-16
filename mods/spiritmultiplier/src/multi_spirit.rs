@@ -527,11 +527,10 @@ fn install(name: &str, pattern: &str, offset: usize, build: impl Fn(u64) -> Vec<
     // SAFETY: reads the 5 bytes of a call/jmp found in the game image.
     let target = unsafe { codepatch::rel32_target(site) }?;
     // SAFETY: `site` is the scanned call in the game image; the length/offset is the one its pattern matched.
-    let Some(at) = (unsafe { codepatch::redirect_rel32(site, &build(target)) }) else {
+    if (unsafe { codepatch::redirect_rel32(site, &build(target)) }).is_none() {
         logger::error(&format!("MultiSpirit: {name} redirect failed."));
         return None;
-    };
-    logger::log(&format!("MultiSpirit: {name} call at {site:p} (was {target:#x}) -> stub {at:p}."));
+    }
     Some(target)
 }
 
@@ -576,9 +575,10 @@ pub fn run() {
     CLONE.store(config::get_bool("CloneSpirit", false) as u8, Ordering::Relaxed);
     MAX_SPIRITS.store(max_spirits(), Ordering::Relaxed);
     if !install_all() {
-        logger::error("MultiSpirit: not (fully) installed - summoning another Ash may still send the current spirits back.");
+        logger::error("MultiSpirit: patch incomplete, another Ash may still dismiss the current spirits");
         return;
     }
+    logger::log("MultiSpirit: patched");
 
     let cs_task = common::task::wait_for_cs_task();
     let mut elapsed_ms: f64 = 0.0;
@@ -606,8 +606,6 @@ pub fn run() {
             }
         },
     );
-    logger::log("MultiSpirit: tick registered on CSTaskGroupIndex::FrameBegin.");
-
     loop {
         std::thread::sleep(Duration::from_secs(60));
     }

@@ -3,7 +3,7 @@
 //! makes room for them).
 //!
 //! Same technique as `sometweaks`'s `spirit/summon_count.rs` (itself
-//! ported from `.docs/x10_summon/er10x.dll`'s "chain rebuild"), kept as a
+//! ported from `x10_summon/er10x.dll`'s "chain rebuild"), kept as a
 //! separate copy here rather than moved to `common` at the user's request
 //! (2026-09-25). The only behavioral difference is the cap:
 //! [crate::band::band_len] (`MaxSpirits`) instead of 10. See `summon_count.rs`'s module
@@ -153,8 +153,6 @@ pub fn run() {
             }
         },
     );
-
-    logger::log("Chain: tick registered on CSTaskGroupIndex::FrameBegin.");
 
     loop {
         std::thread::sleep(Duration::from_secs(60));

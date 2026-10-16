@@ -267,7 +267,6 @@ fn install_next_cursor() -> bool {
         logger::error("Band: next-cursor patch failed.");
         return false;
     }
-    logger::log(&format!("Band: next-cursor wrap removed at {site:p}."));
     true
 }
 
@@ -287,14 +286,10 @@ fn install_band_alloc() -> bool {
     let found_addr = site as u64 + BAND_ALLOC_FOUND_OFFSET as u64;
     let stub = build_band_stub(band_len(), found_addr);
     // SAFETY: `site` is the scanned site in the game image; the length/offset is the one its pattern matched.
-    let Some(stub_addr) = (unsafe { codepatch::install_jmp_hook(site, BAND_ALLOC_REPLACED_LEN, &stub) }) else {
+    if (unsafe { codepatch::install_jmp_hook(site, BAND_ALLOC_REPLACED_LEN, &stub) }).is_none() {
         logger::error("Band: slot-search hook install failed.");
         return false;
-    };
-    logger::log(&format!(
-        "Band: slot search widened to {} slots (player 0) at {site:p}, stub at {stub_addr:p}.",
-        band_len()
-    ));
+    }
     true
 }
 
@@ -335,7 +330,11 @@ pub fn install(max_spirits: u32) -> bool {
         band_len = DEFAULT_MAX_SPIRITS;
     }
     BAND_LEN.store(band_len, Ordering::Relaxed);
-    install_next_cursor() && install_band_alloc()
+    let patched = install_next_cursor() && install_band_alloc();
+    if patched {
+        logger::log(&format!("Band: patched, {band_len} slots"));
+    }
+    patched
 }
 
 #[cfg(test)]

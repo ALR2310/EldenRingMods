@@ -19,3 +19,5 @@ tmp/
 
 dumps/*
 !dumps/seamless-diff/
+# Smithbox project of risearcher (holds a local game path); copy project.json.example
+/mods/risearcher/project.json
