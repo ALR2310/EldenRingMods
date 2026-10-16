@@ -63,7 +63,7 @@
 //! `add_talk_list_data` event listing message ID 15000395 ("Sort Chest"),
 //! a menu entry present in every single Grace regardless of location
 //! (technique borrowed from the open-source `erdGameTools` project, see
-//! `.docs/Elden_Ring_game_tools`).
+//! `Elden_Ring_game_tools`).
 //!
 //! ## `EzState::EnterState` hook
 //!

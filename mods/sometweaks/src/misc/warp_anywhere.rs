@@ -1,6 +1,6 @@
 //! Lets you open the map and fast-travel from anywhere - including
 //! mid-combat and inside dungeons/caves, where the game normally blocks
-//! both - ported from `.docs/FastTravel/Zibinha_FastTravel.dll` (a
+//! both - ported from `FastTravel/Zibinha_FastTravel.dll` (a
 //! reference-only, non-Rust tool in this repo), decompiled with Ghidra to
 //! recover its exact patch bytes rather than guessing
 //! (`Zibinha_MapInCombat.dll` in the same folder is a strict subset: same

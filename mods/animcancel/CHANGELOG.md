@@ -8,7 +8,6 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 - Guard, dodge and weapon swap can now each cancel a different set of animations.
 - Added in-game settings menu support (requires the ERNativeUI mod).
-- The in-game menu can be shown in Vietnamese.
 
 ## [1.0.0] - 2026-10-12
 

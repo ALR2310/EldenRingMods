@@ -1,5 +1,5 @@
 //! Allows summoning spirit ashes without a rebirth monument nearby -
-//! ported from `.docs/x10_summon/er10x.dll`'s `summon_anywhere` option,
+//! ported from `x10_summon/er10x.dll`'s `summon_anywhere` option,
 //! reverse engineered from its own embedded `Sig` byte patterns
 //! (`kSigGate`/`kSigGateEntry`) and independently confirmed against the
 //! real `eldenring.exe` via Ghidra:
@@ -47,7 +47,7 @@
 //!
 //! ## Hook B: area eligibility
 //!
-//! `.docs/SummonAnywhere/src/summon_anywhere.cpp` (traces back to
+//! `SummonAnywhere/src/summon_anywhere.cpp` (traces back to
 //! `soarqin/ER-EzMod`, MIT) has a 2nd, unrelated hook worth keeping: some
 //! areas (dungeons, certain boss arenas) flat-out disallow summoning via a
 //! small struct at `[rbp-68]` whose `+0x20`/`+0x1c` fields represent "this
@@ -59,7 +59,7 @@
 //!
 //! ## Dead end: "Hook A" / summon-range leash (reverted 2026-09-04)
 //!
-//! The same `.docs/SummonAnywhere/src/summon_anywhere.cpp` also has a
+//! The same `SummonAnywhere/src/summon_anywhere.cpp` also has a
 //! "Hook A" that was ported alongside Hook B above, patching
 //! `mov rax,[rdi+28]; movss xmmN,[rax+84]` to force a hardcoded 1000.0
 //! whenever the referenced object's id is the sentinel `0x7D0` (2000) -
@@ -269,7 +269,7 @@ fn build_area_eligibility_stub() -> Vec<u8> {
 
 fn install_area_eligibility() -> bool {
     let Some(entry) = memscan::wait_for_pattern_in_module(AREA_ELIGIBILITY_PATTERN, SCAN_RETRY_INTERVAL, SCAN_TIMEOUT) else {
-        logger::error("Spirit.Summon.Anywhere: AreaEligibility pattern not found within the timeout. Game may have been updated - see .docs/SummonAnywhere's own version caveat.");
+        logger::error("Spirit.Summon.Anywhere: AreaEligibility pattern not found within the timeout. Game may have been updated - see SummonAnywhere's own version caveat.");
         return false;
     };
     let stub = build_area_eligibility_stub();
@@ -302,7 +302,7 @@ fn install_gate() -> bool {
 /// Installs all 3 hooks once (retrying each AOB scan for up to
 /// [SCAN_TIMEOUT]): the cast-time gate (`er10x.dll`, also grants free
 /// resummon as a side effect - see module doc comment), and the
-/// summon-range + area-eligibility pair (`.docs/SummonAnywhere`) that
+/// summon-range + area-eligibility pair (`SummonAnywhere`) that
 /// fixes summons despawning on their own. Each logs its own
 /// success/failure independently. Meant to run on its own worker thread
 /// spawned from `DllMain`; never returns.

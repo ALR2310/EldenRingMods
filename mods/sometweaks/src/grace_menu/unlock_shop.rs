@@ -8,7 +8,7 @@
 //!
 //! Ported from the community's own `Elden-Ring-CT-TGA` Cheat Engine
 //! table script ("Access all shop inventory.cea",
-//! `.docs/Elden-Ring-CT-TGA`): `ParamPatchAll(ShopLineupParam, {
+//! `Elden-Ring-CT-TGA`): `ParamPatchAll(ShopLineupParam, {
 //! param->eventFlag_forRelease = -1; })` - same idea `GraceMenu.Shop`'s
 //! own item lot range (`0..9999999`) was borrowed from that project's
 //! "All Shops.cea" script.

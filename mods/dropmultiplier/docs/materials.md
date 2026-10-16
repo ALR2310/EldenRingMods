@@ -3,6 +3,8 @@
 **Status 2026-09-28: PHÁT HÀNH trong 1.1.0, người dùng xác nhận chạy ổn trong
 game.** Code: `mods/dropmultiplier/src/materials.rs`.
 
+Đã dừng (2026-10-15): đề xuất nhân cả đồ hái như Erdleaf Flower, Trina's Lily (LordSoulOfNito, 2026-10-02) không được làm, vì người báo không phản hồi thêm; chưa kiểm goodsType của chúng.
+
 ## Vì sao có tính năng này
 
 Đề xuất từ người báo lỗi Convergence trên Nexus (sau khi 1.0.2 sửa xong): cho
