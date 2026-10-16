@@ -2,7 +2,7 @@
 //! 10-spirit cap (see `band.rs`) - no gameplay
 //! change at all, only logging.
 //!
-//! `sometweaks`'s `spirit::summon_count` (and `.docs/x10_summon/er10x.dll`
+//! `sometweaks`'s `spirit::summon_count` (and `x10_summon/er10x.dll`
 //! before it) can lengthen an Ash's SpEffect -> BuddyParam chain freely, but
 //! the engine only ever spawns 10: per `er10x.ini`, each player gets a fixed
 //! "band" of 10 slots inside `WorldChrMan.summon_buddy_chr_set`, whose start
@@ -205,8 +205,6 @@ pub fn run() {
             }
         },
     );
-
-    logger::log("SlotProbe: tick registered on CSTaskGroupIndex::FrameBegin.");
 
     loop {
         std::thread::sleep(Duration::from_secs(60));

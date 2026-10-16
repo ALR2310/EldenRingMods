@@ -22,7 +22,7 @@ use std::time::Duration;
 use eldenring::cs::{CSTaskGroupIndex, ChrLoadStatus, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
-use common::{config, logger};
+use common::config;
 
 const TICK_INTERVAL_MS: f64 = 1000.0;
 
@@ -110,8 +110,6 @@ pub fn run() {
             }
         },
     );
-
-    logger::log("Regen: tick registered on CSTaskGroupIndex::FrameBegin.");
 
     loop {
         std::thread::sleep(Duration::from_secs(60));

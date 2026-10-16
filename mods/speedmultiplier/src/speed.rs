@@ -303,7 +303,6 @@ pub fn run() {
             apply(&mut last_active, &mut seamless_fix, &mut sped_victims, &mut sped_enemies)
         }
     });
-    logger::log("Speed: per-action multipliers active.");
     loop {
         std::thread::sleep(Duration::from_secs(60));
     }

@@ -527,7 +527,7 @@ pub fn run(dir: String) {
             apply(repo, rows, &bundles, &config);
             let names: Vec<&str> = BUNDLES.iter().enumerate().filter(|(i, _)| bits & (1 << i) != 0).map(|(_, b)| b.0).collect();
             logger::log(&format!(
-                "ThinkOverride: {names:?} + {} file field(s) {} written to {} row(s). Re-summon spirits for it to take effect.",
+                "ThinkOverride: {names:?} + {} file field(s) {} written to {} row(s)",
                 config.count(),
                 config.describe(),
                 rows.think.len() + rows.npc.len()
@@ -535,8 +535,6 @@ pub fn run(dir: String) {
             applied = Some(signature);
         },
     );
-
-    logger::log("ThinkOverride: tick registered on CSTaskGroupIndex::FrameBegin.");
 
     loop {
         std::thread::sleep(Duration::from_secs(60));

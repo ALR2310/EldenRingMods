@@ -216,13 +216,9 @@ fn apply(repo: &mut SoloParamRepository, mode: &Mode) -> Option<usize> {
     // this lock must not turn every later reload into a second panic.
     let mut snapshot_guard = ORIGINAL_BASE_POINTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if snapshot_guard.is_none() {
-        logger::log(&format!(
-            "SoloParamRepository ready, snapshotting {}...",
-            common::params::describe::<ItemLotParam_enemy>(repo)
-        ));
+        logger::log(&format!("Snapshot: {}", common::params::describe::<ItemLotParam_enemy>(repo)));
         let mut points = Vec::new();
         common::params::for_each_row_mut::<ItemLotParam_enemy>(repo, |_, row| points.push(get_base_points(row)));
-        logger::log(&format!("snapshotted {} row(s), applying...", points.len()));
         *snapshot_guard = Some(points);
     }
     let snapshot = snapshot_guard.as_ref()?;
@@ -260,7 +256,6 @@ pub fn run() {
     let mut last_seen_generation = common::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
 
     let repo = common::player::wait_for_solo_param_repository();
-    logger::log("SoloParamRepository instance acquired.");
     let mode = build_mode();
     if let Some(changed) = apply(repo, &mode) {
         log_mode(&mode, changed, "");
@@ -288,7 +283,7 @@ pub fn run() {
             // menu): keep the request and apply it once the world is loaded.
             if common::player::main_player_chr_ins_ptr().is_none() {
                 if !waiting_logged {
-                    logger::warn("not in-world yet, reload deferred until the world is loaded.");
+                    logger::warn("Reload: deferred, not in world");
                     waiting_logged = true;
                 }
                 return;
@@ -297,7 +292,7 @@ pub fn run() {
             last_seen_generation = generation;
             crate::menu::sync_from_config();
             let Ok(repo) = (unsafe { SoloParamRepository::instance_mut() }) else {
-                logger::warn("SoloParamRepository not available on reload, skipped.");
+                logger::warn("Reload: SoloParamRepository unavailable, skipped");
                 return;
             };
             let mode = build_mode();

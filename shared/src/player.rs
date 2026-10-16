@@ -5,7 +5,7 @@
 //! means the manager object exists (already at the title screen). Why, and
 //! what went wrong without it: `shared/docs/player.md`.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use eldenring::cs::{SoloParamRepository, WorldChrMan};
 use fromsoftware_shared::FromStatic;
@@ -70,25 +70,22 @@ pub fn main_player_chr_ins_ptr() -> Option<*const u8> {
         .map(|p| &p.chr_ins as *const _ as *const u8)
 }
 
-/// How often to log that we're still waiting. Not a warning: picking a save
-/// and loading in can take minutes. It only shows the thread didn't die.
-const REMINDER_EVERY: Duration = Duration::from_secs(30);
-
 /// Waits, forever like [`crate::task::wait_for_cs_task`], for
 /// `SoloParamRepository` (the live regulation.bin) AND for the player to be in
 /// the game world. `SoloParamRepository::instance_mut()` alone can return `Ok`
 /// while the param tables are still empty (title/loading screen), the same
 /// premature-singleton trap [main_player_chr_ins_ptr] guards against.
 pub fn wait_for_solo_param_repository() -> &'static mut SoloParamRepository {
-    let mut next_reminder = Instant::now() + REMINDER_EVERY;
+    let mut logged = false;
     loop {
         if main_player_chr_ins_ptr().is_some()
             && let Ok(repo) = unsafe { SoloParamRepository::instance_mut() }
         {
             return repo;
         }
-        if Instant::now() >= next_reminder {
-            next_reminder += REMINDER_EVERY;
+        // Logged once: picking a save and loading in can take minutes.
+        if !logged {
+            logged = true;
             crate::logger::log("SoloParamRepository: waiting for world");
         }
         std::thread::sleep(Duration::from_millis(200));

@@ -257,8 +257,6 @@ pub fn run() {
         },
     );
 
-    logger::log("GhostColor: tick registered on CSTaskGroupIndex::FrameBegin.");
-
     loop {
         std::thread::sleep(Duration::from_secs(60));
     }

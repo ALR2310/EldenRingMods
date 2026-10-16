@@ -217,12 +217,22 @@ fn all_ids() -> Vec<(u32, Role)> {
 pub fn apply(repo: &mut SoloParamRepository) -> usize {
     let cfg = Config::load();
     let ids = all_ids();
+    // ID -> row index, built from the param file itself: `get_mut` goes
+    // through a lookup table that is shorter than the file on some modded
+    // regulations (see `common::params`).
+    let index_by_id = match common::params::row_ids_or_reason::<Bullet>(repo) {
+        Ok(row_ids) => row_ids.into_iter().enumerate().map(|(index, id)| (id, index)).collect::<HashMap<u32, usize>>(),
+        Err(reason) => {
+            logger::warn(&format!("Bullet: couldn't read the row ids ({reason}), arrow tuning skipped."));
+            return 0;
+        }
+    };
 
     let mut snapshot_guard = ORIGINALS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let originals = snapshot_guard.get_or_insert_with(|| {
         let mut map = HashMap::new();
         for &(id, _role) in &ids {
-            if let Some(row) = repo.get_mut::<Bullet>(id) {
+            if let Some(row) = index_by_id.get(&id).and_then(|&index| repo.get_row_by_index_mut::<Bullet>(index)) {
                 map.insert(id, snapshot(row));
             }
         }
@@ -232,7 +242,8 @@ pub fn apply(repo: &mut SoloParamRepository) -> usize {
     let mut changed = 0;
     let mut missing = 0;
     for &(id, role) in &ids {
-        match (repo.get_mut::<Bullet>(id), originals.get(&id)) {
+        let row = index_by_id.get(&id).and_then(|&index| repo.get_row_by_index_mut::<Bullet>(index));
+        match (row, originals.get(&id)) {
             (Some(row), Some(baseline)) => {
                 apply_role(row, role, baseline, &cfg);
                 changed += 1;

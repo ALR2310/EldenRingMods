@@ -44,3 +44,4 @@ lịch sử git của `README.md`.
 | 2026-10-15 | Chữ menu theo ngôn ngữ: `locales/en.json` + `locales/vi.json` nhúng vào DLL qua `common::i18n` (host báo `vietnamese`), `menu.rs` chỉ nêu khoá, ngôn ngữ khác tiếng Anh; nhãn kiểu hồi máu cũng dịch; test khớp khoá menu với các tệp | [docs](../../shared/docs/i18n.md) |
 
 | 2026-10-15 | Menu trong game: Multiplier (0..10, bước 0.25) và Stuck Range (0..100, bước 1) thành slider native khi host có API 1.2 (ERNativeUI >= 1.2), phạm vi slider hẹp hơn phạm vi mod chấp nhận (ô gõ và tệp cấu hình vẫn nhận số lớn); chưa thử trong game | [docs](../../docs/ingame_menu.md) |
+| 2026-10-16 | Log gọn lại theo kiểu ngắn, kỹ thuật cho dev: bỏ dòng lặp ý, địa chỉ patch, câu dài; chỉ ghi 1 lần khi chờ thế giới | |

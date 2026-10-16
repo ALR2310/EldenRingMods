@@ -138,8 +138,6 @@ pub fn run() {
         },
     );
 
-    logger::log("ActiveLimit: tick registered on CSTaskGroupIndex::FrameBegin.");
-
     loop {
         std::thread::sleep(Duration::from_secs(60));
     }

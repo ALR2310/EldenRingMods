@@ -228,11 +228,10 @@ fn install(name: &str, pattern: &str, offset: usize, build: impl Fn(u64) -> Vec<
         return false;
     };
     // SAFETY: `site` is the scanned call in the game image; the length/offset is the one its pattern matched.
-    let Some(at) = (unsafe { codepatch::redirect_rel32(site, &build(target)) }) else {
+    if (unsafe { codepatch::redirect_rel32(site, &build(target)) }).is_none() {
         logger::error(&format!("SummonAnywhere: {name} redirect failed."));
         return false;
-    };
-    logger::log(&format!("SummonAnywhere: {name} at {site:p} (was {target:#x}) -> stub {at:p}."));
+    }
     true
 }
 
@@ -283,8 +282,10 @@ fn capture(repo: &mut SoloParamRepository) -> Option<Vec<Original>> {
 
 pub fn run() {
     let patched = install_patches();
-    if !patched {
-        logger::error("SummonAnywhere: code patches not installed - it only works near loaded summoning pools.");
+    if patched {
+        logger::log("SummonAnywhere: patched");
+    } else {
+        logger::error("SummonAnywhere: patch failed, works only near loaded pools");
     }
     let cs_task = common::task::wait_for_cs_task();
 
@@ -395,8 +396,6 @@ pub fn run() {
             applied = Some((no_rest, anywhere));
         },
     );
-
-    logger::log("BuddyStone: tick registered on CSTaskGroupIndex::FrameBegin.");
 
     loop {
         std::thread::sleep(Duration::from_secs(60));

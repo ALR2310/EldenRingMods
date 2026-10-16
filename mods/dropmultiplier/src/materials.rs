@@ -240,8 +240,7 @@ pub fn apply(repo: &mut SoloParamRepository, suffix: &str) {
             snapshot.enemy.iter().chain(&snapshot.map).flat_map(|r| r.groups).filter(|&g| g == group).count()
         };
         logger::log(&format!(
-            "Materials: {} ({} goods), found {} crafting, {} upgrade, {} unique material slot(s).",
-            common::params::describe::<ItemLotParam_map>(repo),
+            "Materials: {} goods, {} crafting, {} upgrade, {} unique slot(s)",
             goods_types.len(),
             count(Group::Crafting),
             count(Group::Upgrade),

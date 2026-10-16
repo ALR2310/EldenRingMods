@@ -106,7 +106,7 @@ struct Baseline {
 // comment), and a panic while this mutex was held would otherwise poison it
 // permanently, turning every retry's own `.lock().unwrap()` into a second,
 // unrelated panic before it ever got a chance to try again.
-static ORIGINALS: Mutex<Option<HashMap<u32, Baseline>>> = Mutex::new(None);
+static ORIGINALS: Mutex<Option<HashMap<usize, Baseline>>> = Mutex::new(None);
 
 /// Whether `row` is one RiseArcher touches at all - excludes the NPC-only
 /// duplicate rows and every weapon category outside the bow/crossbow/
@@ -183,19 +183,22 @@ pub fn apply(repo: &mut SoloParamRepository) -> usize {
 
     let mut snapshot_guard = ORIGINALS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let originals = snapshot_guard.get_or_insert_with(|| {
-        repo.rows_mut::<EquipParamWeapon>()
-            .filter(|(_, row)| is_relevant(row))
-            .map(|(id, row)| (id, snapshot(row)))
-            .collect()
+        let mut map = HashMap::new();
+        common::params::for_each_row_mut::<EquipParamWeapon>(repo, |index, row| {
+            if is_relevant(row) {
+                map.insert(index, snapshot(row));
+            }
+        });
+        map
     });
 
     let mut changed = 0;
-    for (id, row) in repo.rows_mut::<EquipParamWeapon>() {
-        let Some(baseline) = originals.get(&id) else {
-            continue; // not one of RiseArcher's rows (see is_relevant)
+    common::params::for_each_row_mut::<EquipParamWeapon>(repo, |index, row| {
+        let Some(baseline) = originals.get(&index) else {
+            return; // not one of RiseArcher's rows (see is_relevant)
         };
         let Some(kind) = weapon_kind(row.weapon_category(), row.wep_type()) else {
-            continue; // shouldn't happen - baseline is only ever inserted for a recognized kind
+            return; // shouldn't happen - baseline is only ever inserted for a recognized kind
         };
 
         match kind {
@@ -213,7 +216,7 @@ pub fn apply(repo: &mut SoloParamRepository) -> usize {
         }
 
         changed += 1;
-    }
+    });
 
     changed
 }
