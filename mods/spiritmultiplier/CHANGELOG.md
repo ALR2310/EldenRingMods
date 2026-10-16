@@ -6,6 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+- Fixed Mimic Tear summoning fewer spirits than set.
+- Fixed teleport options in the config file being ignored.
 - Added in-game settings menu support (requires the ERNativeUI mod).
 
 ## [1.2.2] - 2026-10-10
