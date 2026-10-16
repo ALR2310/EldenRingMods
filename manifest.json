@@ -193,7 +193,7 @@
     "internalId": "18610093304655",
     "name": "InfiniteAilment",
     "crate": "infiniteailment",
-    "modFileId": "18610093344854",
+    "modFileId": "8008011",
     "deploys": [
       {
         "version": "1.0.0",
@@ -202,6 +202,10 @@
       {
         "version": "1.0.1",
         "commit": "9d45929ab587123cfca1ea91a00b8746c3f8733e"
+      },
+      {
+        "version": "1.1.0",
+        "commit": "da75058da7c27d41fd9cb6f5d127fd95bfee506e"
       }
     ]
   },
