@@ -134,6 +134,7 @@ pub fn install_panic_hook() {
             error(&format!("PANIC on thread '{thread_name}' at {location}: {message}"));
             default_hook(info);
         }));
+        crate::crash::install();
     });
 }
 
