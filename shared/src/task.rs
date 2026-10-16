@@ -38,7 +38,7 @@ fn poll_cs_task() -> &'static CSTaskImp {
             return instance;
         }
         if start.elapsed() < WARN_AFTER {
-            logger::log("CSTaskImp not ready yet, retrying in 500ms...");
+            logger::log("CSTaskImp: waiting");
         } else if !warned {
             warned = true;
             logger::error(&format!(

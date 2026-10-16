@@ -91,7 +91,15 @@ pub fn for_each_row_mut<P: SoloParam>(
 /// mismatch (the layout assumption broke on some game version) this returns
 /// `None` rather than wrong IDs.
 pub fn row_ids<P: SoloParam>(repo: &SoloParamRepository) -> Option<Vec<u32>> {
-    let file = &res_cap::<P>(repo)?.param_res_cap.data;
+    row_ids_or_reason::<P>(repo).ok()
+}
+
+/// [row_ids], with the reason it gave up, for a log line.
+pub fn row_ids_or_reason<P: SoloParam>(repo: &SoloParamRepository) -> Result<Vec<u32>, String> {
+    // Typed on purpose: `.data` is an `OwnedPtr<ParamFile>`, and without the
+    // annotation `file as *const _` below would be the address of that pointer
+    // field, not of the param file (every offset read from it is then garbage).
+    let file: &ParamFile = &res_cap::<P>(repo).ok_or("param slot not available")?.param_res_cap.data;
     let base = file as *const _ as *const u8;
     let format_2d = unsafe { base.add(0x2D).read() };
     let is_64_bit = format_2d & 0x04 != 0;
@@ -101,7 +109,10 @@ pub fn row_ids<P: SoloParam>(repo: &SoloParamRepository) -> Option<Vec<u32>> {
 
     let mut ids = Vec::with_capacity(file.row_count());
     for index in 0..file.row_count() {
-        let row = repo.get_row_by_index::<P>(index)? as *const _ as *const u8;
+        let row = repo
+            .get_row_by_index::<P>(index)
+            .ok_or_else(|| format!("row {index} of {} not readable (format {format_2d:#x})", file.row_count()))?
+            as *const _ as *const u8;
         unsafe {
             let descriptor = base.add(start + index * stride);
             let data_offset = if is_64_bit {
@@ -110,10 +121,14 @@ pub fn row_ids<P: SoloParam>(repo: &SoloParamRepository) -> Option<Vec<u32>> {
                 (descriptor.add(data_field) as *const u32).read_unaligned() as usize
             };
             if base.add(data_offset) != row {
-                return None;
+                return Err(format!(
+                    "row {index} of {}: descriptor data offset {data_offset:#x} != row at {:#x} (format {format_2d:#x}, start {start:#x}, stride {stride})",
+                    file.row_count(),
+                    (row as usize).wrapping_sub(base as usize)
+                ));
             }
             ids.push((descriptor as *const u32).read_unaligned());
         }
     }
-    Some(ids)
+    Ok(ids)
 }

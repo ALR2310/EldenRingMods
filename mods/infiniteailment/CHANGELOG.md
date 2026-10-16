@@ -6,8 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+- Added Black Flame and Destined Death options.
 - Added in-game settings menu support (requires the ERNativeUI mod).
-- The in-game menu can be shown in Vietnamese.
 
 ## [1.0.1] - 2026-09-24
 

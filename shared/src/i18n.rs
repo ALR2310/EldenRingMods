@@ -76,7 +76,7 @@ impl Catalog {
                 .iter()
                 .map(|(name, text)| {
                     let texts = parse_texts(text).unwrap_or_else(|reason| {
-                        logger::log(&format!("Menu translation file for {name} is invalid ({reason})."));
+                        logger::log(&format!("i18n: {name} invalid ({reason})"));
                         HashMap::new()
                     });
                     (*name, texts)

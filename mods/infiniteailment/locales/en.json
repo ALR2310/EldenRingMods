@@ -10,6 +10,18 @@
     "title": "Poison",
     "help": "Poison damage over time."
   },
+  "black_flame": {
+    "title": "Black Flame",
+    "help": "Black Flame burn damage over time."
+  },
+  "destined_death": {
+    "title": "Destined Death",
+    "help": "Destined Death burn damage over time, and how long its max HP loss lasts."
+  },
+  "max_hp_loss": {
+    "label": "Max HP loss (s)",
+    "help": "How long Destined Death's max HP loss lasts, in seconds. -1 = infinite. Vanilla: 15 / 45."
+  },
   "duration": {
     "label": "Duration (s)",
     "help": "How long the damage lasts, in seconds. -1 = infinite. Vanilla: {vanilla}."

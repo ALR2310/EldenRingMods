@@ -10,6 +10,18 @@
     "title": "Độc",
     "help": "Sát thương theo thời gian của độc."
   },
+  "black_flame": {
+    "title": "Black Flame",
+    "help": "Sát thương theo thời gian của lửa đen (Black Flame)."
+  },
+  "destined_death": {
+    "title": "Destined Death",
+    "help": "Sát thương cháy theo thời gian của Destined Death, và thời gian giảm HP tối đa."
+  },
+  "max_hp_loss": {
+    "label": "Giảm HP tối đa (giây)",
+    "help": "Destined Death giảm HP tối đa kéo dài bao lâu, tính bằng giây. -1 = vô hạn. Gốc: 15 / 45."
+  },
   "duration": {
     "label": "Thời gian (giây)",
     "help": "Sát thương kéo dài bao lâu, tính bằng giây. -1 = vô hạn. Gốc: {vanilla}."
