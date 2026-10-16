@@ -1,5 +1,5 @@
 //! Changes how many spirits an Ash of War summons - ported from
-//! `.docs/x10_summon/er10x.dll`'s "chain rebuild" (its own `worker`
+//! `x10_summon/er10x.dll`'s "chain rebuild" (its own `worker`
 //! thread's stage 3), but using `fromsoftware-rs`'s own typed structure
 //! instead of hand-derived raw offsets:
 //!

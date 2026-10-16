@@ -1,5 +1,5 @@
 //! Allows riding Torrent (the spectral horse) anywhere, including areas that
-//! normally force a dismount - port of `.docs/torent_anywhere/
+//! normally force a dismount - port of `torent_anywhere/
 //! CavaloLivre_V7_Cardoso.dll` (a reference-only, non-Rust tool in this
 //! repo), decompiled with Ghidra to recover its exact patch bytes rather
 //! than guessing. Three independent techniques, same as that DLL:

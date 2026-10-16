@@ -20,3 +20,4 @@ link sang `docs/`.
 | 2026-10-15 | Mỗi hành động (Guard/Dodge/WeaponSwap) có section và bộ animation riêng thay cho `[Cancel]` + `[Animations]` dùng chung, vì người chơi Reforged bị guard huỷ luôn phép khi cast bằng weapon catalyst (giữ guard + đánh nhẹ); `ConfigVersion` 2 kèm migrate file cũ, menu thành 3 trang con | [docs](docs/animation_cancel.md) |
 | 2026-10-15 | Thử đỡ đòn trên không (nhóm `Jump` + `EventProbe`), bị kéo xuống đất và reset trạng thái liên tục nên dừng: không làm được chỉ bằng DLL; code nằm trong git stash | [docs](docs/air_guard.md) |
 | 2026-10-15 | Chữ của menu trong game đưa sang hệ đa ngôn ngữ (en.json, vi.json trong `locales/`), có bản tiếng Việt | [docs](../../shared/docs/i18n.md) |
+| 2026-10-15 | Người dùng đã chơi thử nhiều ngày, không thấy tác dụng phụ (i-frame, hitbox, FP khi cắt phép); đóng việc kiểm tra | [docs](docs/animation_cancel.md) |

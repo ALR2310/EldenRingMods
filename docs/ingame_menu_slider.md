@@ -3,6 +3,8 @@
 **Status 2026-10-13: nghiên cứu tĩnh xong (IDA, exe 2.7.1.0, và đọc `mod-settings-menu.dll`), CHƯA thử nghiệm trong game. Kết luận: số âm và thập phân làm được bằng ánh xạ hiển thị
 (`min + chỉ_số x step`) với một hook ghi đè chữ của slider (`0x74FA20`), đã có tiền lệ; cũng có đường sửa 1 byte nếu muốn lưu thẳng số âm trong byte. Hiện tại menu dùng ô nhập số cho số âm/thập phân, nên chưa cần làm.**
 
+**Cập nhật 2026-10-15: `NumberSetting::slider(from, to, step)` (ERNativeUI API 1.2) đã dùng ở Drop/Rune/Weight/Spirit/Speed/RiseArcher/AutoRegen; host API 1.1 tự lùi về ô gõ số (`shared/src/erui.rs`, chưa thử với host cũ trong game). AnimCancel chỉ có công tắc; InfiniteAilment và PassiveRunes giữ ô gõ số vì khoảng giá trị quá rộng (vd. 0..3.600.000 ms, -1000..1000) hoặc cần số lẻ mịn (0.18, 0.25), không vừa 256 mức.**
+
 Bối cảnh: ERNativeUI (xem [ingame_menu.md](ingame_menu.md)) giới hạn slider ở một byte 0..255. Câu hỏi: giới hạn đó nằm ở game hay ở thư viện?
 
 ## Kết luận

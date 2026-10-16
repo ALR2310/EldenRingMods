@@ -5,7 +5,7 @@
 //! [vanilla_text].
 //!
 //! Ported from the open-source `erdGameTools` project
-//! (`.docs/Elden_Ring_game_tools/src/grace_test_messages.cpp`, an actively
+//! (`Elden_Ring_game_tools/src/grace_test_messages.cpp`, an actively
 //! maintained mod confirmed already working against the exact game
 //! version `mod_test` runs) - same idea `EldenConvenienceMod` and every
 //! other Grace-menu mod investigated here settled on: nobody patches the

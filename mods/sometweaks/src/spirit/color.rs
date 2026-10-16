@@ -1,6 +1,6 @@
 //! Removes the ghostly tint from summoned spirit ashes (and Torrent, which
 //! shares the same `summon_buddy_chr_set`, but is never given the tint
-//! SpEffect so this never touches it), ported from `.docs/x10_summon/
+//! SpEffect so this never touches it), ported from `x10_summon/
 //! er10x.dll`'s `ghost_colour` option - but using a live per-tick SpEffect
 //! removal instead of that mod's static `NpcParam` row edit:
 //! `er10x.dll` has to hunt through up to 194 param tables at startup to

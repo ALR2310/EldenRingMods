@@ -1,7 +1,7 @@
 //! Prevents the player's currently-held rune count from being lost on
 //! death - by NOPing the exact `CALL` that moves current runes into a
 //! death bloodstain, port of the technique reverse engineered from
-//! `.docs/DisableRuneLoss.dll` (see this crate's README's "Giai ma
+//! `DisableRuneLoss.dll` (see this crate's README's "Giai ma
 //! DisableRuneLoss.dll" entry for the full writeup), confirmed against the
 //! real `eldenring.exe` via Ghidra (RVA `0x594f6c`; the `CALL` sits at
 //! `+5` within the matched pattern).
