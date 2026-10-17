@@ -148,3 +148,9 @@ Quy tắc (`src/weapon.rs`, `guard_possible`): đọc kiểu cầm `arm=` và ha
 - Không đọc được vũ khí hoặc không có dòng param: Guard không huỷ gì.
 
 Hàng param tra theo ID đang cầm, nếu không có thì theo ID bỏ hai chữ số cuối (9080009 = hàng 9080000 +9); kết quả lưu theo (kiểu cầm, ID trái, ID phải). Probe `STYLE` ghi `type/guard/dual/motion/shield` của hai tay. Chưa đo trong game các tình huống: hai tay một vũ khí, khiên + vũ khí một tay, hai katana (dual wield), Twin Blades.
+
+## Giữ guard rồi tấn công: không huỷ đòn vừa bắt đầu (2026-10-17)
+
+Báo cáo Nexus (wlpo1266): giữ đỡ đòn rồi bấm tấn công thì không đánh được (vanilla: chuyển sang đánh, đánh xong tự quay lại đỡ). Log (`WINDOW`, Heater Shield + katana): `a000_000100` (đứng giữ khiên) -> bấm R1 (`press=0x1`) -> `a029_030000` (đòn đánh) -> ở t=0,20-0,22 s mod mở cửa sổ có Guard (`can=0x2003070634`) -> game chuyển ngay sang `a000_019000` (vào guard), đòn bị cắt; lặp lại mỗi lần bấm.
+
+Nguyên nhân: guard vẫn **đang được giữ** từ trước khi đòn bắt đầu, nên khi cửa sổ Guard mở, game coi là yêu cầu guard và huỷ đòn. Sửa (`cancel.rs`, `next_guard_block`): khi animation mới bắt đầu mà L1 hoặc Guard (`action_requests`, bit 2 và 24) đang giữ thì chặn Guard cho animation đó; hết chặn khi thả guard (bấm lại sau đó là guard mới, huỷ được như thường). Probe `WINDOW` ghi thêm `held=` (phím đang giữ) và `gblock=` (1 = đang chặn).

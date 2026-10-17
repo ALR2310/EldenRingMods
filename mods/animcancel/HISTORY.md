@@ -22,3 +22,4 @@ link sang `docs/`.
 | 2026-10-15 | Chữ của menu trong game đưa sang hệ đa ngôn ngữ (en.json, vi.json trong `locales/`), có bản tiếng Việt | [docs](../../shared/docs/i18n.md) |
 | 2026-10-15 | Người dùng đã chơi thử nhiều ngày, không thấy tác dụng phụ (i-frame, hitbox, FP khi cắt phép); đóng việc kiểm tra | [docs](docs/animation_cancel.md) |
 | 2026-10-17 | Guard (L1) chỉ huỷ khi L1 thật sự là đỡ: cầm hai tay một vũ khí (trừ Twin Blades) hoặc một tay với khiên ở tay trái (`wepmotionCategory` 47/48/49/57); một vũ khí mỗi tay (dual wield) và Twin Blades thì L1 là đòn đánh, huỷ làm cụt combo (báo cáo người dùng, log `STYLE`); thêm dòng probe `STYLE` | [docs](docs/animation_cancel.md) |
+| 2026-10-17 | Sửa lỗi người dùng báo (wlpo1266): giữ đỡ đòn rồi bấm tấn công thì đòn bị cắt ở 0,2 giây (guard còn giữ từ trước khi đòn bắt đầu bị coi là yêu cầu guard); Guard chỉ huỷ khi bấm guard mới sau khi đòn đã bắt đầu | [docs](docs/animation_cancel.md) |

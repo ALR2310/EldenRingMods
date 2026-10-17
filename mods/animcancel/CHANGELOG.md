@@ -6,6 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+- Fixed attacks being cut right away when started while holding guard.
+
 ## [1.1.0] - 2026-10-17
 
 - Guard, dodge and weapon swap can now each cancel a different set of animations.

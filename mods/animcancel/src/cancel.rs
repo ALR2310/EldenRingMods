@@ -24,7 +24,7 @@
 //! frame) and `ChrIns_BehaviorSafe` (next frame), the combination tested in
 //! game.
 
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering};
 use std::time::Duration;
 
 use eldenring::cs::{ActionQueueEntry, CSChrActionRequestModule, CSTaskGroupIndex, ChrIns, WorldChrMan};
@@ -158,6 +158,39 @@ static LAST: AtomicU8 = AtomicU8::new(NOT_FORCED);
 pub const NOT_FORCED: u8 = 0;
 pub const FORCED: u8 = 1;
 
+/// Guard (L1) held as the animation began: it is no new press, and letting
+/// it cancel cuts the attack the player just started from a raised guard at
+/// once (2026-10-17 report; hold guard, press attack: the attack was cut and
+/// the guard raised again).
+static GUARD_HELD_AT_START: AtomicBool = AtomicBool::new(false);
+static GUARD_ANIM: AtomicI32 = AtomicI32::new(-1);
+
+/// The tracker behind [GUARD_HELD_AT_START]: `held` is whether guard is held
+/// now, `blocked` the previous answer. A new animation starts blocked when
+/// guard is already held; the block ends when the guard is let go.
+pub fn next_guard_block(same_animation: bool, held: bool, blocked: bool) -> bool {
+    if !same_animation {
+        held
+    } else {
+        blocked && held
+    }
+}
+
+/// Whether the guard held since before the animation began must not cancel it.
+fn guard_blocked(request: &CSChrActionRequestModule, id: i32) -> bool {
+    let held: u64 = read(&request.action_requests);
+    let guard_held = held & bits(&[GUARD, L1]) != 0;
+    let same = GUARD_ANIM.swap(id, Ordering::Relaxed) == id;
+    let blocked = next_guard_block(same, guard_held, GUARD_HELD_AT_START.load(Ordering::Relaxed));
+    GUARD_HELD_AT_START.store(blocked, Ordering::Relaxed);
+    blocked
+}
+
+/// Whether guard was held from before the animation began (for the probe's log).
+pub fn guard_held_since_start() -> bool {
+    GUARD_HELD_AT_START.load(Ordering::Relaxed)
+}
+
 pub fn last_state() -> u8 {
     LAST.load(Ordering::Relaxed)
 }
@@ -200,7 +233,12 @@ fn apply() {
     };
     let request = &mut chr.modules.action_request;
     let id = queue_id(request);
-    let allow = if id < 0 { Allow::default() } else { allow_from(&config, group_for_cancel(id), crate::weapon::guard_button_guards()) };
+    let guard_blocked = guard_blocked(request, id);
+    let allow = if id < 0 {
+        Allow::default()
+    } else {
+        allow_from(&config, group_for_cancel(id), crate::weapon::guard_button_guards() && !guard_blocked)
+    };
     if allow.actions == 0 {
         LAST.store(NOT_FORCED, Ordering::Relaxed);
         return;
@@ -260,6 +298,23 @@ mod tests {
         assert!(with.actions & (1 << GUARD | 1 << L1) != 0);
         assert_eq!(without.actions & (1 << GUARD | 1 << L1), 0);
         assert!(without.actions & 1 << ROLLING != 0);
+    }
+
+    #[test]
+    fn guard_held_before_the_attack_does_not_cancel_it() {
+        // Guard held, attack starts: blocked while the guard stays held.
+        let blocked = next_guard_block(false, true, false);
+        assert!(blocked);
+        assert!(next_guard_block(true, true, blocked));
+        // Let go: no longer blocked; a new press during the attack cancels.
+        let released = next_guard_block(true, false, blocked);
+        assert!(!released);
+        assert!(!next_guard_block(true, true, released));
+        // Attack started without guard: a guard pressed later cancels it.
+        assert!(!next_guard_block(false, false, false));
+        assert!(!next_guard_block(true, true, false));
+        // Held across into the next animation: blocked again.
+        assert!(next_guard_block(false, true, false));
     }
 
     #[test]
