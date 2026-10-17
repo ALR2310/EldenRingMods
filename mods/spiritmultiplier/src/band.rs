@@ -63,7 +63,7 @@
 //! the same capacity (true under Seamless, which sets it on everyone).
 
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use common::codepatch;
 use common::logger;
@@ -293,6 +293,28 @@ fn install_band_alloc() -> bool {
     true
 }
 
+/// How long to wait for Seamless Co-op (`ersc.dll`) to load before patching
+/// the capacity. The patch only has to beat the world's creation, which is
+/// much later; this runs on its own thread, not in `DllMain`.
+const SEAMLESS_WAIT: Duration = Duration::from_secs(10);
+
+/// Whether Seamless Co-op is loaded (waiting up to [SEAMLESS_WAIT] for it).
+/// It raises the same capacity itself, by scanning for the very bytes
+/// [install_capacity] rewrites: patched first, its scan fails with a fatal
+/// "No such pattern" (2026-10-18), so with Seamless the capacity is left to it.
+fn seamless_loaded() -> bool {
+    let deadline = Instant::now() + SEAMLESS_WAIT;
+    loop {
+        if common::diag::is_module_loaded("ersc.dll") {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
 fn install_capacity(capacity: u32) -> bool {
     let Some(site) = memscan::wait_for_pattern_in_module(CAPACITY_INIT_AOB, SCAN_RETRY_INTERVAL, SCAN_TIMEOUT) else {
         logger::error("Band: ChrSet init pattern not found. Game may have been updated - re-check CAPACITY_INIT_AOB.");
@@ -326,8 +348,12 @@ fn install_capacity(capacity: u32) -> bool {
 /// to what 80 slots hold.
 pub fn install(max_spirits: u32) -> bool {
     let mut band_len = max_spirits.clamp(DEFAULT_MAX_SPIRITS, MAX_MAX_SPIRITS);
-    if band_len > DEFAULT_MAX_SPIRITS && !install_capacity(BAND_START + band_len) {
-        band_len = DEFAULT_MAX_SPIRITS;
+    if band_len > DEFAULT_MAX_SPIRITS {
+        if seamless_loaded() {
+            logger::log("Band: Seamless Co-op sets the capacity, own capacity patch skipped");
+        } else if !install_capacity(BAND_START + band_len) {
+            band_len = DEFAULT_MAX_SPIRITS;
+        }
     }
     BAND_LEN.store(band_len, Ordering::Relaxed);
     let patched = install_next_cursor() && install_band_alloc();

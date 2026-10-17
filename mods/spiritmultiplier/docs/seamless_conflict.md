@@ -42,3 +42,11 @@ Manh mối bên ngoài: tác giả Seamless trả lời các mod spirit rằng "
 Nên cơ chế chặn nằm trong code của Seamless, không thấy được từ SpEffect; áp `2147300000` bằng `apply_speffect` rất có thể không có tác dụng (không có dòng param). Không giải mã `ersc.dll` (packer/VM): tốn công, và lỗi không tái hiện được nên không kiểm chứng được bản sửa.
 
 **Hướng tiếp (nếu có thêm báo cáo):** tra trong `dumps/seamless-diff/.../seamless_only_ida.txt` các vá nằm trên đường triệu hồi (DoSummon, `sub_1404B92B0`, `sub_1404BAEA0`, kiểm tra stone/`stateInfo`), rồi dùng breakpoint phần cứng/log xem Seamless đọc cờ nào lúc bấm triệu hồi lại, thay vì đọc mã của nó.
+
+## MaxSpirits > 60 làm Seamless dừng "No such pattern" (2026-10-18)
+
+**Status 2026-10-18: đã sửa (`band.rs`, `seamless_loaded`); đã tái hiện lỗi, chưa test lại bản sửa trong game.**
+
+Seamless 2.0.1 hiện hộp thoại `Fatal Error: No such pattern "BA 00 05 00 00 41 B8 08 00 00 00 FF 50 50 48 89 46 18"` (`ersc\signatures\signatures.cpp`) khi cài cùng mod này với `MaxSpirits` > 60. Mẫu đó là phần đầu của `CAPACITY_INIT_AOB` (khởi tạo ChrSet của spirit, `sub_1404954B0`): Seamless quét nó để nới capacity lên 1000, còn phép vá capacity của mod viết đè `BA 00 05 00 00` (kích thước cấp phát) nên Seamless không tìm thấy. Quy tắc cũ ở trên (không đụng chữ ký của Seamless) bị phép vá này vi phạm.
+
+Cách sửa: khi `MaxSpirits` > 60, đợi tối đa 10 giây (thread riêng, không phải `DllMain`) xem `ersc.dll` có nạp không; có thì bỏ phép vá capacity và để Seamless nới (dải slot vẫn rộng `MaxSpirits`, `band_layout` chia theo capacity thật); không có thì vá như cũ. Phép vá chỉ cần xong trước khi thế giới được tạo nên chờ vài giây không sao. Còn sót: nếu `ersc.dll` nạp sau 10 giây thì lỗi cũ vẫn xảy ra.
