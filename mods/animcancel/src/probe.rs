@@ -64,6 +64,9 @@ struct Windows {
     queue_id: i32,
     queue_inputs: u64,
     queue_cancels: u64,
+    /// Keys held (`action_requests`) and whether guard was held as the animation began.
+    held: u64,
+    guard_blocked: bool,
 }
 
 /// Logs the windows when they (or the animation) change, and every new press
@@ -89,6 +92,8 @@ fn log_windows(chr: &ChrIns, last: &mut Windows, last_press: &mut u64) {
         queue_id: id,
         queue_inputs: entry_actions(&queue.input_entries),
         queue_cancels: entry_actions(&queue.cancel_entries),
+        held: read(&request.action_requests),
+        guard_blocked: cancel::guard_held_since_start(),
     };
     let press: u64 = read(&request.new_action_presses);
     if now == *last && press == *last_press {
@@ -97,7 +102,7 @@ fn log_windows(chr: &ChrIns, last: &mut Windows, last_press: &mut u64) {
     *last = now;
     *last_press = press;
     logger::log(&format!(
-        "WINDOW {} t={:.2}/{:.2} grp={:?} qgrp={:?} mod={} inputs={:#x} cancels={:#x} queued={:#x} ready={:#x} press={:#x} tae={:#x} disabled={:#x} q={} qin={:#x} qcan={:#x}",
+        "WINDOW {} t={:.2}/{:.2} grp={:?} qgrp={:?} mod={} inputs={:#x} cancels={:#x} queued={:#x} ready={:#x} press={:#x} tae={:#x} disabled={:#x} q={} qin={:#x} qcan={:#x} held={:#x} gblock={}",
         fmt_anim(now.anim),
         anim.play_time,
         anim.anim_length,
@@ -114,6 +119,8 @@ fn log_windows(chr: &ChrIns, last: &mut Windows, last_press: &mut u64) {
         now.queue_id,
         now.queue_inputs,
         now.queue_cancels,
+        now.held,
+        now.guard_blocked as u8,
     ));
 }
 
