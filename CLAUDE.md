@@ -149,6 +149,10 @@ Mod ID theo từng mod trong workspace này (game domain luôn là `eldenring`):
 - `animcancel` → 11328 (Anim Cancel)
 - `windowresize` → **không đăng lên Nexus, dùng nội bộ (quyết định 2026-10-07)**
 
+Quét zip phát hành bằng VirusTotal: `python scripts/vt-scan.py <zip>` (khoá
+`VT_API_KEY` trong `.env`, miễn phí; tra hash trước, chưa có thì tải lên và
+chờ kết quả; skill `deploy-nexus-mod` gọi nó sau khi build zip).
+
 Key API cá nhân của người dùng lưu ở biến `NEXUS_API_KEY` trong `.env` ở
 gốc repo (mẫu: `.env.example`; chỉ dùng nội bộ cho quy trình phát hành,
 không mod nào đọc nó lúc chạy/build; đã

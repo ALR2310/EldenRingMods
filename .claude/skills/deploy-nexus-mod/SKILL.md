@@ -194,6 +194,22 @@ Kết quả mong đợi: `builds/<crate>/<Mod>-<version>.zip` (`<crate>` = tên 
 fail, thiếu ini...) - dừng lại, báo nguyên văn lỗi cho người dùng, không tự
 sửa code để "cho qua".
 
+Rồi quét zip bằng VirusTotal (cần `VT_API_KEY` trong `.env`; không có khoá thì
+bỏ qua bước này và nói rõ trong tóm tắt ở Bước 4). Quét luôn cả zip của
+phiên bản đã deploy trước đó (nếu còn trong `builds/<crate>/`) để có mốc so sánh:
+
+```bash
+python scripts/vt-scan.py builds/<crate>/<Mod>-<version>.zip builds/<crate>/<Mod>-<phiên bản trước>.zip
+```
+
+Script tra SHA-256 trước, chưa có trên VirusTotal thì **tải lên** (zip phát hành
+vốn sắp public nên được; không chạy với build thử chưa định phát hành, hoặc
+thêm `--no-upload`). Kết quả chỉ để **báo cho người dùng**, không chặn quy
+trình: Nexus có bộ quét riêng, và số hãng VirusTotal gắn cờ không quyết định
+việc file bị quarantine (AnimCancel 1.0.0 bị 24/68 vẫn qua, 1.1.1 chỉ 14/67
+lại bị chặn, 2026-10-17). Chỉ cảnh báo thêm nếu số cờ cao hơn rõ rệt so với
+bản trước.
+
 ## Bước 4 - Xác nhận lần cuối rồi publish
 
 5. Lấy mod ID nội bộ Nexus (khác `game_scoped_id`) từ `internalId` đã cache
@@ -227,6 +243,8 @@ sửa code để "cho qua".
      (bước 12): changelog >= 3 dòng → 2 dòng cố định; < 3 dòng → các dòng
      changelog + dòng antivirus. Ghi rõ `description` sẽ gửi trong tóm tắt.
    - Tên file zip vừa build, kích thước, md5.
+   - Kết quả VirusTotal của zip (số hãng gắn cờ / tổng, tên các hãng) và của
+     bản trước để so sánh; ghi rõ nếu đã bỏ qua quét (thiếu khoá).
 
    Sau đó **BẮT BUỘC gọi tool `AskUserQuestion`** (không phải chỉ hỏi bằng
    văn bản thường) với câu hỏi "Xác nhận publish?" + 2 lựa chọn (VD "Xác
