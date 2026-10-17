@@ -12,7 +12,7 @@ ReloadBanner = false
 
 
 [Guard]
-# Raising the guard cancels the animations below.
+# Raising the guard cancels the animations below (not while dual wielding or with twin blades).
 Enabled = true
 Attack = true       # normal attacks
 Skill = true        # weapon arts (Ashes of War)

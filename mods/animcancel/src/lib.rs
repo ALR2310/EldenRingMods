@@ -4,6 +4,7 @@ mod cancel;
 mod config;
 mod menu;
 mod probe;
+mod weapon;
 
 use common::{dll_dir, logger};
 

@@ -85,11 +85,12 @@ pub fn source_allowed(group: Group, action: &Action) -> bool {
 }
 
 /// The mask for an animation of `group`: the actions that are enabled and may
-/// cancel that group.
-pub fn allow_from(config: &Config, group: Group) -> Allow {
+/// cancel that group. `guard`: L1 really guards with what is held (one weapon
+/// in both hands, or a shield); otherwise it may be an attack and cancels nothing.
+pub fn allow_from(config: &Config, group: Group, guard: bool) -> Allow {
     let on = |action: &Action| action.enabled && source_allowed(group, action);
     let mut allow = Allow::default();
-    if on(&config.guard) {
+    if guard && on(&config.guard) {
         // Guard is L1 in game; ACTION_ARM_GUARD (24) alone queued no press.
         allow.actions |= bits(&[GUARD, L1]);
     }
@@ -199,7 +200,7 @@ fn apply() {
     };
     let request = &mut chr.modules.action_request;
     let id = queue_id(request);
-    let allow = if id < 0 { Allow::default() } else { allow_from(&config, group_for_cancel(id)) };
+    let allow = if id < 0 { Allow::default() } else { allow_from(&config, group_for_cancel(id), crate::weapon::guard_button_guards()) };
     if allow.actions == 0 {
         LAST.store(NOT_FORCED, Ordering::Relaxed);
         return;
@@ -240,19 +241,30 @@ mod tests {
 
     #[test]
     fn nothing_allowed_means_no_bits() {
-        assert_eq!(allow_from(&only(false, false, false), Group::Attack), Allow::default());
+        assert_eq!(allow_from(&only(false, false, false), Group::Attack, true), Allow::default());
     }
 
     #[test]
     fn guard_includes_l1() {
-        let allow = allow_from(&only(true, false, false), Group::Attack);
+        let allow = allow_from(&only(true, false, false), Group::Attack, true);
         assert_eq!(allow.actions, 1 << GUARD | 1 << L1);
         assert_eq!(allow.tae, TAE_ACTION_GENERAL);
     }
 
+    /// L1 not guarding (dual wield, twin blades): guard cancels nothing, the rest still does.
+    #[test]
+    fn guard_cancels_nothing_when_l1_attacks() {
+        let config = only(true, true, true);
+        let with = allow_from(&config, Group::Attack, true);
+        let without = allow_from(&config, Group::Attack, false);
+        assert!(with.actions & (1 << GUARD | 1 << L1) != 0);
+        assert_eq!(without.actions & (1 << GUARD | 1 << L1), 0);
+        assert!(without.actions & 1 << ROLLING != 0);
+    }
+
     #[test]
     fn dodge_includes_the_roll_and_step_bits() {
-        let allow = allow_from(&only(false, true, false), Group::Attack);
+        let allow = allow_from(&only(false, true, false), Group::Attack, true);
         for bit in [SP_MOVE, ROLLING, BACKSTEP, DODGE_18] {
             assert!(allow.actions & 1 << bit != 0, "bit {bit}");
         }
@@ -261,11 +273,11 @@ mod tests {
 
     #[test]
     fn weapon_swap_needs_the_queue_bit_and_the_slot_flag() {
-        let allow = allow_from(&only(false, false, true), Group::Attack);
+        let allow = allow_from(&only(false, false, true), Group::Attack, true);
         assert!(allow.actions & 1 << SLOT_SWITCH != 0);
         assert!(allow.tae & TAE_SLOT_SWITCH != 0);
         // The others don't get the slot flag.
-        assert_eq!(allow_from(&only(true, true, false), Group::Attack).tae & TAE_SLOT_SWITCH, 0);
+        assert_eq!(allow_from(&only(true, true, false), Group::Attack, true).tae & TAE_SLOT_SWITCH, 0);
     }
 
     #[test]
@@ -290,15 +302,15 @@ mod tests {
         let no_cast = Action { cast: false, ..ALL };
         let config = config(no_cast, ALL, ALL);
         let guard = 1 << GUARD;
-        assert_eq!(allow_from(&config, Group::Cast).actions & guard, 0);
-        assert!(allow_from(&config, Group::Cast).actions & 1 << ROLLING != 0);
-        assert!(allow_from(&config, Group::Cast).actions & 1 << SLOT_SWITCH != 0);
+        assert_eq!(allow_from(&config, Group::Cast, true).actions & guard, 0);
+        assert!(allow_from(&config, Group::Cast, true).actions & 1 << ROLLING != 0);
+        assert!(allow_from(&config, Group::Cast, true).actions & 1 << SLOT_SWITCH != 0);
         for group in [Group::Attack, Group::Skill, Group::Item] {
-            assert!(allow_from(&config, group).actions & guard != 0, "{group:?}");
+            assert!(allow_from(&config, group, true).actions & guard != 0, "{group:?}");
         }
         // An action that is off cancels nothing, whatever its set says.
         let off = self::config(OFF, ALL, ALL);
-        assert_eq!(allow_from(&off, Group::Attack).actions & guard, 0);
+        assert_eq!(allow_from(&off, Group::Attack, true).actions & guard, 0);
     }
 
     #[test]
