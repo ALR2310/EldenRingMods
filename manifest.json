@@ -322,6 +322,10 @@
       {
         "version": "1.0.0",
         "commit": "1e3d1bf333793345ca7eb2957afbad487372f6f1"
+      },
+      {
+        "version": "1.1.0",
+        "commit": "2eaaef6f6df55a31c55883337b8bd70fb1e0e22f"
       }
     ]
   }
