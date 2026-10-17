@@ -6,6 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+- Fixed Seamless Co-op failing to start when MaxSpirits is above 60.
+
 ## [1.3.0] - 2026-10-17
 
 - Fixed Mimic Tear summoning fewer spirits than set.
