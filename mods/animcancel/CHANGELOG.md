@@ -6,6 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-17
+
 - Fixed attacks being cut right away when started while holding guard.
 
 ## [1.1.0] - 2026-10-17
