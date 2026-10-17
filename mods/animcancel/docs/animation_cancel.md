@@ -135,3 +135,16 @@ cancel: giả thuyết đó đã loại.
    `cancel_entries.push_back` dùng bộ cấp phát của game (chưa thấy lỗi trong test).
 3. Chờ DAM127 nói rõ muốn cancel gì (có thể thêm Item, Jump, cancel từ lăn...).
 4. Trang Nexus (`nexus_page.bbcode`), CHANGELOG, logo khi quyết định đăng.
+
+## Guard chỉ huỷ khi L1 thật sự là đỡ (2026-10-17)
+
+Báo cáo người dùng: cầm Rellana's Twin Blades hoặc một vũ khí mỗi tay (dual wield) thì bấm nhanh chuột phải (L1) làm đòn đánh bị huỷ giữa chừng. Log (`STYLE` + `WINDOW`): L1 (`queued=0x4`, bit 2) lúc `mod=forced` cắt các chuỗi L1 `a029_035000 -> 035010` (cắt ở 0,57 / 2,30 s) và `a249_032000 -> 032100 -> 032110`. Với các vũ khí đó L1 là đòn đánh, không phải đỡ, nên "guard huỷ đòn" làm cụt combo.
+
+Dữ liệu `EquipParamWeapon` (bản xuất trong `tmp/`): `enableGuard` chỉ bằng 1 với khiên thật (Heater Shield `31330000`: `wepType 67`, `wepmotionCategory 49`), katana bằng 0; Rellana's Twin Blades: `wepType 93`, `isDualBlade 1`, `wepmotionCategory 60`. Nhóm animation khiên: 47 Greatshield, 48 Small Shield, 49 Medium Shield, 57.
+
+Quy tắc (`src/weapon.rs`, `guard_possible`): đọc kiểu cầm `arm=` và hai vũ khí đang chọn.
+- Cầm hai tay (`RightBothHands` / `LeftBothHands`): một vũ khí đang cầm, vũ khí ở ô bên kia được cất, nên L1 là đỡ, trừ Twin Blades (`isDualBlade`).
+- Cầm một tay (`OneHanded`): chỉ khi tay trái là khiên. Một vũ khí mỗi tay không phải khiên là dual wield, L1 là đòn đánh.
+- Không đọc được vũ khí hoặc không có dòng param: Guard không huỷ gì.
+
+Hàng param tra theo ID đang cầm, nếu không có thì theo ID bỏ hai chữ số cuối (9080009 = hàng 9080000 +9); kết quả lưu theo (kiểu cầm, ID trái, ID phải). Probe `STYLE` ghi `type/guard/dual/motion/shield` của hai tay. Chưa đo trong game các tình huống: hai tay một vũ khí, khiên + vũ khí một tay, hai katana (dual wield), Twin Blades.

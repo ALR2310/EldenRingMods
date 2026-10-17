@@ -11,12 +11,17 @@
 //!   `forced`), the masks and the queue entries for the queue's id
 //!   (`q=<id>`, `qin` = the requests the HKS reads, `qcan` = the permissions
 //!   it checks).
+//! - `CancelProbe` also writes a `STYLE` line when how the weapons are held or
+//!   which weapons are equipped changes (`arm=` the arm style, `slot=` the
+//!   selected left/right weapon slots, `weapon=` the param IDs held), to see
+//!   what holding two weapons looks like (guard is an attack there).
 //! - `FlagProbe`: a `FLAG` line for every word of `CSChrActionFlagModule` that
 //!   changes (the flags animation events set).
 //!
 //! Runs at `ChrIns_PostPhysics`, after this frame's windows are final.
 
-use eldenring::cs::{ActionQueueEntry, CSTaskGroupIndex, ChrIns};
+use eldenring::cs::{ActionQueueEntry, CSTaskGroupIndex, ChrAsmSlot, ChrIns, WorldChrMan};
+use fromsoftware_shared::FromStatic;
 
 use common::anim::{current_anim_id, group_of};
 use common::logger;
@@ -112,6 +117,57 @@ fn log_windows(chr: &ChrIns, last: &mut Windows, last_press: &mut u64) {
     ));
 }
 
+/// The weapon's class and the flags that decide what L1 does with it.
+fn weapon_info(id: i32) -> String {
+    match crate::weapon::weapon(id) {
+        Some(w) => format!(
+            "type={} guard={} dual={} motion={}/{} shield={}",
+            w.wep_type,
+            w.enable_guard as u8,
+            w.dual_blade as u8,
+            w.motion,
+            w.guard_motion,
+            crate::weapon::is_shield(&w) as u8
+        ),
+        None => "no row".to_string(),
+    }
+}
+
+/// What the player holds: arm style, selected slots and the weapon param IDs.
+#[derive(Clone, PartialEq, Eq, Default)]
+struct Style(String);
+
+fn read_style() -> Option<Style> {
+    let world_chr_man = unsafe { WorldChrMan::instance_mut() }.ok()?;
+    let player = world_chr_man.main_player.as_mut()?;
+    let data = unsafe { player.player_game_data.as_ref() };
+    let asm = &data.equipment.chr_asm;
+    let equipment = &asm.equipment;
+    let id = |slot: ChrAsmSlot| asm.equipment_param_ids[slot as usize];
+    let left = equipment.active_left_weapon_slot();
+    let right = equipment.active_right_weapon_slot();
+    Some(Style(format!(
+        "arm={:?} slot=L{}/R{} weapon=L{}/R{} left[{}] right[{}]",
+        equipment.arm_style,
+        equipment.selected_slots.left_weapon_slot,
+        equipment.selected_slots.right_weapon_slot,
+        id(left),
+        id(right),
+        weapon_info(id(left)),
+        weapon_info(id(right))
+    )))
+}
+
+fn log_style(last: &mut Style) {
+    let Some(now) = read_style() else {
+        return;
+    };
+    if now != *last {
+        logger::log(&format!("STYLE {}", now.0));
+        *last = now;
+    }
+}
+
 /// Logs every 4-byte word of the player's `CSChrActionFlagModule` that
 /// changed since the last frame (skipping the vftable and owner pointer).
 fn log_flag_changes(chr: &ChrIns, prev: &mut Vec<u8>) {
@@ -139,6 +195,7 @@ pub fn start() {
     let mut last = Windows::default();
     let mut last_press = 0u64;
     let mut flag_prev: Vec<u8> = Vec::new();
+    let mut last_style = Style::default();
     common::task::run_recurring_safe(
         cs_task,
         "Probe",
@@ -154,6 +211,7 @@ pub fn start() {
             };
             if logging.cancel_probe {
                 log_windows(chr, &mut last, &mut last_press);
+                log_style(&mut last_style);
             }
             if logging.flag_probe {
                 log_flag_changes(chr, &mut flag_prev);

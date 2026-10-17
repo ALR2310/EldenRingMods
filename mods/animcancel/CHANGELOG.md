@@ -7,6 +7,7 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 ## [Unreleased]
 
 - Guard, dodge and weapon swap can now each cancel a different set of animations.
+- Fixed guard cancelling attacks made with the guard button.
 - Added in-game settings menu support (requires the ERNativeUI mod).
 
 ## [1.0.0] - 2026-10-12
