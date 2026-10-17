@@ -4,7 +4,7 @@
   },
   "guard": {
     "title": "Đỡ đòn",
-    "help": "Giơ khiên đỡ đòn sẽ huỷ các animation bạn chọn (không áp dụng khi cầm hai vũ khí)."
+    "help": "Giơ khiên đỡ đòn sẽ huỷ các animation bạn chọn."
   },
   "dodge": {
     "title": "Né",

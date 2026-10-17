@@ -4,7 +4,7 @@
   },
   "guard": {
     "title": "Guard",
-    "help": "Raising your guard cancels the animations you pick (not while dual wielding)."
+    "help": "Raising your guard cancels the animations you pick."
   },
   "dodge": {
     "title": "Dodge",
