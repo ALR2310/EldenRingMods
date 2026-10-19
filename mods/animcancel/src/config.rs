@@ -1,4 +1,4 @@
-//! `AnimCancel.toml`, loaded through `common::toml_config` (same layout as
+//! `AnimCancelV1.toml`, loaded through `common::toml_config` (same layout as
 //! SpeedMultiplier's). Defaults live only in the embedded template: `Default`
 //! on these structs is the derived zero value the loader needs while parsing,
 //! never a config in use - see [template] and the test
@@ -15,7 +15,7 @@ use common::toml_config::{remove_value, set_value, LoadReport, Migration, Step, 
 
 /// Embedded verbatim at compile time - single source of truth for the
 /// default file.
-pub const TEMPLATE: &str = include_str!("../AnimCancel.toml");
+pub const TEMPLATE: &str = include_str!("../AnimCancelV1.toml");
 
 /// Format migration steps for `General.ConfigVersion` (see
 /// `common::toml_config`): `STEPS[i]` takes a file from version `i + 1` to
@@ -59,6 +59,7 @@ pub struct Config {
     pub guard: Action,
     pub dodge: Action,
     pub weapon_swap: Action,
+    pub jump: Action,
     pub logging: Logging,
 }
 
@@ -72,7 +73,7 @@ pub struct General {
     pub reload_banner: bool,
 }
 
-/// `[Guard]`, `[Dodge]`, `[WeaponSwap]`: one action that may cut an animation
+/// `[Guard]`, `[Dodge]`, `[WeaponSwap]`, `[Jump]`: one action that may cut an animation
 /// short, and which animations it may cut.
 #[derive(Deserialize, Serialize, Default, Debug, Clone, Copy, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
@@ -146,7 +147,7 @@ mod tests {
     fn template_defaults() {
         let config = template();
         assert_eq!(config.general.config_version, 2);
-        for action in [config.guard, config.dodge, config.weapon_swap] {
+        for action in [config.guard, config.dodge, config.weapon_swap, config.jump] {
             assert!(action.enabled && action.attack && action.skill && action.cast && action.item);
         }
         // Like the other mods: the log is on, the (verbose) probes are off.

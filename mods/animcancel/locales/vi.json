@@ -14,6 +14,10 @@
     "title": "Đổi vũ khí",
     "help": "Đổi vũ khí sẽ huỷ các animation bạn chọn."
   },
+  "jump": {
+    "title": "Nhảy",
+    "help": "Nhảy sẽ huỷ các animation bạn chọn."
+  },
   "enabled": {
     "label": "Bật",
     "help": "Bật hoặc tắt việc huỷ animation cho hành động này."

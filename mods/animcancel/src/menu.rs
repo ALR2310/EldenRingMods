@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! Anim Cancel                -> opens a page with:
-//!   Guard / Dodge / Weapon swap -> each a page with: Enabled, Attacks, Skills,
+//!   Guard / Dodge / Weapon swap / Jump -> each a page with: Enabled, Attacks, Skills,
 //!                                  Spells, Items
 //!   Log file                 on/off
 //! ```
@@ -46,6 +46,7 @@ macro_rules! action_settings {
 static GUARD: ActionSettings = action_settings!("Guard");
 static DODGE: ActionSettings = action_settings!("Dodge");
 static WEAPON_SWAP: ActionSettings = action_settings!("WeaponSwap");
+static JUMP: ActionSettings = action_settings!("Jump");
 static LOG_FILE: Setting = Setting::flag("Logging.LogFile");
 
 static MENU: OnceLock<erui::Menu> = OnceLock::new();
@@ -86,6 +87,7 @@ fn build(b: &mut MenuBuilder) -> Result<(), String> {
     action_page!(b, page, &t("guard.title"), &t("guard.help"), GUARD, guard);
     action_page!(b, page, &t("dodge.title"), &t("dodge.help"), DODGE, dodge);
     action_page!(b, page, &t("weapon_swap.title"), &t("weapon_swap.help"), WEAPON_SWAP, weapon_swap);
+    action_page!(b, page, &t("jump.title"), &t("jump.help"), JUMP, jump);
 
     b.toggle(page, &t("log.label"), &t("log.help"), &LOG_FILE, || config::get().logging.log_file as u8)
 }

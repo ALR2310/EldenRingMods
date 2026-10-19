@@ -6,6 +6,10 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+- Added jump option to cancel animations by jumping.
+- Fixed the reload key working outside the game window.
+- Changed the config file name to AnimCancelV1.toml. This fixes false detections by antivirus scanners.
+
 ## [1.1.1] - 2026-10-17
 
 - Fixed attacks being cut right away when started while holding guard.
