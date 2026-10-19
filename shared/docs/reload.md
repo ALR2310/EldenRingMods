@@ -1,6 +1,6 @@
 # reload: nạp lại config bằng phím nóng
 
-**Status 2026-10-13: hoạt động, dùng bởi dropmultiplier, infiniteailment, animcancel, runemultiplier và các mod khác. Còn một việc mở: `reload.rs` vẫn gọi `eldenring::util::input::is_key_pressed` (xem TODO.md và `shared/docs/input.md`). Code ở `shared/src/reload.rs`.**
+**Status 2026-10-19: hoạt động, dùng bởi dropmultiplier, infiniteailment, animcancel, runemultiplier và các mod khác. Phím đọc bằng `common::input::is_key_pressed` (`GetAsyncKeyState`, chỉ tính khi cửa sổ game có focus); đến 2026-10-18 `reload.rs` gọi `eldenring::util::input::is_key_pressed` (`GetKeyState`, nhận phím cả khi cửa sổ game không ở nền) và đổi vì lỗi đó, đồng thời bản đó cộng với `common::diag` làm antivirus gắn cờ (RuneMultiplier 6 xuống 2 cờ trên VirusTotal, xem `mods/animcancel/docs/antivirus.md`). Code ở `shared/src/reload.rs`.**
 
 ## Vai trò
 
@@ -15,14 +15,11 @@ gốc thay vì cộng dồn). Đa số tính năng không cần: `common::config
 
 ## Chỉ một người poll mỗi phím
 
-Hàm `eldenring::util::input::is_key_pressed` debounce theo mã VK trong **một bản
-đồ dùng chung** (`DEBOUNCE_MAP`, xem `crates/eldenring/src/util/input.rs`), không
-theo từng người gọi. Nếu hai module cùng gọi cho một phím, chỉ module chạy trước
-trong frame đó mới thấy `true`. Vì vậy `run` phải là nơi **duy nhất** poll
-`ReloadKey` trong một process; các module khác theo dõi `RELOAD_GENERATION`.
-
-Bản `common::input::is_key_pressed` cũng giữ trạng thái theo phím chứ không theo
-người gọi, nên quy tắc này đúng với cả hai.
+`common::input::is_key_pressed` giữ trạng thái theo mã phím (`KEY_STATE`) chứ không
+theo người gọi: nếu hai module cùng gọi cho một phím, chỉ lần gọi đến trước trong
+frame mới thấy `true` (lần gọi sau thấy phím vẫn đang giữ). Vì vậy `run` phải là nơi
+**duy nhất** poll `ReloadKey` trong một process; các module khác theo dõi
+`RELOAD_GENERATION`. Mỗi DLL có bản `KEY_STATE` riêng (mỗi DLL link riêng `common`).
 
 ## `run` và `run_with`
 

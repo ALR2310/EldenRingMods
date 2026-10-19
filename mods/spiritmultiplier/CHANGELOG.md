@@ -6,6 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+- Fixed the reload key working outside the game window.
+
 ## [1.3.1] - 2026-10-18
 
 - Fixed Seamless Co-op failing to start when MaxSpirits is above 60.

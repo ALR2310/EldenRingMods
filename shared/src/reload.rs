@@ -7,10 +7,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use eldenring::cs::CSTaskGroupIndex;
-use eldenring::util::input;
 
 use crate::config;
-use crate::input::parse_virtual_key;
+use crate::input::{self, parse_virtual_key};
 use crate::logger;
 
 const VK_F5: i32 = 0x74;

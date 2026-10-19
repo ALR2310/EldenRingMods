@@ -6,12 +6,10 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
-- Added in-game settings menu support (requires the ERNativeUI mod).
-
-## [2.0.0]
-
+- Fixed the reload key working outside the game window.
 - Rewritten as a Rust DLL - patches EquipParamWeapon/Bullet live in memory via fromsoftware-rs instead of shipping a modified regulation.bin, so it no longer conflicts with other regulation.bin mods.
 - Every multiplier/value is now configurable via RiseArcher.ini instead of fixed at build time.
+- Added in-game settings menu support (requires the ERNativeUI mod).
 
 ## [1.16.1]
 
