@@ -29,8 +29,8 @@ vtable-rs = "0.1.5"
 # TOML config (common::toml_config): typed parse via serde, comment-preserving
 # "add missing keys from the template" via toml_edit.
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"
-toml_edit = "0.22"
+toml = "1.1.8"
+toml_edit = "0.25.17"
 # Menu translation files (common::i18n).
 serde_json = "1"
 

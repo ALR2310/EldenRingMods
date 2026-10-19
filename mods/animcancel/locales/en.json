@@ -14,6 +14,10 @@
     "title": "Weapon swap",
     "help": "Switching weapons cancels the animations you pick."
   },
+  "jump": {
+    "title": "Jump",
+    "help": "Jumping cancels the animations you pick."
+  },
   "enabled": {
     "label": "Enabled",
     "help": "Turn this action's cancelling on or off."

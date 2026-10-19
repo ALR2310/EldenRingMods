@@ -61,6 +61,14 @@ foreach ($Ext in @("toml", "ini")) {
         break
     }
 }
+# A config named differently from the mod (AnimCancelV1.toml for AnimCancel, renamed on purpose, see
+# mods/animcancel/docs/antivirus.md): the one <Mod>*.toml next to Cargo.toml.
+if (-not $ConfigName) {
+    $Candidates = @(Get-ChildItem -Path $CrateDir -Filter "$Mod*.toml" -File)
+    if ($Candidates.Count -eq 1) {
+        $ConfigName = $Candidates[0].Name
+    }
+}
 if (-not $ConfigName) {
     throw "No config found in '$CrateDir' - expected '$Mod.toml' or '$Mod.ini' next to the crate's Cargo.toml."
 }

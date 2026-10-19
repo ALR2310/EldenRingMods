@@ -20,7 +20,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
 
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
-        let report = config::init(&format!("{dir}\\AnimCancel.toml"));
+        let report = config::init(&format!("{dir}\\AnimCancelV1.toml"));
 
         // [Logging] LogFile gates the log file entirely - see common::logger.
         logger::set_enabled(config::get().logging.log_file);
@@ -33,32 +33,32 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
 
         logger::log("Activating AnimCancel...");
         if report.created {
-            logger::log("AnimCancel.toml created with the default settings.");
+            logger::log("AnimCancelV1.toml created with the default settings.");
         }
         if report.added_keys > 0 {
             logger::log(&format!(
-                "AnimCancel.toml updated: added {} new key(s) from a newer default template.",
+                "AnimCancelV1.toml updated: added {} new key(s) from a newer default template.",
                 report.added_keys
             ));
         }
         if let Some((from, to)) = report.migrated {
-            logger::log(&format!("AnimCancel.toml updated from format version {from} to {to}."));
+            logger::log(&format!("AnimCancelV1.toml updated from format version {from} to {to}."));
         }
         if let Some((file, current)) = report.newer {
             logger::warn(&format!(
-                "AnimCancel.toml is from a newer version of the mod (format {file}, this one knows {current}) - left as it is."
+                "AnimCancelV1.toml is from a newer version of the mod (format {file}, this one knows {current}) - left as it is."
             ));
         }
         if !report.unknown.is_empty() {
             logger::warn(&format!(
-                "AnimCancel.toml: {} key(s) this version doesn't use were moved to comments at the end of the file:\n  {}",
+                "AnimCancelV1.toml: {} key(s) this version doesn't use were moved to comments at the end of the file:\n  {}",
                 report.unknown.len(),
                 report.unknown.join("\n  ")
             ));
         }
         if let Some(err) = report.error {
             logger::error(&format!(
-                "AnimCancel.toml has an error, running on the default settings:\n{err}"
+                "AnimCancelV1.toml has an error, running on the default settings:\n{err}"
             ));
         }
 

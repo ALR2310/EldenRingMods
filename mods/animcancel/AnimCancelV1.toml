@@ -38,6 +38,15 @@ Cast = true
 Item = true
 
 
+[Jump]
+# Jumping cancels the animations below.
+Enabled = true
+Attack = true
+Skill = true
+Cast = true
+Item = true
+
+
 [Logging]
 # Write a log file next to the DLL, for troubleshooting.
 LogFile = true

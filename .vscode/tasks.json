@@ -224,7 +224,7 @@
         },
         {
             "label": "Cargo: Build AnimCancel (Release)",
-            "detail": "Builds AnimCancel (release), then copies AnimCancel.dll + AnimCancel.toml into builds/<crate>/",
+            "detail": "Builds AnimCancel (release), then copies AnimCancel.dll + AnimCancelV1.toml into builds/<crate>/",
             "type": "process",
             "command": "powershell.exe",
             "args": [
