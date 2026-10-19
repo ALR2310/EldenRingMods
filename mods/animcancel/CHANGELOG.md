@@ -6,9 +6,11 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-19
+
 - Added jump option to cancel animations by jumping.
 - Fixed the reload key working outside the game window.
-- Changed the config file name to AnimCancelV1.toml. This fixes false detections by antivirus scanners.
+- Changed the config file name.
 
 ## [1.1.1] - 2026-10-17
 
