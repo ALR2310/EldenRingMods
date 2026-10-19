@@ -1,6 +1,6 @@
 # input: phím nóng và vì sao có `is_key_pressed` riêng
 
-**Status 2026-10-13: `common::input::is_key_pressed` được `soulsteleport` và `weightmultiplier` dùng. `common::reload` và `autoregen` vẫn dùng `eldenring::util::input::is_key_pressed` (còn mở, xem TODO.md). Code ở `shared/src/input.rs`.**
+**Status 2026-10-19: `common::input::is_key_pressed` được `common::reload`, `soulsteleport`, `weightmultiplier` và `autoregen` dùng; không còn nơi nào dùng `eldenring::util::input::is_key_pressed`. Code ở `shared/src/input.rs`.**
 
 ## Hai hàm cùng tên
 

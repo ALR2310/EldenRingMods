@@ -25,3 +25,4 @@ sử git của `README.md`.
 | 2026-10-15 | Chữ của menu trong game chuyển sang `common::i18n` (`locales/en.json`, `vi.json`): menu hiện tiếng Việt khi game chạy ngôn ngữ Việt, còn lại lùi về tiếng Anh | [docs](../../shared/docs/i18n.md) |
 | 2026-10-15 | Menu trong game: hệ số Multiplier (-10..10, bước 0.5) thành slider native khi host có API 1.2 (ERNativeUI >= 1.2), phạm vi slider hẹp hơn phạm vi mod chấp nhận (ô gõ và tệp cấu hình vẫn nhận số lớn); chưa thử trong game | [docs](../../docs/ingame_menu.md) |
 | 2026-10-15 | Reload qua `common::reload` + banner coi như đã kiểm: các mod khác dùng cùng cơ chế và chạy ổn | |
+| 2026-10-19 | Sửa lỗi phím reload lọt ra ngoài game: `common::reload` đọc bằng `common::input` (`GetAsyncKeyState`, chỉ nhận phím khi cửa sổ game có focus) thay cho `GetKeyState` của `eldenring`, và antivirus gắn ít cờ hơn (RuneMultiplier 6 xuống 2 cờ trên VirusTotal); chưa test phím reload trong game | [docs](../../shared/docs/reload.md) |
