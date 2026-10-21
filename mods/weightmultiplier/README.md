@@ -45,13 +45,9 @@ Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0. Client: `common::erui` ([shared/s
   Đổi `Mode` thì mod vá lại 4 byte opcode trong stub (`mulss` ↔ `movss`).
 - **Khởi động:** `DllMain` tạo một thread, nạp/tạo ini, mở log, chờ `LoadDelay`,
   ghi phiên bản game và danh sách DLL (`common::diag`), rồi cài hook. Sau đó
-  thread thăm dò `ReloadKey` mỗi 100 ms.
+  `common::reload` giữ phím `ReloadKey` (xem [shared/docs/reload.md](../../shared/docs/reload.md)).
 - **Mod khác hook đè cùng chỗ:** nếu không tìm thấy neo, mod kiểm tra xem có phải
   một mod trọng lượng khác đã hook không và ghi tên DLL đó vào log.
-- **Không phụ thuộc `fromsoftware-rs`** và không dùng bộ lập lịch task của game:
-  mod chỉ patch bộ nhớ một lần từ một thread thường. Vì vậy phím reload dùng
-  `common::input` (thăm dò phím từ thread riêng) và **không có banner "Config
-  reloaded"/`ReloadBanner`** như các mod khác, kết quả reload chỉ hiện trong log.
 
 Code: [src/hook.rs](src/hook.rs) (toàn bộ logic), [src/lib.rs](src/lib.rs) (entry point).
 

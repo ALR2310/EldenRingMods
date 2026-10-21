@@ -7,6 +7,7 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 ## [Unreleased]
 
 - Added in-game settings menu support (requires the ERNativeUI mod).
+- Added reload banner option.
 
 ## [2.0.1] - 2026-09-24
 
