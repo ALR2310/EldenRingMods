@@ -44,10 +44,9 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
             ));
         }
 
-        // `reload` owns General.ReloadKey watching for the whole DLL (see its
-        // module doc comment for why only one module may call
-        // eldenring::util::input::is_key_pressed for the same key) - `run`
-        // below only polls `common::reload::RELOAD_GENERATION`.
+        // `common::reload` owns General.ReloadKey watching for the whole DLL
+        // (see its module doc comment for why only one module may poll the
+        // same key) - `run` below only polls `RELOAD_GENERATION`.
         // The menu registers right away (the host only accepts registrations
         // at startup); its changes reach `run` through the same generation.
         menu::start(hmodule, ini_path.clone());
