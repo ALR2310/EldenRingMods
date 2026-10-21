@@ -24,7 +24,7 @@ ini mẫu từng mod. Nguồn: `mods/<mod>/src/menu.rs`. Quy ước chung và gi
 ```
 
 Mọi mod đều có công tắc **Log file** ở trang đầu và hàng gốc ở System > Game Options. Có GFX thì Game Options có 9 chỗ trống,
-10 mod sẽ phân trang (Next/Previous); không GFX thì chỉ 2 chỗ.
+10 mod sẽ phân trang (Next/Previous); không GFX thì chỉ 2 chỗ (số của host 1.1; host 1.3.0 hoàn thiện GFX lúc chạy, chưa đo lại).
 
 ---
 

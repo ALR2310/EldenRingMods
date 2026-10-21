@@ -1,6 +1,6 @@
 # Menu trong game (ERNativeUI)
 
-**Status 2026-10-13: hướng đã chốt = dùng ERNativeUI làm phụ thuộc tùy chọn; đã thử trong game với RuneMultiplier (trang con + slider + công tắc), kết quả tốt. Chưa phát hành, chưa mod nào khác dùng.**
+**Status 2026-10-21: hướng đã chốt = dùng ERNativeUI làm phụ thuộc tùy chọn. Từ host 1.3.0 (exe 2.7.2.0) menu chạy tốt mà không cần cài file GFX rời (người dùng thử 2026-10-21); các giới hạn GFX ở mục "Kết quả thử" dưới đây là của host 1.0-1.2 (exe 2.7.0/2.7.1).**
 
 Đường đi đã bỏ: ImGui qua hudhook (nhánh `feat/modmenu`, tạm dừng 2026-10-02: xung đột hudhook với
 SoulsTeleport/SoulsChat); tự dịch ngược và tự dựng menu native (ERNativeUI đã làm sẵn, mã mở).
@@ -13,7 +13,7 @@ chung + SDK C ABI (`erui.h`). Release 1.0.0 (2026-08-30), 1.1.0 (09-06), 1.1.1
 `tmp/` hoặc scratchpad.
 
 - Hook hàm dựng trang menu của game (không ImGui, không file GFX bắt buộc); các mod gọi API khai báo lúc khởi động.
-- Chỉ hỗ trợ exe **2.7.0.0 và 2.7.1.0** (nhận theo PE timestamp + SizeOfImage, fail-closed). Không có
+- Chỉ hỗ trợ exe **2.7.0.0, 2.7.1.0 và (từ host 1.3.0) 2.7.2.0** (nhận theo PE timestamp + SizeOfImage, fail-closed). Không có
   2.6.2.0. Chỉ offline, tắt EAC. Tương thích Solid Uncapper có tài liệu (tải Solid Uncapper trước).
 - Control: Toggle, Slider, Button, Submenu, Inline/Popup choice, TextInput, ColorPicker, input bindings,
   storage INI, dialog. Trang đích: Game Options (mặc định) và Camera/Display/Sound/Network/Keyboard/Graphics.
@@ -32,7 +32,9 @@ chung + SDK C ABI (`erui.h`). Release 1.0.0 (2026-08-30), 1.1.0 (09-06), 1.1.1
 - `provider_id` duy nhất toàn tiến trình (`[A-Za-z0-9_.-]`, 1-255), `owner_module` = HMODULE của mod.
 - Host không tự lưu giá trị: mod tự ghi ini (hoặc dùng storage của host).
 
-### Kết quả thử trong game (2.7.1.0, 2026-10-12/13)
+### Kết quả thử trong game (2.7.1.0, host 1.1, 2026-10-12/13)
+
+Host 1.3.0 (2026-10-20) tự hoàn thiện GFX lúc chạy ("runtime GFX completion"): menu chạy tốt trên 2.7.2.0 không cần file GFX rời. Chưa đo lại số chỗ trống của Game Options và nhãn bên trái ở host mới. Host 1.3.0 thêm API 1.3 (tab riêng ở System, `add_tab`); client `common::erui` vẫn xin API 1.2, chưa dùng tab riêng.
 
 - Hàng của mod hiện ở System > Game Options; trang con mở được; slider/công tắc hoạt động.
 - **Không cài GFX**: hàng dạng nút (submenu/button) **mất nhãn bên trái** (chỉ còn chữ trong nút); Game Options chỉ
