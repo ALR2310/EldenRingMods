@@ -35,7 +35,7 @@ Không có host thì mod chạy bằng ini như trước. Host chỉ hỗ trợ 
 - **Tick** (`src/regen.rs`): task đăng ký vào `CSTaskGroupIndex::FrameBegin` của game (không phải thread `Sleep` riêng), đọc/ghi `WorldChrMan` → `ChrIns` → `CSChrDataModule` qua `fromsoftware-rs`, gate bằng `common::player` (đã vào game). Việc đăng ký task và lấy allocator dùng quét AOB thay vì bảng RVA của fromsoftware-rs để chạy được trên bản game mới: [docs/task_and_startup.md](docs/task_and_startup.md).
 - **Điều kiện combat / idle / gesture**: "đang giao tranh" xấp xỉ bằng 15 giây kể từ lần đánh/bị đánh gần nhất; idle = đứng yên 5 giây; gesture = chốt khi game thật sự chạy animation gesture, xác nhận sau khoảng trễ qua TAE `anim_id` để không tính gesture bị chặn giữa lúc cast: [docs/gesture_trigger.md](docs/gesture_trigger.md).
 - **Hồi khi đánh trúng** (`src/hit_hook.rs`): hook entry point hàm hit-resolution của game (AOB), đọc attacker, damage, loại nguồn sát thương; phân biệt Weapon Art bằng nút bấm gần nhất: [docs/per_hit.md](docs/per_hit.md).
-- **Hot reload:** watcher `ReloadKey` riêng trong `regen.rs`, banner "AutoRegen: config reloaded".
+- **Hot reload:** `common::reload` giữ phím `ReloadKey` (xem [shared/docs/reload.md](../../shared/docs/reload.md)); tick của `regen.rs` chỉ theo `RELOAD_GENERATION` để cập nhật menu.
 - **Log:** ghi phiên bản game và danh sách DLL đã nạp (`common::diag`, không in đường dẫn đầy đủ).
 
 Nguồn gốc dịch ngược và bản C++ cũ: [docs/cpp_origin.md](docs/cpp_origin.md).

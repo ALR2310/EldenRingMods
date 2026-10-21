@@ -166,7 +166,7 @@ fn get_source_object_type(source_object: *const c_void) -> i32 {
 }
 
 // hit_info field offsets - independently re-derived via Ghidra decompile of
-// `FUN_140448910` (`.docs/reverse_engineering/decompiled_hitres_and_callers.txt`),
+// `FUN_140448910` (`reverse_engineering/decompiled_hitres_and_callers.txt`),
 // matching `attack_hook.rs`'s own offsets exactly.
 const HITINFO_DAMAGE_OFFSET: isize = 0x228;
 const HITINFO_SOURCE_OBJECT_OFFSET: isize = 0x1D8;
