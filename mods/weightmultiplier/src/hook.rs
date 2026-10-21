@@ -22,19 +22,15 @@
 //! here works just as well as multiplying it, without needing a second
 //! patch site.
 //!
-//! `ReloadKey` polling (added later - the mod originally had none, on
-//! purpose, to avoid a hotkey collision) is a plain `Sleep`-based loop via
-//! [`common::input::is_key_pressed`], not a task registered on the game's
-//! own scheduler like `autoregen`/`sometweaks`/`runemultiplier` use - this
-//! crate deliberately has no `fromsoftware-rs` dependency (see `Cargo.toml`),
-//! so it has no access to that scheduler. Changing `Multiplier`/`FixedValue`
-//! on reload is a plain value write (the stub already reads it from a fixed
-//! address every time it runs); changing `Mode` additionally re-patches the
-//! stub's `mulss`/`movss` instruction in place via
-//! [`common::codepatch::overwrite_bytes`], since which of the two runs is
-//! baked into the executing code itself, not read from memory - same
-//! inherent risk as the original `install()` (rewriting code the CPU could
-//! be mid-execution of), just repeated on demand instead of only once.
+//! `ReloadKey` is watched by [`common::reload`] (the shared watcher every mod
+//! uses). Changing `Multiplier`/`FixedValue` on reload is a plain value write
+//! (the stub already reads it from a fixed address every time it runs);
+//! changing `Mode` additionally re-patches the stub's `mulss`/`movss`
+//! instruction in place via [`common::codepatch::overwrite_bytes`], since
+//! which of the two runs is baked into the executing code itself, not read
+//! from memory - same inherent risk as the original `install()` (rewriting
+//! code the CPU could be mid-execution of), just repeated on demand instead of
+//! only once.
 
 use std::sync::atomic::{AtomicI32, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
@@ -43,11 +39,8 @@ use std::time::Duration;
 use common::codepatch;
 use common::config;
 use common::diag;
-use common::input::{is_key_pressed, parse_virtual_key};
 use common::logger;
 use common::memscan;
-
-const VK_F5: i32 = 0x74;
 
 // Cross-checked against a third-party "NoWeight" DLL confirmed to work
 // correctly in-game (WeightValue=0 actually changes the roll weight class,
@@ -123,8 +116,8 @@ fn read_weight_value(mode: i32) -> f32 {
     }) as f32
 }
 
-// Serialises config reloads: the ReloadKey poll thread and the menu's saver
-// thread (via [reload_from_config]) both end up in [reload_weight_value_locked].
+// Serialises config reloads: the reload key's task and the menu's saver thread
+// (via [reload_from_config]) both end up in [reload_weight_value_locked].
 static RELOAD_LOCK: Mutex<()> = Mutex::new(());
 
 fn lock_reload() -> MutexGuard<'static, ()> {
@@ -265,10 +258,9 @@ fn install() -> bool {
     true
 }
 
-/// Waits `LoadDelay`, installs the hook, then polls `ReloadKey` forever.
-/// Meant to run on its own worker thread spawned from `DllMain`; never
-/// returns once the hook is active (matches every other mod in this
-/// workspace having some kind of never-ending loop on its own thread/task).
+/// Waits `LoadDelay`, installs the hook, then hands `ReloadKey` to
+/// `common::reload` forever. Meant to run on its own worker thread spawned from
+/// `DllMain`; never returns once the hook is active.
 pub fn run(ini_path: String) {
     let load_delay_ms = config::get_int("LoadDelay", 5000).max(0) as u64;
     std::thread::sleep(Duration::from_millis(load_delay_ms));
@@ -285,26 +277,15 @@ pub fn run(ini_path: String) {
 
     logger::log("Hook active.");
 
-    loop {
-        std::thread::sleep(Duration::from_millis(100));
-
-        // This loop runs on its own OS thread, not one the game itself calls
-        // into (unlike autoregen/sometweaks's per-frame task callbacks), so a
-        // panic here can't corrupt the game's own call stack either way -
-        // catch_unwind is just to keep this one iteration's panic from
-        // killing the whole reload thread (and with it, ReloadKey) for the
-        // rest of the session.
-        if let Err(panic) = std::panic::catch_unwind(|| {
-            let reload_key = parse_virtual_key(&config::get_string("ReloadKey", "F5"), VK_F5);
-            if is_key_pressed(reload_key) {
-                let _guard = lock_reload();
-                config::load(&ini_path);
-                reload_weight_value_locked();
-                crate::menu::sync_from_config();
-                logger::log("Config reloaded");
-            }
-        }) {
-            logger::error(&format!("ReloadKey poll panicked, skipped: {panic:?}"));
-        }
-    }
+    common::reload::run_with(
+        || config::get_string("ReloadKey", "F5"),
+        || config::get_bool("ReloadBanner", false),
+        move || {
+            let _guard = lock_reload();
+            config::load(&ini_path);
+            reload_weight_value_locked();
+            crate::menu::sync_from_config();
+            Ok(())
+        },
+    );
 }

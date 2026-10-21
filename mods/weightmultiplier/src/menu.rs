@@ -10,8 +10,8 @@
 //!   Log file                   on/off
 //! ```
 //!
-//! This mod has no game task: its own reload (the ReloadKey poll thread) just
-//! re-reads the config and stores the new value for the hook's stub. A menu
+//! The reload key (`common::reload`) re-reads the config and stores the new
+//! value for the hook's stub. A menu
 //! change takes the same path (`hook::reload_from_config`) once it has been
 //! written to the ini (about a second after the player stops changing rows).
 //! The multiplier and the fixed value are typed into text rows.
