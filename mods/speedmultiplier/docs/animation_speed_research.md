@@ -68,7 +68,7 @@ cưỡi / xuống Torrent. Torrent: `000000` đứng, `0020xx`/`0022xx` khi đan
 
 ## Torrent
 
-Torrent là entry có `npc_param_id == 80020000` trong
+Torrent là entry có `npc_param_id` trong `80020000..80059999` (80020000 + skin Spectral Steed Attire của 1.17; Tree Sentinel = 80030000 đã thấy, 2 skin kia đoán là 80040000, 80050000) trong
 `WorldChrMan.summon_buddy_chr_set` (slot #0 của người chơi local). Chỉ các entry
 `Active`/`ReadyForActivation` mới được dereference (cùng quy tắc với `regen.rs` của
 spiritmultiplier).

@@ -26,7 +26,10 @@ use common::logger;
 
 use crate::config::{self, Player, Torrent};
 
-const TORRENT_NPC_PARAM_ID: i32 = 80020000;
+/// Torrent's NpcParam ids: 80020000 is the base one, the Spectral Steed
+/// Attire skins (game 1.17) follow it in steps of 10000 (80030000 seen for
+/// Tree Sentinel, 2026-10-21; the other two are assumed to be next).
+const TORRENT_NPC_PARAM_IDS: std::ops::Range<i32> = 80_020_000..80_060_000;
 
 /// A group's multiplier in `[Player]`.
 fn group_speed(group: Group, player: &Player) -> f32 {
@@ -99,7 +102,7 @@ pub fn torrent(world_chr_man: &mut WorldChrMan) -> Option<&mut ChrIns> {
             continue;
         }
         let chr = unsafe { chr.as_mut() };
-        if chr.npc_param_id == TORRENT_NPC_PARAM_ID {
+        if TORRENT_NPC_PARAM_IDS.contains(&chr.npc_param_id) {
             return Some(chr);
         }
     }
@@ -183,7 +186,7 @@ fn for_each_spirit(world_chr_man: &mut WorldChrMan, mut f: impl FnMut(&mut ChrIn
             continue;
         }
         let chr = unsafe { chr.as_mut() };
-        if chr.npc_param_id != TORRENT_NPC_PARAM_ID {
+        if !TORRENT_NPC_PARAM_IDS.contains(&chr.npc_param_id) {
             f(chr);
         }
     }
