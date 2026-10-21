@@ -21,15 +21,11 @@ use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use eldenring::cs::{CSTaskGroupIndex, WorldChrMan};
-use eldenring::util::input;
 use fromsoftware_shared::FromStatic;
 
 use crate::hit_hook;
 use common::config;
-use common::input::parse_virtual_key;
 use common::logger;
-
-const VK_F5: i32 = 0x74;
 
 // How long a hit landed or taken counts as "in combat" for
 // Regen.PerTick.Trigger=1/2, before it's considered over. There's no
@@ -535,17 +531,17 @@ pub fn is_last_attack_skill() -> bool {
 }
 
 /// Registers the Regen.* tick as a recurring task on the game's own
-/// `FrameBegin` task group and blocks the calling thread forever watching for
-/// `General.ReloadKey`. Meant to run on its own worker thread spawned from
-/// `DllMain`; never returns.
+/// `FrameBegin` task group and blocks the calling thread forever. Meant to run
+/// on its own worker thread spawned from `DllMain`; never returns.
 ///
 /// `CSTaskImp` acquisition and the panic-safe wrapper both come from the
 /// shared `engine` crate now (2026-09-14) - see its `task` module doc
 /// comment for why this no longer needs its own copy of either (this crate
 /// is where both were originally written, before being extracted once a
 /// second/third mod needed the exact same thing).
-pub fn run(ini_path: String) {
+pub fn run() {
     let cs_task = common::task::wait_for_cs_task();
+    let mut last_seen_generation = common::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
 
     let mut elapsed_ms: f64 = 0.0;
     let mut attack_hook_installed = false;
@@ -567,17 +563,12 @@ pub fn run(ini_path: String) {
             // LAST_ATTACK_WAS_SKILL. Also unconditional every frame.
             update_last_attack_input();
 
-            // General.ReloadKey - already debounced by eldenring::util::input,
-            // so this fires once per physical press regardless of how many
-            // frames the key stays down.
-            let reload_key = parse_virtual_key(&config::get_string("ReloadKey", "F5"), VK_F5);
-            if input::is_key_pressed(reload_key) {
-                config::load(&ini_path);
-                logger::log("Config reloaded");
+            // `common::reload` owns General.ReloadKey; just refresh the menu
+            // rows after each reload (or menu save).
+            let generation = common::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
+            if generation != last_seen_generation {
+                last_seen_generation = generation;
                 crate::menu::sync_from_config();
-                if config::get_bool("ReloadBanner", false) {
-                    common::announce::show_announcement("config reloaded");
-                }
             }
 
             // Regen.PerTick.Trigger picks which player state the tick heal
@@ -683,8 +674,6 @@ pub fn run(ini_path: String) {
             heal_main_player_tick(HealField::Stamina, unit, stamina_value, cap_pct);
         },
     );
-
-    logger::log("Regen tick registered on CSTaskGroupIndex::FrameBegin.");
 
     // `_handle` cancels the recurring task if dropped - park this thread
     // forever so it stays alive for the lifetime of the DLL.

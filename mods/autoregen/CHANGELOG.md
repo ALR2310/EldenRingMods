@@ -7,7 +7,7 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 ## [Unreleased]
 
 - Added in-game settings menu support (requires the ERNativeUI mod).
-- The in-game menu can be shown in Vietnamese.
+- Fixed the reload key working outside the game window.
 
 ## [2.6.4] - 2026-10-10
 

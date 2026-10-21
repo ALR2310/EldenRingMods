@@ -39,7 +39,11 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         menu::start(hmodule, ini_path.clone());
 
         common::diag::log_environment_when_game_ready();
-        regen::run(ini_path);
+
+        // `common::reload` owns General.ReloadKey; `regen::run` only follows
+        // `RELOAD_GENERATION`.
+        std::thread::spawn(move || common::reload::run(ini_path));
+        regen::run();
     });
 
     true
