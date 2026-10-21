@@ -6,8 +6,11 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-21
+
 - Fixed the reload key working outside the game window.
 - Added in-game settings menu support (requires the ERNativeUI mod).
+- Added support for the Torrent skins.
 
 ## [1.3.0] - 2026-10-07
 

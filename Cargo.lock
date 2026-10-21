@@ -182,7 +182,7 @@ dependencies = [
 [[package]]
 name = "eldenring"
 version = "0.14.0"
-source = "git+https://github.com/vswarte/fromsoftware-rs?rev=6933967b176332a37e9ce6773f8dcd74b9feaf42#6933967b176332a37e9ce6773f8dcd74b9feaf42"
+source = "git+https://github.com/vswarte/fromsoftware-rs?rev=09a4208ac26af4ae07b08c5273ee0e89faf97cb8#09a4208ac26af4ae07b08c5273ee0e89faf97cb8"
 dependencies = [
  "bitfield",
  "bitflags 2.13.1",
@@ -244,7 +244,7 @@ dependencies = [
 [[package]]
 name = "fromsoftware-shared"
 version = "0.14.0"
-source = "git+https://github.com/vswarte/fromsoftware-rs?rev=6933967b176332a37e9ce6773f8dcd74b9feaf42#6933967b176332a37e9ce6773f8dcd74b9feaf42"
+source = "git+https://github.com/vswarte/fromsoftware-rs?rev=09a4208ac26af4ae07b08c5273ee0e89faf97cb8#09a4208ac26af4ae07b08c5273ee0e89faf97cb8"
 dependencies = [
  "bitflags 2.13.1",
  "from-singleton",
@@ -260,7 +260,7 @@ dependencies = [
 [[package]]
 name = "fromsoftware-shared-macros"
 version = "0.14.0"
-source = "git+https://github.com/vswarte/fromsoftware-rs?rev=6933967b176332a37e9ce6773f8dcd74b9feaf42#6933967b176332a37e9ce6773f8dcd74b9feaf42"
+source = "git+https://github.com/vswarte/fromsoftware-rs?rev=09a4208ac26af4ae07b08c5273ee0e89faf97cb8#09a4208ac26af4ae07b08c5273ee0e89faf97cb8"
 dependencies = [
  "inflections",
  "proc-macro2",
@@ -271,7 +271,7 @@ dependencies = [
 [[package]]
 name = "fromsoftware-shared-stl"
 version = "0.14.0"
-source = "git+https://github.com/vswarte/fromsoftware-rs?rev=6933967b176332a37e9ce6773f8dcd74b9feaf42#6933967b176332a37e9ce6773f8dcd74b9feaf42"
+source = "git+https://github.com/vswarte/fromsoftware-rs?rev=09a4208ac26af4ae07b08c5273ee0e89faf97cb8#09a4208ac26af4ae07b08c5273ee0e89faf97cb8"
 
 [[package]]
 name = "futures-core"

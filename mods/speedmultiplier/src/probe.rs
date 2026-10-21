@@ -24,7 +24,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use eldenring::cs::{CSTaskGroupIndex, ChrIns, WorldChrMan};
+use eldenring::cs::{CSTaskGroupIndex, ChrIns, ChrLoadStatus, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
 use common::logger;
@@ -67,6 +67,7 @@ pub fn run() {
 
     let mut last_player = i32::MIN;
     let mut last_torrent = i32::MIN;
+    let mut last_buddies: Vec<(u32, i32)> = Vec::new();
     let mut last_sp_effects: Vec<i32> = Vec::new();
     let mut last_weight: (u32, f32) = (u32::MAX, f32::NAN);
     let mut last_throw: HashMap<usize, u32> = HashMap::new();
@@ -199,6 +200,25 @@ pub fn run() {
                     for chr in set.characters() {
                         log_throw(&mut last_throw, "chr", chr);
                     }
+                }
+            }
+            if speed_probe {
+                let chr_set = &world_chr_man.summon_buddy_chr_set;
+                let mut buddies = Vec::new();
+                for slot in 0..chr_set.capacity {
+                    let entry = unsafe { chr_set.entries.add(slot as usize).as_ref() };
+                    let Some(chr) = entry.chr_ins else { continue };
+                    if !matches!(
+                        entry.chr_load_status,
+                        ChrLoadStatus::Active | ChrLoadStatus::ReadyForActivation
+                    ) {
+                        continue;
+                    }
+                    buddies.push((slot, unsafe { chr.as_ref() }.npc_param_id));
+                }
+                if buddies != last_buddies {
+                    logger::log(&format!("BUDDY slot/npc {buddies:?}"));
+                    last_buddies = buddies;
                 }
             }
             if let Some(chr) = torrent(world_chr_man) {
