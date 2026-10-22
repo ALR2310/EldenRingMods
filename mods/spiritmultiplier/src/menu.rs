@@ -268,36 +268,18 @@ pub fn start(hmodule: u64, ini_path: String) {
 
 /// After an ini reload: show the reloaded values in the menu.
 pub fn sync_from_config() {
-    if let Some(menu) = MENU.get() {
-        menu.sync();
-    }
+    erui::sync(&MENU);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Every key the menu passes to the text lookup is in every language file,
-    /// and the files have the same keys (nothing missing, nothing left over).
+    /// Every key the menu passes to `t` is in every language file, and the files
+    /// have the same keys (nothing missing, nothing left over).
     #[test]
     fn language_files_match_the_menu_keys() {
-        let source = include_str!("menu.rs");
-        let mut used: Vec<String> = Vec::new();
-        for (at, _) in source.match_indices("t(\"") {
-            let before = source[..at].chars().next_back();
-            if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
-                continue;
-            }
-            let rest = &source[at + 3..];
-            if let Some(end) = rest.find('"') {
-                used.push(rest[..end].to_string());
-            }
-        }
-        used.sort();
-        used.dedup();
-        assert!(used.len() > 30, "found only {} menu keys", used.len());
-        assert_eq!(used, TEXT.keys("english"), "menu.rs keys and locales/en.json differ");
-        assert_eq!(used, TEXT.keys("vietnamese"), "menu.rs keys and locales/vi.json differ");
+        TEXT.assert_matches_source(include_str!("menu.rs"), 31);
     }
 
     /// Every row meant to be a native slider has a valid range and step (else

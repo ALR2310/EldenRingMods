@@ -989,6 +989,14 @@ impl Menu {
     }
 }
 
+/// [`Menu::sync`] on a menu that may not exist (no host): the body of a mod's
+/// `sync_from_config`.
+pub fn sync(slot: &OnceLock<Menu>) {
+    if let Some(menu) = slot.get() {
+        menu.sync();
+    }
+}
+
 /// Collects the rows of one mod's menu; every row added here is remembered with
 /// its reader for [`Menu::sync`].
 pub struct MenuBuilder {

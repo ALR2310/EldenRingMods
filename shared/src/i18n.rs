@@ -102,6 +102,28 @@ impl Catalog {
         keys.sort();
         keys
     }
+
+    /// For a menu's test: every `t("key")` call in `source` (the menu's own
+    /// file, `include_str!("menu.rs")`) is in every language file and the files
+    /// hold nothing else. `min_keys` guards against the scan finding nothing.
+    pub fn assert_matches_source(&self, source: &str, min_keys: usize) {
+        let mut used: Vec<String> = Vec::new();
+        for (at, _) in source.match_indices("t(\"") {
+            if source[..at].chars().next_back().is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                continue;
+            }
+            let rest = &source[at + 3..];
+            if let Some(end) = rest.find('"') {
+                used.push(rest[..end].to_string());
+            }
+        }
+        used.sort();
+        used.dedup();
+        assert!(used.len() >= min_keys, "found only {} menu keys", used.len());
+        for (name, _) in self.files {
+            assert_eq!(used, self.keys(name), "menu keys and the {name} language file differ");
+        }
+    }
 }
 
 #[cfg(test)]

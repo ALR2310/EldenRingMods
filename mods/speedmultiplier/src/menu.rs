@@ -139,9 +139,7 @@ pub fn start(hmodule: u64) {
 
 /// After a config reload: show the reloaded values in the menu.
 pub fn sync_from_config() {
-    if let Some(menu) = MENU.get() {
-        menu.sync();
-    }
+    erui::sync(&MENU);
 }
 
 #[cfg(test)]
@@ -165,17 +163,6 @@ mod tests {
     /// have the same keys (nothing missing, nothing left over).
     #[test]
     fn language_files_match_the_menu_keys() {
-        let source = include_str!("menu.rs");
-        let mut used: Vec<String> = Vec::new();
-        for part in source.split("&t(\"").skip(1) {
-            if let Some(end) = part.find("\")") {
-                used.push(part[..end].to_string());
-            }
-        }
-        used.sort();
-        used.dedup();
-        assert!(used.len() > 40, "found only {} menu keys", used.len());
-        assert_eq!(used, TEXT.keys("english"), "menu.rs keys and locales/en.json differ");
-        assert_eq!(used, TEXT.keys("vietnamese"), "menu.rs keys and locales/vi.json differ");
+        TEXT.assert_matches_source(include_str!("menu.rs"), 41);
     }
 }
