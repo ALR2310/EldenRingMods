@@ -251,7 +251,7 @@ pub fn run() {
                     };
                     if config::get_bool("LogFile", false) {
                         logger::log(&format!(
-                            "Milestone bonus {:+} at {}s -> held {}, level {}",
+                            "Milestone: {:+} at {}s -> held {}, level {}",
                             milestone.bonus,
                             milestone.at_ms / 1000.0,
                             granted.held,
@@ -285,7 +285,7 @@ pub fn run() {
             let percent_setting = config::get_double("Rune.Passive.Percent", 0.25).clamp(-100.0, 100.0);
             let percent = percent_runes(percent_setting);
             let interest_setting = config::get_double("Rune.Passive.Interest", 0.0).clamp(-100.0, 100.0);
-            let (interest, principal) = interest_runes(interest_setting, &mut interest_state);
+            let (interest, _) = interest_runes(interest_setting, &mut interest_state);
             let amount = fixed + percent + interest;
             if amount == 0 {
                 return;
@@ -296,11 +296,9 @@ pub fn run() {
             interest_state.last_held = Some(granted.held);
             if config::get_bool("LogFile", false) {
                 logger::log(&format!(
-                    "{amount:+} runes ({fixed:+} fixed, {percent:+} from {percent_setting}% of {} next-level cost, {interest:+} from {interest_setting}% interest on {principal}) -> held {}, level {}, session {:.0}s",
-                    level_up_cost(granted.level),
+                    "Tick: {amount:+} (fixed {fixed:+}, percent {percent:+}, interest {interest:+}) -> held {}, level {}",
                     granted.held,
-                    granted.level,
-                    session_elapsed_ms / 1000.0
+                    granted.level
                 ));
             }
         },
@@ -308,7 +306,7 @@ pub fn run() {
 
     // Success is already logged by run_recurring_safe ("Rune: task registered.").
     if !installed {
-        logger::error("Rune tick failed to install - game may need a mod update, check Nexus.");
+        logger::error("Rune tick: install failed, game may need a mod update, check Nexus.");
     }
 
     loop {

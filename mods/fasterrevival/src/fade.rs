@@ -34,14 +34,14 @@ pub fn apply(state: &mut FadeState) {
     // Whatever happens below, don't retry every frame.
     state.done = true;
     if let Err(reason) = common::params::check::<MenuCommonParam>(repo) {
-        logger::error(&format!("YOU DIED fade: {reason} - disabled."));
+        logger::error(&format!("Fade: failed ({reason})"));
         return;
     }
     let Some(row) = repo.get_row_by_index_mut::<MenuCommonParam>(0) else {
-        logger::error("YOU DIED fade: MenuCommonParam has no row - disabled.");
+        logger::error("Fade: failed (MenuCommonParam has no row)");
         return;
     };
     let vanilla = row.solo_play_death_to_fade_out_time();
     row.set_solo_play_death_to_fade_out_time(0.0);
-    logger::log(&format!("YOU DIED fade delay: 0s (was {vanilla}s)."));
+    logger::log(&format!("Fade: delay 0s (was {vanilla}s)"));
 }

@@ -175,7 +175,7 @@ fn save_layout(pos: [f32; 2], size: [f32; 2]) {
         &[(KEY_X, fmt(pos[0])), (KEY_Y, fmt(pos[1])), (KEY_W, fmt(size[0])), (KEY_H, fmt(size[1]))],
     );
     if !ok {
-        logger::error("Menu: couldn't save the menu position to the ini.");
+        logger::error("Menu: position save to ini failed");
     }
 }
 
@@ -330,20 +330,20 @@ impl ImguiRenderLoop for MenuRenderLoop {
                         }),
                     },
                 ]);
-                logger::log(&format!("Menu: embedded Noto Sans + CJK from {name}."));
+                logger::log(&format!("Menu: font Noto Sans + CJK ({name})"));
             }
             None => {
                 ctx.fonts().add_font(&[main]);
-                logger::log("Menu: embedded Noto Sans (no system CJK font found).");
+                logger::log("Menu: font Noto Sans (no system CJK font)");
             }
         }
         self.menu_scale = menu_scale();
         if self.menu_scale != 1.0 {
-            logger::log(&format!("Menu: MenuScale {:.2}.", self.menu_scale));
+            logger::log(&format!("Menu: MenuScale {:.2}", self.menu_scale));
         }
         apply_theme(ctx.style_mut());
         self.base_style = Some(*ctx.style());
-        logger::log("Menu: ImGui initialized.");
+        logger::log("Menu: ImGui initialized");
     }
 
     fn before_render<'a>(&'a mut self, ctx: &mut Context, _render_context: &'a mut dyn RenderContext) {
@@ -378,7 +378,7 @@ impl ImguiRenderLoop for MenuRenderLoop {
             }
             ctx.io_mut().font_global_scale = FONT_AT_1080P * scale / font_raster_size();
             if self.scale != 0.0 {
-                logger::log(&format!("Menu: UI scale {:.2} -> {scale:.2}.", self.scale));
+                logger::log(&format!("Menu: UI scale {:.2} -> {scale:.2}", self.scale));
             }
             self.scale = scale;
             self.relayout = true;
@@ -691,10 +691,10 @@ fn install_cursor_hooks() {
     let clip = hook_user32("ClipCursor", clip_cursor_hook as *mut std::ffi::c_void, &CLIP_CURSOR_ORIG);
     let applied = unsafe { MH_ApplyQueued() }.ok().is_ok();
     if set_pos && clip && applied {
-        logger::log("Menu: cursor unpin hooks applied.");
+        logger::log("Menu: cursor hooks applied");
     } else {
         logger::error(&format!(
-            "Menu: cursor unpin hooks incomplete (SetCursorPos {set_pos}, ClipCursor {clip}, apply {applied}) - the cursor may stay locked while the menu is open."
+            "Menu: cursor hooks incomplete (SetCursorPos {set_pos}, ClipCursor {clip}, applied {applied})"
         ));
     }
 }
@@ -703,10 +703,10 @@ fn install_cursor_hooks() {
 pub fn install() {
     match Hudhook::builder().with::<ImguiDx12Hooks>(MenuRenderLoop::default()).build().apply() {
         Ok(()) => {
-            logger::log("Menu: DX12 hooks applied.");
+            logger::log("Menu: DX12 hooks applied");
             install_cursor_hooks();
             crate::input_block::install();
         }
-        Err(e) => logger::error(&format!("Menu: couldn't apply DX12 hooks ({e:?}) - menu unavailable.")),
+        Err(e) => logger::error(&format!("Menu: DX12 hooks failed ({e:?}), menu unavailable")),
     }
 }

@@ -67,7 +67,7 @@ pub fn own_is_hostile() -> bool {
     // invading is what decides whether this block works at all.
     let mut last = OWN_ROLE.lock().unwrap();
     if *last != Some(chr_type) {
-        logger::log(&format!("Own role: {chr_type:?}."));
+        logger::log(&format!("Party: own role {chr_type:?}"));
         *last = Some(chr_type);
     }
     is_hostile_type(chr_type)
@@ -147,7 +147,7 @@ pub fn members() -> Vec<Member> {
                 let name = character_name(&unsafe { player.player_game_data.as_ref() }.character_name);
                 let chr_type = player.chr_ins.chr_type;
                 if known.insert(steam_id, chr_type) != Some(chr_type) {
-                    logger::log(&format!("Role of '{name}': {chr_type:?}."));
+                    logger::log(&format!("Party: role of '{name}' {chr_type:?}"));
                 }
                 member.character_name = Some(name);
                 member.chr_type = Some(chr_type);

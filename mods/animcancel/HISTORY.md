@@ -27,3 +27,4 @@ link sang `docs/`.
 | 2026-10-19 | Dựng lại logic cắt animation (`cancel.rs`, `weapon.rs`, `probe.rs`): ghi bitfield qua kiểu `ChrActions` / `TaeCancelFlags` (crate `bitfield`) thay cho ép kiểu con trỏ và `mem::zeroed`, tách `plan()` (thuần, có test) khỏi `open()`, `GuardTracker`; hành vi giữ nguyên, đã test trong game | |
 | 2026-10-19 | Sửa lỗi phím reload lọt ra ngoài game: đọc bằng `common::input` (`GetAsyncKeyState`, chỉ khi cửa sổ game có focus) thay cho `GetKeyState` của `eldenring`; nhóm 4 hãng antivirus (Avast, AVG, Avira, WithSecure) cũng không còn gắn cờ | [docs](../../shared/docs/reload.md) |
 | 2026-10-19 | Thêm hành động Jump (`[Jump]`, trang menu): nút nhảy là bit 6 (`ACTION_ARM_CHANGE_STYLE`), mở trong `cancel_entries` là đủ; đã test trong game | [docs](docs/animation_cancel.md) |
+| 2026-10-22 | Log gọn lại theo kiểu ngắn, kỹ thuật cho dev: bỏ dòng lặp ý, địa chỉ patch, câu dài; chỉ ghi 1 lần khi chờ thế giới | |

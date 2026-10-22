@@ -136,7 +136,7 @@ pub fn warp_to(fns: &GameFns, spot: &Spot) -> bool {
     }
     let game_man = unsafe { *fns.game_man_static };
     if game_man == 0 {
-        logger::error("Warp: GameMan not allocated yet.");
+        logger::error("Warp: GameMan not allocated");
         return false;
     }
 
@@ -152,7 +152,7 @@ pub fn warp_to(fns: &GameFns, spot: &Spot) -> bool {
     }
 
     logger::log(&format!(
-        "Warp requested: block {:#010X} (normalized {:#010X}) local ({:.2}, {:.2}, {:.2})",
+        "Warp: block {:#010X} (normalized {:#010X}) local ({:.2}, {:.2}, {:.2})",
         spot.block_id, normalized_block, spot.x, spot.y, spot.z
     ));
     true
@@ -231,13 +231,10 @@ fn handle_net_event(fns: &GameFns, event: net::Event) {
 /// on its own worker thread spawned from `DllMain`; never returns.
 pub fn run() {
     let Some(fns) = resolve_game_fns() else {
-        logger::error("Warp functions not found (AOB) - game update may need a mod update. SoulsTeleport disabled.");
+        logger::error("Warp: AOB not found, disabled (game update?)");
         return;
     };
-    logger::log(&format!(
-        "Warp functions found (AOB), GameMan static at {:#X}.",
-        fns.game_man_static as usize
-    ));
+    logger::log("Warp: AOB found");
     GAME_MAN_STATIC.store(fns.game_man_static as usize, Ordering::Relaxed);
 
     let cs_task = common::task::wait_for_cs_task();
@@ -250,10 +247,10 @@ pub fn run() {
         if net.is_none() && steam_attempts < STEAM_LOAD_ATTEMPTS {
             steam_attempts += 1;
             if let Some(steam) = SteamMessages::load() {
-                logger::log("Steam networking messages ready - teleport to partner on.");
+                logger::log("Net: Steam messaging ready");
                 net = Some(Net::new(steam));
             } else if steam_attempts == STEAM_LOAD_ATTEMPTS {
-                logger::error("Steam networking messages unavailable - teleport to partner off.");
+                logger::error("Net: Steam messaging unavailable, teleport to partner off");
             }
         }
         if let Some(event) = net.as_mut().and_then(Net::tick) {

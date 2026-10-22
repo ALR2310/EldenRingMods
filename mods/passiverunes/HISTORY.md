@@ -26,3 +26,4 @@ sử git của `README.md`.
 | 2026-10-13 | Thêm menu tùy chọn trong game qua ERNativeUI (`common::erui`): bật/tắt, chu kỳ, lượng rune, phần trăm, lãi (số gõ vào ô văn bản), log. Mod đọc ini mỗi tick nên chỉ cần lưu ini, không cần reload; danh sách milestone giữ ở ini. | [docs](../../docs/ingame_menu.md) |
 | 2026-10-15 | Chữ của menu trong game chuyển sang hệ đa ngôn ngữ (`locales/en.json`, `vi.json`): hiện tiếng Việt khi game chạy tiếng Việt, ngôn ngữ khác dùng tiếng Anh | [docs](../../shared/docs/i18n.md) |
 | 2026-10-19 | Sửa lỗi phím reload lọt ra ngoài game: `common::reload` đọc bằng `common::input` (`GetAsyncKeyState`, chỉ nhận phím khi cửa sổ game có focus) thay cho `GetKeyState` của `eldenring`, và antivirus gắn ít cờ hơn (RuneMultiplier 6 xuống 2 cờ trên VirusTotal); chưa test phím reload trong game | [docs](../../shared/docs/reload.md) |
+| 2026-10-22 | Log gọn lại theo kiểu ngắn, kỹ thuật cho dev: bỏ dòng lặp ý, địa chỉ patch, câu dài | |
