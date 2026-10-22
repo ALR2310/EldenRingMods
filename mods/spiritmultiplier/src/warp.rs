@@ -230,9 +230,25 @@ fn local_handles(world_chr_man: &WorldChrMan) -> Vec<u64> {
 /// entry's chr up by handle and uses the result without a null check, so an
 /// entry whose chr is missing (or never findable, as it seems for Seamless's
 /// Mimic Tear: crash right after summoning it) takes the game down.
+///
+/// Calls the ChrSet's `get_chr_ins_by_handle` (vtable slot 3) directly:
+/// `WorldChrMan::chr_ins_by_handle` also type-checks the chr through
+/// `rva::get()`, which panics on game builds newer than the pinned
+/// `fromsoftware-rs` (2.7.2.0: the Warp tick panicked every frame, log
+/// 2026-10-22).
 fn resolvable(world_chr_man: &WorldChrMan, handle: u64) -> bool {
-    let handle = unsafe { (&handle as *const u64 as *const eldenring::cs::FieldInsHandle).read_unaligned() };
-    world_chr_man.chr_ins_by_handle(&handle).is_some()
+    use eldenring::cs::{ChrIns, ChrSet, FieldInsHandle};
+    let handle = unsafe { (&handle as *const u64 as *const FieldInsHandle).read_unaligned() };
+    let Some(Some(chr_set)) = world_chr_man.chr_sets.get(handle.selector.container() as usize) else {
+        return false;
+    };
+    let chr_set: &ChrSet<ChrIns> = chr_set;
+    type GetByHandle = extern "C" fn(&ChrSet<ChrIns>, FieldInsHandle) -> Option<std::ptr::NonNull<ChrIns>>;
+    unsafe {
+        let vtable = *(chr_set as *const ChrSet<ChrIns> as *const *const usize);
+        let get_by_handle: GetByHandle = std::mem::transmute(*vtable.add(3));
+        get_by_handle(chr_set, handle).is_some()
+    }
 }
 
 /// Registers with the warp manager every spirit of the local player that has
