@@ -95,11 +95,11 @@ struct DeathState {
 pub fn run() {
     let kill_chr: Option<KillChrFn> = match memscan::find_pattern_in_module(KILL_CHR_PATTERN) {
         Some(addr) => {
-            logger::log("Kill function found.");
+            logger::log("KillChr: found");
             Some(unsafe { std::mem::transmute::<*mut u8, KillChrFn>(addr) })
         }
         None => {
-            logger::error("Kill function not found - game version not supported, death speed-up disabled.");
+            logger::error("KillChr: not found, death speed-up disabled");
             None
         }
     };
@@ -126,7 +126,7 @@ fn tick(state: &mut DeathState, kill_chr: Option<KillChrFn>) {
 
     if hp > 0 {
         if let Some(since) = state.since.take() {
-            logger::log(&format!("Respawned: {} ms after HP hit 0.", since.elapsed().as_millis()));
+            logger::log(&format!("Death: respawned {} ms after HP 0", since.elapsed().as_millis()));
         }
         return;
     }
@@ -146,7 +146,7 @@ fn tick(state: &mut DeathState, kill_chr: Option<KillChrFn>) {
             state.last_log = None;
             state.last_anim_id = -1;
             logger::log(&format!(
-                "Died: anim={} death_flag={} killed={}.",
+                "Death: died anim={} death_flag={} killed={}",
                 cur.anim_id,
                 chr_ins.chr_flags1c5.death_flag(),
                 killed,
@@ -161,14 +161,14 @@ fn tick(state: &mut DeathState, kill_chr: Option<KillChrFn>) {
             if has_kill_event(cur.anim_id) {
                 state.kill_sent = true;
                 unsafe { kill_chr(chr_ins as *const ChrIns as *mut ChrIns) };
-                logger::log(&format!("Killed early: +{elapsed} ms, anim={} t={:.3}.", cur.anim_id, cur.play_time));
+                logger::log(&format!("Death: killed early +{elapsed} ms anim={} t={:.3}", cur.anim_id, cur.play_time));
             }
         }
     }
 
     if killed && !state.killed_logged {
         state.killed_logged = true;
-        logger::log(&format!("Death registered by the game: +{elapsed} ms (anim={} t={:.3}).", cur.anim_id, cur.play_time));
+        logger::log(&format!("Death: registered +{elapsed} ms anim={} t={:.3}", cur.anim_id, cur.play_time));
     }
 
     if probe {

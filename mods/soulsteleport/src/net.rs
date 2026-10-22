@@ -190,7 +190,7 @@ impl Net {
         w.put(&own_steam_id.to_le_bytes()).put(&request_id.to_le_bytes());
         let result = self.steam.send_to(target.steam_id, &w.buf, CHANNEL);
         logger::log(&format!(
-            "WHERE -> '{}' ({}) request {request_id}, send result {result}.",
+            "WHERE -> '{}' ({}) id={request_id} send={result}",
             target.display_name(),
             target.steam_id
         ));
@@ -238,7 +238,7 @@ impl Net {
             }
             if !sender_matches(&packet) {
                 logger::log(&format!(
-                    "Dropped a packet claiming to be from {} (Steam says {:?}).",
+                    "Net: dropped packet, claimed sender {} != Steam {:?}",
                     u64_at(p, 4),
                     packet.sender
                 ));
@@ -253,7 +253,7 @@ impl Net {
 
         if event.is_none() {
             if let Some(p) = self.pending.as_ref().filter(|p| p.sent.elapsed() >= REPLY_TIMEOUT) {
-                logger::log(&format!("No HERE from '{}' within {:?}.", p.target_name, REPLY_TIMEOUT));
+                logger::log(&format!("WHERE: no HERE from '{}' within {:?}", p.target_name, REPLY_TIMEOUT));
                 event = Some(Event::TimedOut { target_name: p.target_name.clone() });
                 self.pending = None;
             }
@@ -263,12 +263,12 @@ impl Net {
 
     fn answer_where(&mut self, members: &[Member], from: u64, request_id: u32) {
         let Some(asker) = members.iter().find(|m| m.steam_id == from) else {
-            logger::log(&format!("Ignored WHERE from {from}: not in this session."));
+            logger::log(&format!("WHERE <- {from}: ignored (not in session)"));
             return;
         };
         if asker.is_hostile() || party::own_is_hostile() {
             logger::log(&format!(
-                "Ignored WHERE from '{}': teleporting is disabled between hostile players.",
+                "WHERE <- '{}': ignored (hostile)",
                 asker.display_name()
             ));
             return;
@@ -279,7 +279,7 @@ impl Net {
         let reply = if self.settled() { own_here(own, request_id) } else { None };
         let Some(reply) = reply else {
             logger::log(&format!(
-                "WHERE from '{}': not in the world yet, will answer once back in.",
+                "WHERE <- '{}': deferred (not in world)",
                 asker.display_name()
             ));
             // One deferred request per asker: a newer WHERE replaces theirs.
@@ -294,7 +294,7 @@ impl Net {
         };
         let result = self.steam.send_to(from, &reply, CHANNEL);
         logger::log(&format!(
-            "HERE -> '{}' request {request_id}, send result {result}.",
+            "HERE -> '{}' id={request_id} send={result}",
             asker.display_name()
         ));
     }
@@ -312,7 +312,7 @@ impl Net {
         self.deferred.retain(|d| {
             let allowed = !own_hostile && members.iter().any(|m| m.steam_id == d.asker && !m.is_hostile());
             if !allowed {
-                logger::log(&format!("Dropped deferred WHERE from '{}': hostile.", d.asker_name));
+                logger::log(&format!("WHERE <- '{}': deferred dropped (hostile)", d.asker_name));
             }
             allowed
         });
@@ -322,7 +322,7 @@ impl Net {
                 Some(reply) => {
                     let result = self.steam.send_to(d.asker, &reply, CHANNEL);
                     logger::log(&format!(
-                        "HERE -> '{}' request {} (deferred {:.1}s), send result {result}.",
+                        "HERE -> '{}' id={} deferred={:.1}s send={result}",
                         d.asker_name,
                         d.request_id,
                         d.received.elapsed().as_secs_f32()
@@ -358,13 +358,13 @@ impl Net {
         let character_name = party::character_name(&units);
         if !spot_is_sane(&spot) {
             logger::log(&format!(
-                "Dropped HERE from '{character_name}': not a usable position (block {:#010X}, ({}, {}, {})).",
+                "HERE <- '{character_name}': dropped (unusable position, block {:#010X}, ({}, {}, {}))",
                 spot.block_id, spot.x, spot.y, spot.z
             ));
             return None; // keep waiting - times out normally if nothing valid comes
         }
         logger::log(&format!(
-            "HERE <- '{character_name}' request {request_id} after {:.0} ms: block {:#010X} local ({:.2}, {:.2}, {:.2}).",
+            "HERE <- '{character_name}' id={request_id} {:.0}ms block {:#010X} local ({:.2}, {:.2}, {:.2})",
             pending.sent.elapsed().as_secs_f32() * 1000.0,
             spot.block_id,
             spot.x,

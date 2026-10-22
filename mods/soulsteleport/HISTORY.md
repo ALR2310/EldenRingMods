@@ -18,3 +18,4 @@ sử git của `README.md`.
 | 2026-09-26 | 1.1.0: chặn teleport giữa người thù địch (invader), log phiên bản game và danh sách DLL, nhãn `[INFO]` | [docs](docs/roles_and_invaders.md) |
 | 2026-10-05 | Version thật trong thuộc tính file DLL (`build.rs` + `winresource`) | |
 | 2026-10-07 | Đổi thư mục `crates/` thành `mods/`; tách README thành README + HISTORY + docs/; kiểm tra bằng IDA: hai mẫu AOB của hàm warp duy nhất trên 2.6.2.0, 2.7.0.0, 2.7.1.0 | [docs](docs/warp_mechanism.md) |
+| 2026-10-22 | Log gọn lại theo kiểu ngắn, kỹ thuật cho dev: bỏ dòng lặp ý, địa chỉ patch, câu dài; chỉ ghi 1 lần khi chờ thế giới | |

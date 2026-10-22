@@ -46,19 +46,19 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         }
         if let Some((file, current)) = report.newer {
             logger::warn(&format!(
-                "AnimCancelV1.toml is from a newer version of the mod (format {file}, this one knows {current}) - left as it is."
+                "AnimCancelV1.toml: newer format {file} (supported {current}), left as is"
             ));
         }
         if !report.unknown.is_empty() {
             logger::warn(&format!(
-                "AnimCancelV1.toml: {} key(s) this version doesn't use were moved to comments at the end of the file:\n  {}",
+                "AnimCancelV1.toml: {} unused key(s) moved to comments:\n  {}",
                 report.unknown.len(),
                 report.unknown.join("\n  ")
             ));
         }
         if let Some(err) = report.error {
             logger::error(&format!(
-                "AnimCancelV1.toml has an error, running on the default settings:\n{err}"
+                "AnimCancelV1.toml: error, using defaults:\n{err}"
             ));
         }
 

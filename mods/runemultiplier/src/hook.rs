@@ -164,37 +164,41 @@ fn hex_dump(bytes: &[u8]) -> String {
 /// untouched in that case.
 fn install(debug_log: bool) -> bool {
     let Some(anchor) = memscan::find_pattern_in_module(ANCHOR_PATTERN) else {
-        logger::error("Anchor pattern not found (used to locate AddSoul_Call). Game may have been updated - re-check ANCHOR_PATTERN.");
+        logger::error("Hook: anchor not found, game may need a mod update, check Nexus.");
         return false;
     };
-    logger::log(&format!("Anchor found at {anchor:p} (known-good offset is +0x630CB3)."));
+    if debug_log {
+        logger::log(&format!("Hook: anchor at {anchor:p}"));
+    }
 
     let call_site = unsafe { anchor.add(ADDSOUL_CALL_SITE_OFFSET) };
     let Some(addsoul_entry) = resolve_call_target(call_site) else {
-        logger::error("Couldn't resolve AddSoul_Call from the anchor - byte layout differs from expected.");
+        logger::error("Hook: AddSoul_Call not resolved (byte layout differs)");
         return false;
     };
-    logger::log(&format!("AddSoul_Call resolved at {addsoul_entry:p}."));
+    if debug_log {
+        logger::log(&format!("Hook: AddSoul_Call at {addsoul_entry:p}"));
+    }
 
     let original_prefix: [u8; ADDSOUL_PREFIX_LEN] =
         unsafe { std::slice::from_raw_parts(addsoul_entry, ADDSOUL_PREFIX_LEN) }
             .try_into()
             .unwrap();
     if debug_log {
-        logger::log(&format!("AddSoul_Call original prefix bytes: {}", hex_dump(&original_prefix)));
+        logger::log(&format!("Hook: original prefix {}", hex_dump(&original_prefix)));
     }
 
     let return_addr = unsafe { addsoul_entry.add(ADDSOUL_PREFIX_LEN) };
     let stub_body = build_stub(&original_prefix, return_addr);
     if debug_log {
-        logger::log(&format!("AddSoul_Call stub body bytes: {}", hex_dump(&stub_body)));
+        logger::log(&format!("Hook: stub body {}", hex_dump(&stub_body)));
     }
 
     let stub = unsafe {
         VirtualAlloc(std::ptr::null_mut(), stub_body.len(), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)
     };
     if stub.is_null() {
-        logger::error("VirtualAlloc failed for the stub.");
+        logger::error("Hook: stub alloc failed (VirtualAlloc)");
         return false;
     }
     unsafe { std::ptr::copy_nonoverlapping(stub_body.as_ptr(), stub as *mut u8, stub_body.len()) };
@@ -211,7 +215,7 @@ fn install(debug_log: bool) -> bool {
     let mut old_protect: u32 = 0;
     let ok = unsafe { VirtualProtect(addsoul_entry as *mut c_void, ADDSOUL_PREFIX_LEN, PAGE_EXECUTE_READWRITE, &mut old_protect) };
     if ok == 0 {
-        logger::error("VirtualProtect failed, RuneMultiplier disabled.");
+        logger::error("Hook: patch failed (VirtualProtect)");
         return false;
     }
     unsafe {
@@ -221,7 +225,7 @@ fn install(debug_log: bool) -> bool {
         FlushInstructionCache(GetCurrentProcess(), stub as *const c_void, stub_body.len());
     }
 
-    logger::log(&format!("AddSoul_Call hook installed. stub={stub:p}"));
+    logger::log("Hook: installed");
     true
 }
 
@@ -236,14 +240,14 @@ pub fn run(ini_path: String, hmodule: u64) {
 
     let debug_log = config::get_bool("LogFile", false);
     if !install(debug_log) {
-        logger::error("RuneMultiplier disabled for this session (hook install failed).");
+        logger::error("Hook: install failed, disabled");
         // Right away, not after CSTaskImp - this path never gets there.
         common::diag::log_environment();
         return;
     }
 
     let hotkey_name = config::get_string("ReloadKey", "F5");
-    logger::log(&format!("Hook active. Press {hotkey_name} in-game to reload RuneMultiplier.ini."));
+    logger::log(&format!("Hook: active, reload key {hotkey_name}"));
 
     // `common::reload` must stay the only watcher of `ReloadKey` (see its module
     // doc), so this module just follows `RELOAD_GENERATION`.
@@ -267,7 +271,7 @@ pub fn run(ini_path: String, hmodule: u64) {
         },
     );
     if !registered {
-        logger::error("Couldn't register the reload-follow task, hot reload is off for this session.");
+        logger::error("Reload: task registration failed, hot reload off");
     }
 
     loop {

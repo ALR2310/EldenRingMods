@@ -34,6 +34,19 @@ dùng đọc thành lỗi gõ (2026-09-26).
 
 Log được người dùng đăng công khai, xem `shared/docs/diag.md` về quyền riêng tư.
 
+## Văn phong log: mod nào đã áp
+
+Quy ước (CLAUDE.md gốc, mục "Văn phong: log"): ngắn, kỹ thuật, dạng `<Thành phần>: <trạng thái>`,
+không địa chỉ hay dump ở lần chạy thường, lỗi kèm lý do. Đợt dọn 2026-10-16 chỉ gồm 6 mod
+và bỏ sót phần còn lại, nên danh sách này để lần sau không quên:
+
+- 2026-10-16: autoregen, dropmultiplier, infiniteailment, risearcher, speedmultiplier, spiritmultiplier.
+- 2026-10-22: weightmultiplier, runemultiplier, passiverunes, soulsteleport, fasterrevival, animcancel, windowresize.
+- Không áp: sometweaks (đã bỏ).
+
+Mod mới hoặc dòng log mới viết theo quy ước ngay từ đầu, rồi ghi mod vào danh sách này. Dòng
+dò lỗi (`DeathProbe`, `WINDOW`/`STYLE`/`FLAG` của animcancel) để sau cờ ini riêng, tắt mặc định.
+
 ## Mở file ở chế độ append
 
 File được cắt về 0 byte bằng một lần mở riêng, rồi giữ handle ở chế độ **append**.

@@ -212,10 +212,10 @@ pub fn install() {
     let dinput = install_dinput();
     let applied = unsafe { MH_ApplyQueued() }.ok().is_ok();
     if applied && dinput > 0 {
-        logger::log(&format!("Menu: mouse blocking hooks applied (DirectInput flavors {dinput})."));
+        logger::log(&format!("Menu: mouse block hooks applied (DirectInput {dinput})"));
     } else {
         logger::error(&format!(
-            "Menu: mouse blocking incomplete (DirectInput {dinput}, apply {applied}) - the camera may still turn while the menu is open."
+            "Menu: mouse block hooks incomplete (DirectInput {dinput}, applied {applied})"
         ));
     }
 }

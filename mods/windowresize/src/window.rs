@@ -184,12 +184,12 @@ fn hook(hwnd: Hwnd) {
     ORIG_WNDPROC.store(unsafe { GetWindowLongPtrW(hwnd, GWLP_WNDPROC) }, Ordering::SeqCst);
     let prev = unsafe { SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wnd_proc as *const () as isize) };
     if prev == 0 {
-        logger::error("Couldn't subclass the game window - resizing unavailable.");
+        logger::error("Window: subclass failed (SetWindowLongPtr returned 0), resizing unavailable");
         return;
     }
     ORIG_WNDPROC.store(prev, Ordering::SeqCst);
     FRAME_ADDED.store(false, Ordering::SeqCst);
-    logger::log(&format!("Game window found and hooked (DPI {}).", unsafe { GetDpiForWindow(hwnd) }));
+    logger::log(&format!("Window: hooked (DPI {})", unsafe { GetDpiForWindow(hwnd) }));
 }
 
 /// Adds or removes `WS_THICKFRAME` to match `Resizable`, windowed mode only
@@ -206,11 +206,11 @@ fn sync_frame(hwnd: Hwnd) {
     }
     let new_style = if want && !has_frame {
         FRAME_ADDED.store(true, Ordering::SeqCst);
-        logger::log("Resize border added.");
+        logger::log("Resize border: added");
         style | WS_THICKFRAME
     } else if !want && has_frame && FRAME_ADDED.load(Ordering::SeqCst) {
         FRAME_ADDED.store(false, Ordering::SeqCst);
-        logger::log("Resize border removed (Resizable=false).");
+        logger::log("Resize border: removed");
         style & !WS_THICKFRAME
     } else {
         if want {
@@ -295,7 +295,7 @@ fn apply_start_size(hwnd: Hwnd) {
     unsafe {
         SetWindowPos(hwnd, null_mut(), 0, 0, w + frame_w, h + frame_h, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
-    logger::log(&format!("Window set to {w}x{h} (was {}x{}).", current.0, current.1));
+    logger::log(&format!("Window: set to {w}x{h} (was {}x{})", current.0, current.1));
 }
 
 fn min_client() -> (i32, i32) {

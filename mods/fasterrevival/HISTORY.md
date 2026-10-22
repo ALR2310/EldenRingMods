@@ -16,3 +16,4 @@ sử git của `README.md`.
 | 2026-09-28 | Bỏ `ReloadKey`, `FastDeath`, `ToggleKey`: mod luôn bật (các key đó chỉ phục vụ so sánh lúc test); `fade.rs` chỉ ghi 1 lần | |
 | 2026-10-05 | Version thật trong thuộc tính file DLL (`build.rs` + `winresource`) | |
 | 2026-10-07 | Đổi thư mục `crates/` thành `mods/`; tách README thành README + HISTORY + docs/ | |
+| 2026-10-22 | Log gọn lại theo kiểu ngắn, kỹ thuật cho dev: bỏ dòng lặp ý, địa chỉ patch, câu dài; chỉ ghi 1 lần khi chờ thế giới | |
