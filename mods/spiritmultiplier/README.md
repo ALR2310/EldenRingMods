@@ -13,9 +13,9 @@ mà không cần khởi động lại game (trừ `MaxSpirits`).
 Cấu hình trong `SpiritMultiplier.ini` cạnh DLL (tự tạo nếu thiếu; key mới được thêm vào file có sẵn mà không ghi đè giá trị đã chỉnh). Có thể chỉnh:
 
 - số spirit mỗi Ash: nhân hệ số hoặc đặt số cố định, và trần `MaxSpirits`;
-- bật/tắt `MultiSpirit`, `NoRestResummon`, `SummonAnywhere`, màu ma (`GhostColor`), cách hồi máu (`RegenMode`, `RegenValue`);
+- bật/tắt `MultiSpirit`, `NoRestResummon`, `SummonAnywhere`, màu ma (`GhostColor`), `InstantMimic`, cách hồi máu (`RegenMode`, `RegenValue`);
 - phím nạp lại cấu hình và việc hiện banner sau khi nạp;
-- ghi log và các key chẩn đoán (`SlotProbe`, `EnemyProbe`, `ActiveCharacterLimit` - không nên đụng).
+- ghi log và các key chẩn đoán (`SlotProbe`, `EffectProbe`, `EnemyProbe`, `ActiveCharacterLimit` - không nên đụng).
 
 Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong [`SpiritMultiplier.ini`](SpiritMultiplier.ini); file mẫu này được nhúng vào DLL nên là nguồn sự thật duy nhất, README không lặp lại để khỏi lệch.
 
@@ -61,6 +61,7 @@ trị từ ini. Không có host thì mod chạy bằng ini như trước. Host c
 - **GhostColor** (`src/ghost_color.rs`): tắt ghi đè PhantomParam trên các
   `SpEffectVfx` chỉ spirit dùng (hoạt động cả với Reforged):
   [docs/ghost_color.md](docs/ghost_color.md).
+- **InstantMimic** (`src/mimic.rs`, `src/chain.rs`): Mimic Tear bỏ qua giai đoạn Blob: [docs/mimic_tear.md](docs/mimic_tear.md).
 - **Regen** (`src/regen.rs`): mỗi giây hồi máu cho spirit và Torrent: số HP cố định, % HP tối đa, hoặc % HP đã mất.
 - **Hot reload không cộng dồn:** giá trị param gốc được chụp một lần, mọi lần
   áp/reload tính lại từ bản chụp.
@@ -89,6 +90,7 @@ trị từ ini. Không có host thì mod chạy bằng ini như trước. Host c
 - [docs/activate_limit.md](docs/activate_limit.md): giới hạn 60 nhân vật active.
 - [docs/multi_spirit.md](docs/multi_spirit.md): gọi nhiều Ash cùng lúc.
 - [docs/summon_anywhere.md](docs/summon_anywhere.md): NoRestResummon, SummonAnywhere.
+- [docs/mimic_tear.md](docs/mimic_tear.md): Mimic Tear (Blob, `Amount`, `InstantMimic`, crash Seamless).
 - [docs/ghost_color.md](docs/ghost_color.md): màu ma, cờ hành vi spirit.
 - [docs/seamless_conflict.md](docs/seamless_conflict.md): xung đột Seamless, quy tắc đổi đích `call`.
 - [docs/warp_research.md](docs/warp_research.md): cơ chế dịch chuyển spirit về người chơi và cách mod đẩy nó.
