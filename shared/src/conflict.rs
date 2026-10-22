@@ -153,10 +153,10 @@ fn owner_from_stub(stub: usize) -> Option<String> {
     })
 }
 
-/// Logs `hook` and, when `show_box`, queues it for the mod's message box.
+/// Logs `hook` and queues it for the mod's message box.
 /// `feature` is what the mod turns off, `log_file` the name the user should
 /// look at. Conflicts reported within [COLLECT_WINDOW] share one box.
-pub fn report(mod_name: &str, feature: &str, log_file: &str, hook: &ForeignHook, show_box: bool) {
+pub fn report(mod_name: &str, feature: &str, log_file: &str, hook: &ForeignHook) {
     let owner = match (&hook.owner, hook.via_stub) {
         (Some(name), true) => format!("{name}, from its stub"),
         (Some(name), false) => name.clone(),
@@ -169,9 +169,7 @@ pub fn report(mod_name: &str, feature: &str, log_file: &str, hook: &ForeignHook,
         hook.dest,
         head.join(" ")
     ));
-    if show_box {
-        queue_box(mod_name, log_file, feature, hook.owner.clone());
-    }
+    queue_box(mod_name, log_file, feature, hook.owner.clone());
 }
 
 fn pending() -> std::sync::MutexGuard<'static, Vec<(String, Option<String>)>> {
