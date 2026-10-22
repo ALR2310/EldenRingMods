@@ -38,6 +38,7 @@ use std::time::Duration;
 
 use common::codepatch;
 use common::config;
+use common::conflict;
 use common::diag;
 use common::logger;
 use common::memscan;
@@ -161,7 +162,7 @@ fn reload_weight_value_locked() {
             // under the old mode's instruction.
             let patched = unsafe { codepatch::overwrite_bytes(addr as *mut u8, &mode_instruction(new_mode)) };
             if !patched {
-                logger::warn("Failed to re-patch stub for new Mode - keeping the previous Mode's behavior.");
+                logger::warn("Reload: Mode re-patch failed, kept previous Mode");
                 // The instruction is unchanged: keep the old mode and its value.
                 mode = old_mode;
                 value = read_weight_value(old_mode);
@@ -182,7 +183,7 @@ fn reload_weight_value_locked() {
 /// re-reading the file: the menu's saver already updated the shared config).
 pub fn reload_from_config() {
     if let Err(panic) = std::panic::catch_unwind(reload_weight_value) {
-        logger::error(&format!("Menu reload panicked, skipped: {panic:?}"));
+        logger::error(&format!("Reload: menu reload panicked ({panic:?})"));
     }
 }
 
@@ -212,33 +213,46 @@ fn build_stub(mode: i32, weight_value_addr: u64) -> Vec<u8> {
 // hooks `inc ebx` - see the comment above ANCHOR_PATTERN) leaves behind.
 const FOREIGN_PATCH_PATTERN: &str = "E9 ?? ?? ?? ?? 7C ?? 4C 8D 5C 24 ??";
 
+const FEATURE: &str = "Equip load hook";
+
+fn report_conflict(hook: &conflict::ForeignHook) {
+    let show_box = config::get_bool("ConflictMessageBox", true);
+    conflict::report("WeightMultiplier", FEATURE, "WeightMultiplier.log", hook, show_box);
+}
+
 /// Called only when ANCHOR_PATTERN isn't found: tells "another mod already
-/// patched this spot" apart from "the game code changed", and names the
-/// other mod's DLL when the jmp lands inside one (it often lands in a stub
-/// allocated outside any module instead - then only the address is known).
-fn report_foreign_patch() {
+/// patched this spot" apart from "the game code changed" (the jmp often lands
+/// in a stub allocated outside any module, then only the address is known).
+/// Returns whether a foreign hook was found and reported.
+fn report_foreign_patch() -> bool {
     let Some(site) = memscan::find_pattern_in_module(FOREIGN_PATCH_PATTERN) else {
-        return;
+        return false;
     };
     let rel = unsafe { (site.add(1) as *const i32).read_unaligned() };
     let dest = (site as usize + 5).wrapping_add_signed(rel as isize);
-    let owner = diag::module_containing(dest)
-        .map(|m| m.name)
-        .unwrap_or_else(|| "unknown (stub outside any module)".to_string());
-    logger::error(&format!(
-        "The weight-summing loop at {site:p} is already hooked by another mod (jmp to 0x{dest:X}, owner: {owner}).          Disable the other weight/equip-load mod - the two can't run together."
-    ));
+    let Some(hook) = conflict::foreign_hook(site as usize, dest) else {
+        return false;
+    };
+    report_conflict(&hook);
+    true
 }
 
 fn install() -> bool {
     let Some(anchor) = memscan::find_pattern_in_module(ANCHOR_PATTERN) else {
-        logger::error("Weight-summing-loop anchor pattern not found. Game may have been updated - re-check ANCHOR_PATTERN.");
-        report_foreign_patch();
+        // A foreign hook explains the miss; only otherwise blame the game version.
+        if !report_foreign_patch() {
+            logger::error("Hook: anchor pattern not found, game may need a mod update");
+        }
         return false;
     };
     let target = unsafe { anchor.add(ANCHOR_TO_TARGET) };
+    // SAFETY: `target` is inside the matched game code, well within one readable page run.
+    if let Some(hook) = unsafe { conflict::foreign_hook_at(target) } {
+        report_conflict(&hook);
+        return false;
+    }
     if config::get_bool("LogFile", false) {
-        logger::log(&format!("Anchor found at {anchor:p}, patch target at {target:p}."));
+        logger::log("Hook: anchor found");
     }
 
     let value_addr = &WEIGHT_VALUE as *const AtomicU32 as u64;
@@ -247,13 +261,13 @@ fn install() -> bool {
     // SAFETY: `target` is the scanned instruction in the game image; the length/offset is the one its pattern matched.
 
     let Some(stub) = (unsafe { codepatch::install_jmp_hook(target, TARGET_INSTRUCTION_LEN, &stub_body) }) else {
-        logger::error("Failed to install hook (couldn't allocate stub or patch target).");
+        logger::error("Hook: install failed (stub allocation or patch)");
         return false;
     };
     STUB_MODE_INSTR_ADDR.store(unsafe { stub.add(STUB_MODE_INSTR_OFFSET) } as u64, Ordering::Relaxed);
 
     if config::get_bool("LogFile", false) {
-        logger::log(&format!("Hook installed. stub={stub:p}"));
+        logger::log("Hook: installed");
     }
     true
 }
@@ -271,11 +285,8 @@ pub fn run(ini_path: String) {
     init_weight_value();
 
     if !install() {
-        logger::error("WeightMultiplier disabled for this session (hook install failed).");
         return;
     }
-
-    logger::log("Hook active.");
 
     common::reload::run_with(
         || config::get_string("ReloadKey", "F5"),
