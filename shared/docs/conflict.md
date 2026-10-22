@@ -1,6 +1,6 @@
 # conflict: phát hiện hook của mod khác và báo người dùng
 
-**Status 2026-10-22: chỉ `weightmultiplier` dùng. Đã thử trong game với `ZibaPeso.dll` (cùng hook vòng lặp trọng lượng): phát hiện đúng, hộp thoại hiện, hook của mod được bỏ qua; chưa nêu được tên DLL (stub của ZibaPeso không có con trỏ về DLL của nó trong 128 byte đầu, hoặc hook cách khác), chấp nhận vì mục tiêu chính là phát hiện để không làm hỏng tính năng. Code ở `shared/src/conflict.rs` (có test cho việc nhận dạng lệnh nhảy).**
+**Status 2026-10-22: `weightmultiplier` và `spiritmultiplier` dùng (spiritmultiplier mới nối, chưa thử trong game với mod xung đột thật). Đã thử trong game với `ZibaPeso.dll` (cùng hook vòng lặp trọng lượng): phát hiện đúng, hộp thoại hiện, hook của mod được bỏ qua; chưa nêu được tên DLL (stub của ZibaPeso không có con trỏ về DLL của nó trong 128 byte đầu, hoặc hook cách khác), chấp nhận vì mục tiêu chính là phát hiện để không làm hỏng tính năng. Code ở `shared/src/conflict.rs` (có test cho việc nhận dạng lệnh nhảy).**
 
 ## Vì sao có
 
@@ -32,7 +32,7 @@ Từ báo cáo đó thử nối chuỗi với mod kia, được thì thêm hỗ 
   hộp thoại ghi "another mod".
 - `report(...)`: ghi 1 dòng ERROR (có địa chỉ site, đích nhảy, owner và 12 byte
   đầu của site, để thấy hook của mod kia trông ra sao khi người dùng báo lỗi)
-  rồi xếp conflict vào hộp thoại nếu `show_box`.
+  rồi xếp conflict vào hộp thoại.
 
 ## Hộp thoại
 
@@ -49,8 +49,8 @@ Từ báo cáo đó thử nối chuỗi với mod kia, được thì thêm hỗ 
   phần đề xuất xử lý; chi tiết nằm trong log.
 - Chạy trên thread riêng: hộp modal trên thread gọi có thể làm game treo hoặc
   kẹt loader lock. `MB_TOPMOST | MB_SETFOREGROUND` để không nằm sau cửa sổ game.
-- Mỗi mod có khoá `ConflictMessageBox` (mặc định `true`) trong file config để
-  tắt hộp.
+- Hộp luôn bật, không có khoá cấu hình để tắt (chốt 2026-10-22): hộp chỉ hiện khi
+  có xung đột thật, và xung đột khiến một tính năng bị tắt nên người dùng cần biết.
 
 ## Giới hạn
 

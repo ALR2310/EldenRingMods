@@ -216,8 +216,7 @@ const FOREIGN_PATCH_PATTERN: &str = "E9 ?? ?? ?? ?? 7C ?? 4C 8D 5C 24 ??";
 const FEATURE: &str = "Equip load hook";
 
 fn report_conflict(hook: &conflict::ForeignHook) {
-    let show_box = config::get_bool("ConflictMessageBox", true);
-    conflict::report("WeightMultiplier", FEATURE, "WeightMultiplier.log", hook, show_box);
+    conflict::report("WeightMultiplier", FEATURE, "WeightMultiplier.log", hook);
 }
 
 /// Called only when ANCHOR_PATTERN isn't found: tells "another mod already
