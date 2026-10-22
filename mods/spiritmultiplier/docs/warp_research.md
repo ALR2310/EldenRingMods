@@ -42,3 +42,7 @@ Solo khi `ersc.dll` đã nạp (kiểm tra sau khi `CSTaskImp` có, lúc mọi D
 ## Crash với Mimic Tear trong Seamless (2026-10-10)
 
 Báo cáo Nexus, tái hiện được: bật Seamless + triệu hồi Mimic Tear thì game crash ngay sau khi mod đăng ký spirit với `warp_manager` (vanilla không crash). `sub_1404C28D0` (update) lấy chr bằng `sub_140508A50(handle)` rồi đọc `chr+400` không kiểm null. Sửa: `resolvable()` (`WorldChrMan::chr_ins_by_handle`) trước khi đăng ký và trước mỗi lần gọi update; entry của mod không tra được chr thì gỡ ngay. Đã test in-game, hết crash. Chưa có dump nên nguyên nhân chính xác (Mimic không tra được hay biến mất giữa 2 nhịp) chưa chốt.
+
+## Không phụ thuộc phiên bản game (2026-10-22)
+
+Warp tìm hàm của game bằng AOB và kiểm bố cục node (`layout_known`), nên không gắn với một bản game. Chỗ duy nhất gắn phiên bản là `WorldChrMan::chr_ins_by_handle` của `fromsoftware-rs`: nó ép kiểu chr qua `rva::get()` (chỉ có bảng cho 2.7.1.0), nên trên 2.7.2.0 Warp panic mỗi frame ngay khi có spirit. `resolvable` giờ gọi thẳng `get_chr_ins_by_handle` của ChrSet (vtable slot 3, không ép kiểu). Đã rà: SpiritMultiplier và `shared/` không còn gọi API nào của `eldenring` đi qua `rva::get()` (GameMan, GameDataMan, `ChrInsExt`, `as_subclass`...). Chưa test trên 2.7.2.0.
