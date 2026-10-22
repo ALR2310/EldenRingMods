@@ -1,100 +1,48 @@
-//! Scales the player's equip load (both the displayed number AND the actual
-//! gameplay roll/run behavior) by a configurable factor, ported from
-//! WeightEngine.cpp/CodePatch.cpp - same single hook, patched into the exact
-//! instruction (`movaps xmm0,xmm6`, confirmed against a working third-party
-//! "NoWeight" DLL - see the original README's "Lịch sử tìm offset" for the
-//! full story of how two earlier hook points were tried and ruled out) right
-//! after the game finishes summing every equipped item's weight, so the
-//! multiply runs exactly once per recalculation instead of compounding
-//! across the summing loop's 5 iterations.
-//!
-//! Unlike `autoregen`/`sometweaks`/`runemultiplier`, the patched instruction
-//! here is only 7 bytes long - not enough room for the `mov reg, imm64; jmp
-//! reg` absolute redirect those use (needs ~12 bytes). This keeps the
-//! original technique instead: a 5-byte relative `E9 rel32` JMP, via
-//! [`common::codepatch`] (ported from the C++ `CodePatch.cpp`/`.h`), whose
-//! stub has to be allocated within reach of a 32-bit signed displacement.
-//!
-//! `Mode=1` (`FixedValue`) reuses this exact same hook point instead of
-//! patching mid-loop the way a third-party "NoWeight" DLL does (see the
-//! original README's "Lịch sử tìm offset") - since this hook already runs
-//! exactly once, after the loop has finished summing, overwriting `xmm6`
-//! here works just as well as multiplying it, without needing a second
-//! patch site.
-//!
-//! `ReloadKey` is watched by [`common::reload`] (the shared watcher every mod
-//! uses). Changing `Multiplier`/`FixedValue` on reload is a plain value write
-//! (the stub already reads it from a fixed address every time it runs);
-//! changing `Mode` additionally re-patches the stub's `mulss`/`movss`
-//! instruction in place via [`common::codepatch::overwrite_bytes`], since
-//! which of the two runs is baked into the executing code itself, not read
-//! from memory - same inherent risk as the original `install()` (rewriting
-//! code the CPU could be mid-execution of), just repeated on demand instead of
-//! only once.
+//! Scales the player's equip load (the displayed number AND the roll / run
+//! behavior) by a factor, or sets it to a fixed value. One hook, on the
+//! `movaps xmm0,xmm6` that copies the finished total out right after the game
+//! sums every equipped item's weight, so the change runs exactly once per
+//! recalculation. The instruction is only 7 bytes, too short for an absolute
+//! jump, so it is redirected with a `E9 rel32` jump through
+//! [`common::codepatch`]. Why this spot, the anchor, the stub and the
+//! compatibility check: `docs/hook_point.md`.
 
 use std::sync::atomic::{AtomicI32, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
-use common::codepatch;
-use common::config;
-use common::conflict;
-use common::diag;
-use common::logger;
-use common::memscan;
+use common::{codepatch, config, conflict, diag, logger, memscan};
 
-// Cross-checked against a third-party "NoWeight" DLL confirmed to work
-// correctly in-game (WeightValue=0 actually changes the roll weight class,
-// not just the displayed number) - its own log printed the exact address it
-// patches, which matched this same pattern's match position exactly:
-//
-//   addss xmm6, dword ptr [rax + 0xc]   ; add this slot's item weight
-//   inc ebx                             ; <-- the third-party DLL hooks here (sets a fixed value)
-//   cmp ebx, 5
-//   jl <loop start>
-//   lea r11, [rsp+0x70]
-//   movaps xmm0, xmm6                   ; <-- this hook's target: copy the finished total out
-//   mov rbx, [r11+0x10]
-//
-// Hooking the third-party DLL's spot instead would compound a percentage
-// multiply across all 5 loop iterations (items summed earlier end up scaled
-// down far more than later ones) - fine for "set to a fixed value", wrong
-// for a clean percentage. `movaps xmm0,xmm6` runs exactly once, after the
-// loop has already finished, so scaling xmm6 right there multiplies the true
-// final total by a single clean factor.
+/// `inc ebx; cmp ebx,5; jl <loop>; lea r11,[rsp+0x70]`, the end of the loop
+/// that sums the 5 slots' weights.
 const ANCHOR_PATTERN: &str = "FF C3 83 FB ?? 7C ?? 4C 8D 5C 24 ??";
-const ANCHOR_TO_TARGET: usize = 12; // skip inc+cmp+jl (7 bytes) + lea r11,[rsp+0x70] (5 bytes)
-const TARGET_INSTRUCTION_LEN: usize = 7; // "movaps xmm0,xmm6" (3) + "mov rbx,[r11+0x10]" (4)
+/// Skips `inc`+`cmp`+`jl` (7 bytes) and `lea r11,[rsp+0x70]` (5 bytes).
+const ANCHOR_TO_TARGET: usize = 12;
+/// `movaps xmm0,xmm6` (3) + `mov rbx,[r11+0x10]` (4).
+const TARGET_INSTRUCTION_LEN: usize = 7;
 
 const MODE_MULTIPLIER: i32 = 0;
 const MODE_FIXED_VALUE: i32 = 1;
 
-// The mode currently baked into the installed stub's mulss/movss instruction
-// - compared against on reload to decide whether that instruction needs
-// re-patching (see [reload_weight_value]).
+/// The mode baked into the installed stub's `mulss`/`movss`; compared on
+/// reload to decide whether that instruction needs re-patching.
 static WEIGHT_MODE: AtomicI32 = AtomicI32::new(MODE_MULTIPLIER);
 
-// The value applied to the finished equip-load total - a multiplier factor
-// when WEIGHT_MODE is MODE_MULTIPLIER, or the fixed total itself when
-// MODE_FIXED_VALUE. Stored as raw f32 bits (no AtomicF32 in std) - read by
-// the injected stub via an absolute address baked into it at hook-install
-// time, every time it runs, so updating this alone (no re-patch needed) is
-// enough to hot-reload a new Multiplier/FixedValue number.
-static WEIGHT_VALUE: AtomicU32 = AtomicU32::new(0x3F80_0000); // 1.0f32 bit pattern
+/// The factor (multiplier mode) or the fixed total, as raw `f32` bits (std has
+/// no `AtomicF32`). The stub reads it through an address baked in at install
+/// time every time it runs, so updating it alone hot-reloads a new number.
+static WEIGHT_VALUE: AtomicU32 = AtomicU32::new(0x3F80_0000); // 1.0f32
 
-// Address of the mulss/movss instruction inside the installed stub (see
-// [mode_instruction] + STUB_MODE_INSTR_OFFSET) - 0 until [install] succeeds.
-// Only [reload_weight_value] writes to this address again, if Mode changes.
+/// Address of the `mulss`/`movss` inside the installed stub; 0 until
+/// [install] succeeds. Only [reload_weight_value_locked] writes to it again.
 static STUB_MODE_INSTR_ADDR: AtomicU64 = AtomicU64::new(0);
 
-// Offset of the mulss/movss instruction within the stub built by
-// [build_stub]: right after the 10-byte "mov rcx, imm64" that loads
-// &WEIGHT_VALUE.
+/// Offset of the `mulss`/`movss` in the stub: right after the 10-byte
+/// `mov rcx, imm64` that loads `&WEIGHT_VALUE`.
 const STUB_MODE_INSTR_OFFSET: usize = 10;
 
-/// The 4-byte instruction [build_stub] injects for `mode`: `mulss xmm6,[rcx]`
-/// (MODE_MULTIPLIER) or `movss xmm6,[rcx]` (MODE_FIXED_VALUE, overwrites the
-/// finished total outright instead of scaling it).
+/// `mulss xmm6,[rcx]` (multiplier mode) or `movss xmm6,[rcx]` (fixed value:
+/// overwrites the finished total outright).
 fn mode_instruction(mode: i32) -> [u8; 4] {
     if mode == MODE_FIXED_VALUE {
         [0xF3, 0x0F, 0x10, 0x31]
@@ -104,21 +52,17 @@ fn mode_instruction(mode: i32) -> [u8; 4] {
 }
 
 /// The configured `Multiplier` (1.0 = vanilla when the key is missing); the
-/// in-game menu shows this same value.
+/// in-game menu shows the same value.
 pub fn configured_multiplier() -> f64 {
     config::get_double("Multiplier", 1.0)
 }
 
 fn read_weight_value(mode: i32) -> f32 {
-    (if mode == MODE_FIXED_VALUE {
-        config::get_double("FixedValue", 0.0)
-    } else {
-        configured_multiplier()
-    }) as f32
+    (if mode == MODE_FIXED_VALUE { config::get_double("FixedValue", 0.0) } else { configured_multiplier() }) as f32
 }
 
-// Serialises config reloads: the reload key's task and the menu's saver thread
-// (via [reload_from_config]) both end up in [reload_weight_value_locked].
+/// Serialises reloads: the reload key's task and the menu's saver thread (via
+/// [reload_from_config]) both end up in [reload_weight_value_locked].
 static RELOAD_LOCK: Mutex<()> = Mutex::new(());
 
 fn lock_reload() -> MutexGuard<'static, ()> {
@@ -130,24 +74,13 @@ fn init_weight_value() {
     let value = read_weight_value(mode);
     WEIGHT_MODE.store(mode, Ordering::Relaxed);
     WEIGHT_VALUE.store(value.to_bits(), Ordering::Relaxed);
-    if config::get_bool("LogFile", false) {
-        logger::log(&format!("Mode={mode}, value={value:.3}"));
-    }
+    logger::log(&format!("Weight: mode={mode} value={value:.3}"));
 }
 
-/// Re-reads `Mode`/`Multiplier`/`FixedValue` from the just-`config::load`ed
-/// ini and applies them to the already-installed hook: always updates
-/// `WEIGHT_VALUE` (the stub re-reads it every time it runs, no patch
-/// needed); if `Mode` itself changed, also re-patches the stub's
-/// mulss/movss instruction in place via `codepatch::overwrite_bytes` - see
-/// the module doc comment for why that's riskier than the value-only path.
-/// Takes `RELOAD_LOCK`, so it never interleaves with another reload.
-fn reload_weight_value() {
-    let _guard = lock_reload();
-    reload_weight_value_locked();
-}
-
-/// Body of [reload_weight_value]; the caller holds `RELOAD_LOCK`.
+/// Applies the freshly loaded config to the running hook. The value is always
+/// updated; if `Mode` changed, the stub's `mulss`/`movss` is also re-patched
+/// in place (riskier: the CPU may be executing it). The caller holds
+/// `RELOAD_LOCK`.
 fn reload_weight_value_locked() {
     let new_mode = config::get_int("Mode", MODE_MULTIPLIER);
     let old_mode = WEIGHT_MODE.load(Ordering::Relaxed);
@@ -157,13 +90,11 @@ fn reload_weight_value_locked() {
     if new_mode != old_mode {
         let addr = STUB_MODE_INSTR_ADDR.load(Ordering::Relaxed);
         if addr != 0 {
-            // Patch the instruction first and publish the new value only
-            // afterwards, so the stub never runs with the new mode's value
-            // under the old mode's instruction.
+            // Patch the instruction first and publish the value after, so the
+            // stub never runs the new mode's value under the old instruction.
             let patched = unsafe { codepatch::overwrite_bytes(addr as *mut u8, &mode_instruction(new_mode)) };
             if !patched {
                 logger::warn("Reload: Mode re-patch failed, kept previous Mode");
-                // The instruction is unchanged: keep the old mode and its value.
                 mode = old_mode;
                 value = read_weight_value(old_mode);
             }
@@ -172,45 +103,41 @@ fn reload_weight_value_locked() {
 
     WEIGHT_VALUE.store(value.to_bits(), Ordering::Relaxed);
     WEIGHT_MODE.store(mode, Ordering::Relaxed);
-
-    if config::get_bool("LogFile", false) {
-        logger::log(&format!("Mode={mode}, value={value:.3}"));
-    }
+    logger::log(&format!("Weight: mode={mode} value={value:.3}"));
 }
 
 /// Applies the current config to the running hook; used by the in-game menu
-/// after it has saved a change (same effect as the reload key, without
-/// re-reading the file: the menu's saver already updated the shared config).
+/// after it has saved a change (the shared config is already updated, so it
+/// is not re-read from the file).
 pub fn reload_from_config() {
-    if let Err(panic) = std::panic::catch_unwind(reload_weight_value) {
+    let result = std::panic::catch_unwind(|| {
+        let _guard = lock_reload();
+        reload_weight_value_locked();
+    });
+    if let Err(panic) = result {
         logger::error(&format!("Reload: menu reload panicked ({panic:?})"));
     }
 }
 
+/// The stub: scale or overwrite `xmm6` by `[weight_value_addr]`, then replay
+/// the two overwritten instructions.
 fn build_stub(mode: i32, weight_value_addr: u64) -> Vec<u8> {
     let mut body = Vec::with_capacity(21);
 
-    // mov rcx, &WEIGHT_VALUE
-    body.extend_from_slice(&[0x48, 0xB9]);
+    body.extend_from_slice(&[0x48, 0xB9]); // mov rcx, &WEIGHT_VALUE
     body.extend_from_slice(&weight_value_addr.to_le_bytes());
     debug_assert_eq!(body.len(), STUB_MODE_INSTR_OFFSET);
 
-    // mulss/movss xmm6, dword ptr [rcx] (scale or overwrite the finished
-    // total in place, once, before it's copied out)
-    body.extend_from_slice(&mode_instruction(mode));
-
-    // movaps xmm0, xmm6 (original instruction, re-executed with the now-scaled/overwritten xmm6)
-    body.extend_from_slice(&[0x0F, 0x28, 0xC6]);
-
-    // mov rbx, qword ptr [r11+0x10] (original next instruction, re-executed)
-    body.extend_from_slice(&[0x49, 0x8B, 0x5B, 0x10]);
+    body.extend_from_slice(&mode_instruction(mode)); // mulss/movss xmm6, [rcx]
+    body.extend_from_slice(&[0x0F, 0x28, 0xC6]); // movaps xmm0, xmm6 (original)
+    body.extend_from_slice(&[0x49, 0x8B, 0x5B, 0x10]); // mov rbx, [r11+0x10] (original)
 
     body
 }
 
-// Same anchor, but with `inc ebx; cmp ebx,5` (exactly 5 bytes) replaced by
-// a `jmp rel32` - the shape another weight mod (e.g. a "NoWeight" DLL, which
-// hooks `inc ebx` - see the comment above ANCHOR_PATTERN) leaves behind.
+/// The anchor with `inc ebx; cmp ebx,5` (exactly 5 bytes) replaced by a
+/// `jmp rel32`: the shape another weight mod (a "NoWeight" DLL hooking
+/// `inc ebx`) leaves behind.
 const FOREIGN_PATCH_PATTERN: &str = "E9 ?? ?? ?? ?? 7C ?? 4C 8D 5C 24 ??";
 
 const FEATURE: &str = "Equip load hook";
@@ -219,10 +146,9 @@ fn report_conflict(hook: &conflict::ForeignHook) {
     conflict::report("WeightMultiplier", FEATURE, "WeightMultiplier.log", hook);
 }
 
-/// Called only when ANCHOR_PATTERN isn't found: tells "another mod already
-/// patched this spot" apart from "the game code changed" (the jmp often lands
-/// in a stub allocated outside any module, then only the address is known).
-/// Returns whether a foreign hook was found and reported.
+/// Called only when [ANCHOR_PATTERN] isn't found: tells "another mod already
+/// patched this spot" apart from "the game code changed". Returns whether a
+/// foreign hook was found and reported.
 fn report_foreign_patch() -> bool {
     let Some(site) = memscan::find_pattern_in_module(FOREIGN_PATCH_PATTERN) else {
         return false;
@@ -245,35 +171,29 @@ fn install() -> bool {
         return false;
     };
     let target = unsafe { anchor.add(ANCHOR_TO_TARGET) };
-    // SAFETY: `target` is inside the matched game code, well within one readable page run.
+    // SAFETY: `target` is inside the matched game code, within one readable page run.
     if let Some(hook) = unsafe { conflict::foreign_hook_at(target) } {
         report_conflict(&hook);
         return false;
-    }
-    if config::get_bool("LogFile", false) {
-        logger::log("Hook: anchor found");
     }
 
     let value_addr = &WEIGHT_VALUE as *const AtomicU32 as u64;
     let stub_body = build_stub(WEIGHT_MODE.load(Ordering::Relaxed), value_addr);
 
-    // SAFETY: `target` is the scanned instruction in the game image; the length/offset is the one its pattern matched.
-
+    // SAFETY: `target` is the scanned instruction in the game image, with the length its pattern matched.
     let Some(stub) = (unsafe { codepatch::install_jmp_hook(target, TARGET_INSTRUCTION_LEN, &stub_body) }) else {
         logger::error("Hook: install failed (stub allocation or patch)");
         return false;
     };
     STUB_MODE_INSTR_ADDR.store(unsafe { stub.add(STUB_MODE_INSTR_OFFSET) } as u64, Ordering::Relaxed);
 
-    if config::get_bool("LogFile", false) {
-        logger::log("Hook: installed");
-    }
+    logger::log("Hook: installed");
     true
 }
 
-/// Waits `LoadDelay`, installs the hook, then hands `ReloadKey` to
-/// `common::reload` forever. Meant to run on its own worker thread spawned from
-/// `DllMain`; never returns once the hook is active.
+/// Waits `LoadDelay`, installs the hook, then hands the reload key to
+/// `common::reload` forever. Run it on its own worker thread; never returns
+/// once the hook is active.
 pub fn run(ini_path: String) {
     let load_delay_ms = config::get_int("LoadDelay", 5000).max(0) as u64;
     std::thread::sleep(Duration::from_millis(load_delay_ms));
@@ -298,4 +218,29 @@ pub fn run(ini_path: String) {
             Ok(())
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_mode_decides_between_scaling_and_overwriting() {
+        assert_eq!(mode_instruction(MODE_MULTIPLIER), [0xF3, 0x0F, 0x59, 0x31]); // mulss xmm6,[rcx]
+        assert_eq!(mode_instruction(MODE_FIXED_VALUE), [0xF3, 0x0F, 0x10, 0x31]); // movss xmm6,[rcx]
+        assert_eq!(mode_instruction(7), mode_instruction(MODE_MULTIPLIER)); // unknown modes scale
+    }
+
+    #[test]
+    fn the_stub_loads_the_value_address_then_replays_the_original_instructions() {
+        let stub = build_stub(MODE_FIXED_VALUE, 0x1122_3344_5566_7788);
+        assert_eq!(stub[..2], [0x48, 0xB9]);
+        assert_eq!(stub[2..10], 0x1122_3344_5566_7788u64.to_le_bytes());
+        // The re-patchable instruction sits exactly where `STUB_MODE_INSTR_OFFSET` says.
+        assert_eq!(stub[STUB_MODE_INSTR_OFFSET..STUB_MODE_INSTR_OFFSET + 4], mode_instruction(MODE_FIXED_VALUE));
+        // The two replayed instructions add up to the 7 bytes the hook overwrote.
+        let tail = &stub[STUB_MODE_INSTR_OFFSET + 4..];
+        assert_eq!(tail, [0x0F, 0x28, 0xC6, 0x49, 0x8B, 0x5B, 0x10]);
+        assert_eq!(tail.len(), TARGET_INSTRUCTION_LEN);
+    }
 }

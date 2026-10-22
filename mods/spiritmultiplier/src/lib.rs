@@ -18,8 +18,8 @@ mod warp;
 
 use common::{config, dll_dir, logger};
 
-// SpiritMultiplier.ini is embedded verbatim into the binary at compile time
-// via include_str! - single source of truth for the default config.
+// The default config, embedded verbatim: the single source of truth for keys
+// and defaults.
 const DEFAULT_INI: &str = include_str!("../SpiritMultiplier.ini");
 
 /// # Safety
@@ -35,31 +35,25 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
         let ini_path = format!("{dir}\\SpiritMultiplier.ini");
-        let migrated = config::load_or_create_default_with_renames(&ini_path, DEFAULT_INI, &[("Regen", "RegenValue")]);
+        let added_keys = config::load_or_create_default_with_renames(&ini_path, DEFAULT_INI, &[("Regen", "RegenValue")]);
 
-        // [Logging] LogFile gates the log file entirely - see common::logger.
+        // `LogFile` gates the log file entirely, see common::logger.
         logger::init(&dir, "SpiritMultiplier.log");
         logger::install_panic_hook();
-        logger::log("Activating SpiritMultiplier...");
-        if migrated > 0 {
-            logger::log(&format!(
-                "SpiritMultiplier.ini updated: added {migrated} new key(s) from a newer default template."
-            ));
+        if added_keys > 0 {
+            logger::log(&format!("SpiritMultiplier.ini: added {added_keys} key(s) from the template"));
         }
 
-        // The menu registers right away (the host only accepts registrations
-        // at startup). Every setting but MaxSpirits is read live by the mod.
+        // Registers right away: the host only accepts menu registrations at
+        // startup. Every setting but MaxSpirits is read live by the mod.
         menu::start(hmodule, ini_path.clone());
 
-        // Band first: without it, chains longer than 10 are harmless (the
-        // engine just drops the extra spirits) - so a failed band patch
-        // still leaves the chain half running, it just can't exceed 10.
-        // MaxSpirits sizes the summon ChrSet itself, so it's read once here
-        // and only takes effect on the next game start (unlike Amount/
-        // Multiplier, which chain.rs re-reads every tick).
+        // Band first: without it, chains longer than 10 are harmless (the engine
+        // drops the extra spirits). `MaxSpirits` sizes the summon ChrSet, so it is
+        // read once here and applies from the next game start.
         let max_spirits = config::get_int("MaxSpirits", band::DEFAULT_MAX_SPIRITS as i32).max(0) as u32;
         if !band::install(max_spirits) {
-            logger::error("Band patch not installed - spirits stay capped at 10 per cast.");
+            logger::error("Band: patch not installed, spirits stay capped at 10 per cast");
         }
 
         std::thread::spawn(move || common::reload::run(ini_path));

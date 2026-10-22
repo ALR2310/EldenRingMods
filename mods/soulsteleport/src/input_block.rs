@@ -1,27 +1,8 @@
-//! Keeps the game from reacting to the **mouse** while the menu is open (no
-//! camera turning / attacking while clicking in the menu). Keyboard and
-//! gamepad still reach the game, so the player can keep moving - user's
-//! call (2026-09-25); the first version blocked all of them.
-//!
-//! The game doesn't read input from window messages (so `message_filter`
-//! alone does nothing for it): its imports are `DINPUT8!DirectInput8Create`
-//! (keyboard, mouse, DirectInput pads) and `XINPUT1_4` by ordinal (Xbox-style
-//! pads). Same idea as QuestPath (its log mentions a hooked "dinput8
-//! vtable"): hook the device read calls and, while the menu is open, still
-//! call the original (keeps the game's device buffers drained) but hand the
-//! game an idle state.
-//!
-//! - `IDirectInputDevice8::GetDeviceState` (vtable slot 9): zeroed only for
-//!   the mouse formats (`DIMOUSESTATE`/`DIMOUSESTATE2`); the calling device is
-//!   remembered as "a mouse".
-//! - `IDirectInputDevice8::GetDeviceData` (slot 10): reports 0 buffered
-//!   events, only for a device remembered as a mouse.
-//! - XInput is no longer hooked (gamepads stay fully usable).
-//!
-//! The vtable is read off a throwaway keyboard device we create ourselves:
-//! dinput8 uses one device implementation (one vtable per A/W flavor) for
-//! every device type, so hooking the functions it points at covers the
-//! game's devices too. Both flavors are hooked if they differ.
+//! Keeps the game from reacting to the **mouse** while the menu is open, by
+//! hooking the DirectInput device reads (`GetDeviceState`, `GetDeviceData`)
+//! and handing the game an idle mouse. Keyboard and gamepad still reach the
+//! game, so the player can keep moving. Why window messages don't work and how
+//! the vtable is found: `docs/menu_ui.md`.
 
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicUsize, Ordering};

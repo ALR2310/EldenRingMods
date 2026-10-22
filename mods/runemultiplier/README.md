@@ -1,67 +1,74 @@
+<div align="center">
+
 # RuneMultiplier
 
-> Nexus mod 10630 · **đã phát hành**
+**Nhân hệ số lên số rune nhận được từ mọi nguồn.**
 
-Mod DLL cho Elden Ring: **nhân hệ số cấu hình được lên số rune nhận được từ mọi
-nguồn** (giết quái, nhặt/dùng item, bán đồ...). Rune **chi tiêu** (lên cấp, mua
-đồ) không bị ảnh hưởng. Chỉ một hook duy nhất, patch thẳng vào hàm cộng rune
-thấp nhất của game (`AddSoul_Call`).
+![Rust](https://img.shields.io/badge/Rust-cdylib-orange?logo=rust)
+![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)
+![Game](https://img.shields.io/badge/game-Elden_Ring-8a6d3b)
+
+</div>
+
+---
+
+## Giới thiệu
+
+RuneMultiplier nhân số rune bạn **nhận được** lên một hệ số tuỳ chọn: giết quái, nhặt hoặc
+dùng vật phẩm, bán đồ đều tính. Rune **chi tiêu** (lên cấp, mua đồ) không bị ảnh hưởng. Chỉ có
+một thiết lập chính, nên cài vào là dùng được ngay.
+
+## Tính năng
+
+| Hệ số | Hiệu ứng |
+|---|---|
+| lớn hơn 1 | nhận nhiều rune hơn (mặc định x2) |
+| nhỏ hơn 1 | nhận ít rune hơn |
+| số âm | rune nhận được bị **trừ** thay vì cộng |
+
+Sai số tối đa ±1 rune mỗi lần nhận. Đổi hệ số xong bấm phím reload là áp dụng ngay, không cần
+khởi động lại game.
 
 ## Cấu hình
 
-Cấu hình trong `RuneMultiplier.ini` cạnh DLL (tự tạo nếu thiếu). Có thể chỉnh:
+Cấu hình nằm trong `RuneMultiplier.ini` cạnh DLL, tự tạo ở lần chạy đầu. Tên key, giá trị mặc
+định và ý nghĩa nằm ở chú thích trong [RuneMultiplier.ini](RuneMultiplier.ini), file mẫu nhúng
+sẵn trong DLL. Phím reload cũng đổi được và có hiệu lực ngay.
 
-- hệ số nhân lên rune nhận được (nhỏ hơn 1 để nhận ít đi, số âm để bị trừ rune);
-- phím nạp lại cấu hình và việc hiện banner sau khi nạp;
-- ghi log để chẩn đoán (mặc định tắt, khác phần lớn mod khác).
+### Menu trong game (tùy chọn)
 
-Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong [`RuneMultiplier.ini`](RuneMultiplier.ini); file mẫu này được nhúng vào DLL nên là nguồn sự thật duy nhất, README không lặp lại để khỏi lệch.
-
-Đổi ini rồi bấm phím reload là có hiệu lực ngay, kể cả đổi chính phím reload, vì phím được đọc lại mỗi frame. Sau khi reload, mod ghi dòng log tương ứng và, nếu bật trong ini (mặc định tắt), hiện banner "Config reloaded". Phím và banner do `common::reload` lo, giống các mod khác.
-
-## Menu trong game (tùy chọn)
-
-Nếu `ERNativeUI.dll` (host menu dùng chung, https://github.com/Flammrock/ERNativeUI) đã được nạp trước mod, System >
-Game Options có thêm hàng **Rune Multiplier**: mở ra trang chỉnh hệ số (hàng nhập số, gõ được số lẻ, 0 và số âm, trong khoảng -1000 đến 1000) và bật/tắt log.
-Đổi trong menu áp ngay và được ghi lại vào ini; bấm phím reload thì menu cập nhật theo ini. Không có host thì mod
-chạy hoàn toàn bằng ini như trước. Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0; chưa cần file GFX nào (có thì nhãn đẹp
-hơn). Client: `common::erui` ([shared/src/erui.rs](../../shared/src/erui.rs)), mod: [src/menu.rs](src/menu.rs),
-ghi chú dùng chung: [docs/ingame_menu.md](../../docs/ingame_menu.md).
+Nếu [ERNativeUI](https://github.com/Flammrock/ERNativeUI) được nạp trước mod, mục **Rune
+Multiplier** xuất hiện trong System > Game Options, gồm ô nhập hệ số (gõ được số lẻ, 0 và số âm,
+trong khoảng -1000 đến 1000) và công tắc ghi log. Đổi trong menu áp ngay và được ghi vào file.
+Không có ERNativeUI thì mod chạy bằng file như bình thường.
 
 ## Cách hoạt động
 
-- **Hook (`src/hook.rs`):** tìm `AddSoul_Call` bằng một mẫu AOB neo (duy nhất trên
-  2.6.2.0, 2.7.0.0 và 2.7.1.0) rồi đọc lệnh `call` tại `anchor+0x11`. Ghi đè 12
-  byte đầu của hàm bằng một jump tuyệt đối tới stub tự sinh. Stub nhân `EDX`
-  (số rune cộng thêm) bằng fixed-point Q20 rồi chạy lại đúng 3 lệnh gốc.
-- **Chỉ nhân khi số cộng thêm dương:** nhờ đó khoản trừ (lên cấp, mua đồ) không bị
-  nhân. Sai số tối đa ±1 rune.
-- **Hot reload không patch lại:** stub đọc hệ số qua con trỏ lúc chạy, nên reload
-  chỉ cập nhật một biến.
-- **Hook thất bại thì mod tắt cho phiên đó** (không tìm thấy neo, không giải
-  được `call`, `VirtualAlloc`/`VirtualProtect` lỗi): log ghi lỗi và không patch gì.
-  Khi đó cũng không có reload. Nếu chỉ không đăng ký được task theo dõi reload thì hook
-  vẫn chạy, chỉ mất hot reload.
-- **Khởi động:** `DllMain` tạo một thread, nạp/tạo ini, mở log, cài hook, chạy
-  watcher `ReloadKey` (`common::reload`), chờ `CSTaskImp`, rồi đăng ký task
-  `FrameBegin` theo dõi mỗi lần reload để cập nhật hệ số. Log ghi phiên bản game
-  và danh sách DLL đã nạp (`common::diag`, không in đường dẫn đầy đủ).
-- Chi tiết kỹ thuật, các hướng đã thử và bỏ, cách kiểm tra tương thích:
-  [docs/addsoul_hook.md](docs/addsoul_hook.md).
+Mod chỉ có **một hook**, vào hàm cộng rune thấp nhất của game (`AddSoul_Call`, dùng chung cho
+mọi nguồn):
 
-Code: [src/hook.rs](src/hook.rs) (hook), [src/menu.rs](src/menu.rs) (menu tùy chọn), [src/lib.rs](src/lib.rs) (entry point).
+1. Tìm hàm bằng một mẫu AOB neo (duy nhất trên 2.6.2.0, 2.7.0.0 và 2.7.1.0).
+2. Thay 12 byte đầu của hàm bằng một lệnh nhảy tới một đoạn mã tự sinh.
+3. Đoạn mã nhân số rune cộng thêm bằng số học cố định Q20, chạy lại đúng 3 lệnh gốc rồi nhảy
+   về hàm.
+
+Đoạn mã chỉ nhân khi số cộng thêm **dương**, nên các khoản trừ (lên cấp, mua đồ) không bị nhân.
+Hệ số được đọc qua con trỏ lúc chạy, nên reload chỉ cập nhật một biến mà không patch lại. Chi
+tiết, các hướng đã bỏ và cách kiểm tra tương thích: [docs/addsoul_hook.md](docs/addsoul_hook.md).
 
 ## Giới hạn
 
-- Phụ thuộc mẫu AOB neo: game vá làm đổi bố cục thì mod tự tắt cho phiên đó.
-- Mọi nguồn rune **nhận được** đều bị nhân, không có tuỳ chọn tách riêng từng nguồn.
-- Với `Multiplier` âm, rune nhận được bị **trừ** thay vì cộng.
-- Menu trong game: hàng nhập số trong khoảng -1000..1000 (ngoài khoảng đó thì sửa ini); chỉ có khi có ERNativeUI.
-- Chỉ dùng ở chế độ offline, tắt EAC.
+- Phụ thuộc mẫu AOB neo: nếu game vá làm đổi bố cục thì hook không cài được, log ghi lỗi và mod
+  tắt cho phiên đó (không patch gì).
+- Mọi nguồn rune nhận được đều bị nhân, không tách riêng được từng nguồn.
+- Menu trong game chỉ nhập hệ số trong khoảng -1000 đến 1000; ngoài khoảng đó thì sửa file.
 
-## Tài liệu liên quan
+## Tài liệu
 
-- [CHANGELOG.md](CHANGELOG.md): ghi chú phát hành cho người dùng.
-- [HISTORY.md](HISTORY.md): dòng thời gian phát triển.
-- [docs/addsoul_hook.md](docs/addsoul_hook.md): hook `AddSoul_Call`, các hướng đã bỏ, tương thích.
-- [nexus_page.bbcode](nexus_page.bbcode): mô tả trang Nexus.
+| Tài liệu | Nội dung |
+|---|---|
+| [docs/addsoul_hook.md](docs/addsoul_hook.md) | Hook `AddSoul_Call`, các hướng đã bỏ, tương thích |
+| [HISTORY.md](HISTORY.md) | Dòng thời gian thay đổi |
+| [CHANGELOG.md](CHANGELOG.md) | Ghi chú phát hành cho người dùng |
+
+Mã nguồn: [src/hook.rs](src/hook.rs) (hook), [src/menu.rs](src/menu.rs) (menu).

@@ -9,7 +9,7 @@
 //!   Log file                 on/off
 //! ```
 //!
-//! Changes are written to `AnimCancel.toml` (comments kept) once the player
+//! Changes are written to `AnimCancelV1.toml` (comments kept) once the player
 //! stops for a second, and the mod applies them when it re-reads the file right
 //! after (about a second after the player stops): it reads its config snapshot
 //! every frame. The probes stay file-only.

@@ -71,6 +71,36 @@ unsafe fn write_jmp_rel32(at: *mut u8, to: *const u8) {
     }
 }
 
+/// Length of [absolute_jmp].
+pub const ABSOLUTE_JMP_LEN: usize = 12;
+
+/// `mov rax, target; jmp rax`: a jump that reaches any 64-bit address, so
+/// the destination can be anywhere (unlike `E9 rel32`). Clobbers `rax`.
+pub fn absolute_jmp(target: u64) -> [u8; ABSOLUTE_JMP_LEN] {
+    let mut code = [0u8; ABSOLUTE_JMP_LEN];
+    code[..2].copy_from_slice(&[0x48, 0xB8]);
+    code[2..10].copy_from_slice(&target.to_le_bytes());
+    code[10..].copy_from_slice(&[0xFF, 0xE0]);
+    code
+}
+
+/// Allocates `len` bytes of readable, writable, executable memory anywhere in
+/// the address space, for a stub reached by an [absolute_jmp].
+pub fn alloc_executable(len: usize) -> Option<*mut u8> {
+    let mem = unsafe { VirtualAlloc(std::ptr::null_mut(), len, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE) };
+    (!mem.is_null()).then_some(mem as *mut u8)
+}
+
+/// Marks `len` bytes at `addr` readable, writable and executable for good, for
+/// code kept in a data buffer. Returns `false` if `VirtualProtect` fails.
+///
+/// # Safety
+/// `addr..addr + len` must be mapped memory of this process.
+pub unsafe fn make_executable(addr: *mut u8, len: usize) -> bool {
+    let mut old_protect: u32 = 0;
+    unsafe { VirtualProtect(addr as *mut c_void, len, PAGE_EXECUTE_READWRITE, &mut old_protect) != 0 }
+}
+
 /// Overwrites `patched.len()` bytes at `addr` in place, for replacements that
 /// fit the original byte window exactly (no stub, unlike [install_jmp_hook]).
 /// Returns `false`, leaving the original bytes untouched, if `VirtualProtect`
@@ -167,4 +197,24 @@ pub unsafe fn redirect_rel32(site: *mut u8, stub_body: &[u8]) -> Option<*mut u8>
         FlushInstructionCache(GetCurrentProcess(), stub as *const c_void, stub_body.len());
     }
     Some(stub)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn absolute_jmp_encodes_mov_rax_imm64_jmp_rax() {
+        let code = absolute_jmp(0x1122_3344_5566_7788);
+        assert_eq!(code[..2], [0x48, 0xB8]);
+        assert_eq!(code[2..10], 0x1122_3344_5566_7788u64.to_le_bytes());
+        assert_eq!(code[10..], [0xFF, 0xE0]);
+    }
+
+    #[test]
+    fn alloc_executable_returns_usable_memory() {
+        let mem = alloc_executable(64).expect("alloc");
+        unsafe { mem.write(0xC3) };
+        assert_eq!(unsafe { mem.read() }, 0xC3);
+    }
 }

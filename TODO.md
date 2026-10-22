@@ -34,6 +34,26 @@ Chi tiết: `mods/spiritmultiplier/docs/open_issues.md`, `docs/warp_research.md`
 
 - [ ] Nghiên cứu hệ số rune riêng theo nguồn (giết địch / bán đồ...; julianpratt, 2026-08-31)
 
+## Kiểm tra lại sau đợt dọn code
+
+Chi tiết từng mục: `docs/cleanup_verify.md`. Chỉ build và unit test, chưa chạy trong game.
+
+- [ ] [verify] `shared/` (codepatch, diag, memscan, config/toml, task/logger): weightmultiplier, spiritmultiplier, speedmultiplier + Seamless, mọi hook AOB
+- [ ] [verify] AutoRegen: tick `Trigger` 0-4, gesture ngồi/cast/đứng dậy, hồi khi đánh trúng (`Mode`, `DamageType`, `ExcludeAow`), hook cài lại khi reload
+- [ ] [verify] AnimCancel: guard/dodge/jump/weapon swap cắt như cũ, luật guard (dual wield, Twin Blades), probe và log mới
+- [ ] [verify] DropMultiplier: `Mode` 0 và 1, `Percentage` 100, `[Materials]`, reload không cộng dồn, log mới
+- [ ] [verify] FasterRevival: chết thường, giữa đòn, đòn tóm, rơi vực; hồi sinh vẫn ~4-5s, log `Death:` / `Fade:` mới
+- [ ] [verify] InfiniteAilment: Scarlet Rot, Poison, Black Flame, Destined Death (cháy và giảm máu tối đa) áp đúng, reload không cộng dồn, log mới
+- [ ] [verify] PassiveRunes: cộng cố định / theo cấp / lãi kép mỗi chu kỳ, mốc thời gian, đồng hồ dừng ngoài thế giới, giá trị âm, log mới
+- [ ] [verify] RiseArcher: buff Bow / Crossbow / Ballista / đạn áp đúng, reload và menu không cộng dồn, cảnh báo ID đạn không tìm thấy, log mới
+- [ ] [verify] RuneMultiplier: hook cài được (log `Hook: installed`), nhân đúng rune nhận được, không nhân khoản trừ, reload đổi hệ số, mod khác dùng AddSoul không xung đột
+- [ ] [verify] WeightMultiplier: hook cài được, Mode 0 (nhân) và Mode 1 (cố định), đổi Mode khi reload và từ menu, phát hiện hook của mod trọng lượng khác
+- [ ] [verify] WindowResize: viền kéo, mũi tên kéo, khoá tỉ lệ, kích thước nhỏ nhất, kích thước khởi động, kéo cạnh và góc
+- [ ] [verify] SpeedMultiplier: tốc độ người chơi theo nhóm, Torrent, spirit, kẻ địch, nạn nhân chí mạng, [[Override]], Seamless (stub), probe, log mới
+- [ ] [verify] SoulsTeleport: WHERE / HERE giữa hai máy, teleport tới đồng đội, từ chối khi thù địch, chặn gói giả người gửi, menu và chặn chuột
+- [ ] [verify] SpiritMultiplier: [verify] spiritmultiplier: sau dọn code, thử trong game (chi tiết docs/cleanup_verify.md)
+
 ## Chung
 
-- [ ] Gắn `common::conflict` (cảnh báo hook trùng mod khác) vào các mod hook byte còn lại: autoregen, runemultiplier; xem `shared/docs/conflict.md`
+- [ ] Sau khi dọn xong mọi mod: đưa phần menu lặp (`TEXT`/`t()`, `MENU`, `start`, `sync_from_config`, test khớp khoá ngôn ngữ) lên `common::erui`
+- [ ] Gắn `common::conflict` (cảnh báo hook trùng mod khác) vào các mod hook byte còn lại: autoregen, runemultiplier; xem `shared/docs/conflict.md`. AOB đầu hàm hỏng khi bị hook trước nên cần pattern đuôi

@@ -15,3 +15,4 @@ sử git của `README.md`.
 | 2026-10-07 | Quyết định **không đăng lên Nexus**, chỉ dùng nội bộ | |
 | 2026-10-07 | Đổi thư mục `crates/` thành `mods/`; tách README thành README + HISTORY + docs/ | |
 | 2026-10-22 | Log gọn lại theo kiểu ngắn, kỹ thuật cho dev: bỏ dòng lặp ý, địa chỉ patch, câu dài; chỉ ghi 1 lần khi chờ thế giới | |
+| 2026-10-22 | Dọn mã: phần tính kích thước (nhỏ nhất, khoá tỉ lệ, kích thước khởi động) tách sang `geometry.rs` thuần Win32-free có test, `window.rs` còn phần Win32, doc đầu file chuyển sang `docs/resize_approach.md`, bỏ dòng `Activating` | |

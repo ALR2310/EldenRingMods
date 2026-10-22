@@ -7,8 +7,8 @@
 `find_pattern_in_module` quét **chỉ các section thực thi** của module chính (exe
 game) và trả về địa chỉ tuyệt đối của khớp đầu tiên. Pattern là chuỗi hex theo
 kiểu IDA, `?` hoặc `??` là byte đại diện. Dùng cho các call site mà
-`fromsoftware-rs` không có API phản chiếu (vd. `attack_hook` của autoregen, vốn
-suy ra từ một bảng Cheat Engine công khai chứ không từ struct engine).
+`fromsoftware-rs` không có API phản chiếu (vd. `hit_hook` của autoregen, tìm
+hàm hit-resolution bằng prologue của nó chứ không từ struct engine).
 
 Token không phải `?`, `??` hay hex bị coi là byte `00`: một lỗi gõ trong pattern
 cho ra "không tìm thấy" chứ không panic trong game.

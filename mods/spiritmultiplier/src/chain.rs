@@ -1,25 +1,8 @@
-//! Lengthens every Ash's SpEffect -> BuddyParam chain so one cast asks for
-//! more spirits - the other half of this mod, next to `band.rs` (which
-//! makes room for them).
-//!
-//! Same technique as `sometweaks`'s `spirit/summon_count.rs` (itself
-//! ported from `x10_summon/er10x.dll`'s "chain rebuild"), kept as a
-//! separate copy here rather than moved to `common` at the user's request
-//! (2026-09-25). The only behavioral difference is the cap:
-//! [crate::band::band_len] (`MaxSpirits`) instead of 10. See `summon_count.rs`'s module
-//! doc comment for the full reasoning; in short:
-//!
-//! - `WorldChrMan.summon_buddy_manager.trigger_speffect_to_buddy_map` maps
-//!   an Ash's summon SpEffect to a linked chain of BuddyParam IDs, one per
-//!   creature. The game's own head node is left untouched; only its `next`
-//!   is redirected to a `Box::leak`'d extension that cycles through the
-//!   original IDs (never freed - the game may still hold the old chain).
-//! - Original chains are snapshotted once per SpEffect ID and every rebuild
-//!   is computed from that snapshot, never from the (possibly already
-//!   rebuilt) current chain - otherwise `Multiplier` compounds every tick
-//!   (the bug `summon_count.rs` hit on 2026-08-26).
-//! - Re-checked on a periodic tick (cheap and idempotent), which also
-//!   picks up ini changes after a hot reload.
+//! Lengthens every Ash's SpEffect -> BuddyParam chain so one cast asks for more
+//! spirits, the other half of this mod next to `band.rs` (which makes room for
+//! them). The original chains are snapshotted once per SpEffect and every
+//! rebuild starts from that snapshot, so `Multiplier` never compounds. Why and
+//! how: `docs/slots_and_band.md`.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;

@@ -1,52 +1,97 @@
+<div align="center">
+
 # AnimCancel
 
-> **Nexus mod ID 11328** (chưa phát hành bản đầu) · đã test trong game: đòn đánh, weapon art và phép
+**Cắt animation đang chạy bằng một hành động khác, không phải đợi nó kết thúc.**
 
-Mod DLL cho Elden Ring cho phép **cắt animation đang chạy** bằng một hành động
-khác mà không phải đợi anim chạy hết: guard cancel, dodge cancel, nhảy, đổi vũ khí
-giữa đòn đánh. Yêu cầu từ người dùng Nexus (DAM127, 2026-10-12).
+![Rust](https://img.shields.io/badge/Rust-cdylib-orange?logo=rust)
+![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)
+![Game](https://img.shields.io/badge/game-Elden_Ring-8a6d3b)
+
+</div>
+
+---
+
+## Giới thiệu
+
+Trong Elden Ring, một animation chỉ cho phép chuyển sang hành động khác ở "cửa sổ
+cancel" do chính nó mở, thường ở nửa sau của đòn. AnimCancel mở cửa sổ đó sớm hơn,
+để guard, lăn, nhảy hay đổi vũ khí có hiệu lực ngay khi bạn bấm, không phải chờ hết
+animation.
+
+## Tính năng
+
+Bốn hành động có thể cắt animation, mỗi hành động bật tắt độc lập:
+
+| Hành động | Cắt animation bằng |
+|---|---|
+| **Guard** | đỡ đòn (L1) |
+| **Dodge** | lăn, lùi |
+| **Jump** | nhảy |
+| **Weapon swap** | đổi vũ khí |
+
+Với mỗi hành động, bạn chọn loại animation nào bị cắt:
+
+| Loại animation | Ví dụ |
+|---|---|
+| **Attack** | đòn đánh thường |
+| **Skill** | weapon art |
+| **Cast** | sorcery, incantation |
+| **Item** | uống flask, dùng item |
+
+Guard chỉ cắt khi L1 thật sự là đỡ đòn, nên không làm đứt chuỗi đòn:
+
+- **Có cắt:** cầm hai tay một vũ khí, hoặc một tay với khiên ở tay trái.
+- **Không cắt:** cầm hai vũ khí (dual wield), Twin Blades, hoặc giữ guard từ trước
+  khi đòn bắt đầu.
 
 ## Cấu hình
 
-Cấu hình trong `AnimCancelV1.toml` cạnh DLL (tự tạo nếu thiếu). Có thể chỉnh:
+Cấu hình nằm trong `AnimCancelV1.toml` cạnh DLL, tự tạo ở lần chạy đầu. Tên key,
+giá trị mặc định và ý nghĩa nằm ở chú thích trong [AnimCancelV1.toml](AnimCancelV1.toml),
+file mẫu nhúng sẵn trong DLL. Sửa file rồi bấm phím reload để áp dụng, không cần
+khởi động lại game.
 
-- hành động nào được cắt animation: guard, lăn/lùi, nhảy, đổi vũ khí;
-- với mỗi hành động đó, animation nào bị cắt: đòn đánh thường, weapon art, phép, dùng item (uống flask...), chỉnh riêng từng hành động;
-- phím reload config trong game và banner báo reload;
-- ghi log để chẩn đoán, và hai probe nghiên cứu (log cửa sổ cancel, log cờ anim; mặc định tắt).
+Tên file có chữ `V1` để tránh một chuỗi bị antivirus gắn cờ nhầm, xem
+[docs/antivirus.md](docs/antivirus.md).
 
-Tên file là `AnimCancelV1.toml` (không phải `AnimCancel.toml`) vì chuỗi `AnimCancel.toml` trong DLL làm antivirus gắn cờ, xem [docs/antivirus.md](docs/antivirus.md).
-Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong
-[`AnimCancelV1.toml`](AnimCancelV1.toml) (nhúng vào DLL, nguồn sự thật duy nhất).
-Đổi file rồi bấm phím reload, không cần khởi động lại game.
+### Menu trong game (tùy chọn)
 
-## Menu trong game (tùy chọn)
-
-Nếu `ERNativeUI.dll` (host menu dùng chung, https://github.com/Flammrock/ERNativeUI) đã được nạp trước mod, System >
-Game Options có thêm hàng **Anim Cancel**: mở ra trang gồm 4 trang con **Guard**, **Dodge**, **Weapon swap**, **Jump** (mỗi trang: bật/tắt hành động và
-chọn đòn đánh, weapon art, phép, item mà nó cắt được) và bật/tắt log. Đổi trong menu được ghi vào `AnimCancelV1.toml` (giữ
-nguyên comment) sau khi ngừng thao tác 1 giây; mod đọc lại file ngay sau đó rồi áp dụng (khoảng 1 giây sau khi ngừng thao tác). Hai probe chỉ chỉnh trong
-file. Không có host thì mod chạy bằng file như trước. Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0. Client: `common::erui`
-([shared/src/erui.rs](../../shared/src/erui.rs)), mod: [src/menu.rs](src/menu.rs), ghi chú dùng chung:
-[docs/ingame_menu.md](../../docs/ingame_menu.md).
+Nếu [ERNativeUI](https://github.com/Flammrock/ERNativeUI) được nạp trước mod, mục
+**Anim Cancel** xuất hiện trong System > Game Options: một trang cho mỗi hành động
+và công tắc ghi log. Thay đổi trong menu được ghi vào file cấu hình (giữ nguyên
+comment). Không có ERNativeUI thì mod chạy bằng file như bình thường.
 
 ## Cách hoạt động
 
-Game chỉ cho cắt anim trong "cửa sổ cancel" do event của anim bật, thường là
-nửa sau của đòn (lăn được sau ~30% đòn kiếm). Mod mở cửa sổ đó sớm hơn cho người
-chơi: mỗi frame, khi anim đang chạy thuộc nhóm được bật, nó ghi quyền cancel vào
-hàng đợi theo từng anim của `CSChrActionRequestModule`, đúng chỗ HKS đọc. Không
-dùng AOB hay RVA, chỉ struct trong `fromsoftware-rs` và `common`. Cơ chế của game,
-vì sao phải ghi đúng chỗ đó và kết quả các lần test:
+```
+animation đang chạy ──► thuộc nhóm được bật? ──► ghi quyền cancel vào hàng đợi
+                                                  của CSChrActionRequestModule
+                                                  (đúng chỗ HKS đọc)
+```
+
+Mỗi frame, nếu animation đang chạy thuộc nhóm được bật, mod mở sẵn quyền cancel của
+nó thay vì đợi animation tự mở. Không cần AOB hay RVA: chỉ dùng struct của
+[fromsoftware-rs](https://github.com/vswarte/fromsoftware-rs) và crate dùng chung
+`common`. Cơ chế của game và kết quả các lần thử:
 [docs/animation_cancel.md](docs/animation_cancel.md).
 
 ## Giới hạn
 
-- Chỉ người chơi local; chưa xét tương thích Seamless Co-op.
-- Đã test: kiếm, một sorcery (Loretta's Greatbow) và một incantation (Placidusax's Ruin). Chưa thử khiên hay vũ khí hai tay đặc biệt.
-- Cắt giữa chừng có thể bỏ lại i-frame hay hitbox của anim cũ (chưa kiểm tra kỹ).
+- Chỉ áp dụng cho người chơi local; chưa xét tương thích với Seamless Co-op.
+- Đỡ đòn khi đang ở trên không không làm được chỉ bằng DLL, xem
+  [docs/air_guard.md](docs/air_guard.md).
 
-Code: [src/cancel.rs](src/cancel.rs) (logic), [src/config.rs](src/config.rs),
-[src/lib.rs](src/lib.rs). Phân loại anim: `common::anim`. Lịch sử:
-[HISTORY.md](HISTORY.md). Ghi chú phát hành: [CHANGELOG.md](CHANGELOG.md); trang Nexus:
-[nexus_page.bbcode](nexus_page.bbcode).
+## Tài liệu
+
+| Tài liệu | Nội dung |
+|---|---|
+| [docs/animation_cancel.md](docs/animation_cancel.md) | Cơ chế cancel của game, vì sao ghi đúng chỗ đó, kết quả các lần thử |
+| [docs/air_guard.md](docs/air_guard.md) | Thử đỡ đòn trên không và vì sao dừng |
+| [docs/antivirus.md](docs/antivirus.md) | Cờ antivirus và việc đổi tên file cấu hình |
+| [HISTORY.md](HISTORY.md) | Dòng thời gian thay đổi |
+| [CHANGELOG.md](CHANGELOG.md) | Ghi chú phát hành cho người dùng |
+
+Mã nguồn: [src/cancel.rs](src/cancel.rs) (logic cắt animation),
+[src/weapon.rs](src/weapon.rs) (luật guard theo vũ khí), [src/config.rs](src/config.rs),
+[src/menu.rs](src/menu.rs). Phân loại animation dùng `common::anim`.

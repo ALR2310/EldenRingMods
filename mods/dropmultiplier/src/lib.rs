@@ -1,21 +1,19 @@
 #![allow(non_snake_case)] // crate name is "DropMultiplier" to control the output DLL's filename
 
 mod drop_rate;
+mod lot;
 mod materials;
 mod menu;
 
 use common::{config, dll_dir, logger};
 
-// DropMultiplier.ini is embedded verbatim into the binary at compile time
-// via include_str! - no resource compiler step needed. This is the single
-// source of truth for the default config: edit DropMultiplier.ini, rebuild,
-// done.
+// The default config, embedded verbatim: the single source of truth for keys
+// and defaults.
 const DEFAULT_INI: &str = include_str!("../DropMultiplier.ini");
 
 /// # Safety
 /// This is exposed this way so the library loader can call it. Do not call it
-/// yourself. Mirrors the entry point shape used across fromsoftware-rs's own
-/// examples (e.g. examples/apply-speffect).
+/// yourself.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     const DLL_PROCESS_ATTACH: u32 = 1;
@@ -26,29 +24,23 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
         let ini_path = format!("{dir}\\DropMultiplier.ini");
-        // `ChancePercent` was renamed to `Percentage` (2026-09-28, along
-        // with `[Settings]` -> `[Drop]`) - carry an existing user's value over.
-        let migrated =
+        // `ChancePercent` was renamed `Percentage` (2026-09-28): carry the value over.
+        let added_keys =
             config::load_or_create_default_with_renames(&ini_path, DEFAULT_INI, &[("ChancePercent", "Percentage")]);
 
-        // [Logging] LogFile gates the log file entirely - see common::logger.
+        // `LogFile` gates the log file entirely, see common::logger.
         logger::init(&dir, "DropMultiplier.log");
         logger::install_panic_hook();
-        logger::log("Activating DropMultiplier...");
-        if migrated > 0 {
-            logger::log(&format!(
-                "DropMultiplier.ini updated: added {migrated} new key(s) from a newer default template."
-            ));
+        if added_keys > 0 {
+            logger::log(&format!("DropMultiplier.ini: added {added_keys} key(s) from the template"));
         }
 
-        // The menu registers right away (the host only accepts registrations
-        // at startup) and follows reloads through `drop_rate::run`.
+        // Registers right away: the host only accepts menu registrations at
+        // startup. The menu follows reloads through `drop_rate::run`.
         menu::start(hmodule, ini_path.clone());
 
-        // `common::reload` owns `General.ReloadKey` watching for the whole
-        // DLL (see its module doc comment for why only one caller may poll
-        // that key) - `drop_rate::run` below only polls
-        // `common::reload::RELOAD_GENERATION`.
+        // `common::reload` owns the reload key; `drop_rate::run` only follows
+        // `RELOAD_GENERATION`.
         std::thread::spawn(move || common::reload::run(ini_path));
 
         common::diag::log_environment_when_game_ready();

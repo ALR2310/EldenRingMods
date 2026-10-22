@@ -1,43 +1,10 @@
-//! Spirit AI tweaks, on the `NpcThinkParam` rows spirits use (the AI:
-//! aggressiveness, sight, battle start distance, ...). Hot reload, no F5 for
-//! the files below:
-//!
-//! - `ImproveSenses` / `ImproveAggression` / `ImproveFollow` (ini keys,
-//!   default `true`): built-in bundles of those fields, see [SENSES],
-//!   [AGGRESSION] and [FOLLOW]. Values were taken from the Age of Spirit
-//!   mod's regulation (its spirits notice enemies from farther away, engage
-//!   together and keep up with the player) and tried in game 2026-10-09.
-//! - `SpiritThinkParam.ini` and `SpiritParam.ini` (optional, experimental):
-//!   set any scalar field / bit flag of the `NpcThinkParam` / `NpcParam` rows
-//!   spirits use, so tweaks can be tried in-game without rebuilding the DLL.
-//!   They are written after the bundles and win over them.
-//!
-//! The files live next to the DLL, are never created and are only read if they exist. One
-//! `Name=value` per line, `;`/`#` comments. `Name` is the
-//! field name as in Smithbox's parentheses (`TeamAttackEffectivity`,
-//! `BattleStartDist`, `isGuard_Act`) or the Rust one
-//! (`team_attack_effectivity`) - case and underscores are ignored when
-//! matching. The file is checked once a second; saving it re-applies it.
-//! Spirits already out keep the old values: re-summon them.
-//!
-//! Which rows: every `npcThinkParamId` / `npcThinkParamId_ridden` of
-//! `BuddyParam` (the rows a spirit spawns with). Rows are addressed by index
-//! (`common::params`), never through the runtime lookup table.
-//!
-//! `SpiritParam.ini` (NpcParam: fields as in Smithbox, e.g. `fallDamageDump`)
-//! hits the `NpcParam` rows of the same spirits (`npcParamId` /
-//! `npcParamId_ridden`). In `SpiritThinkParam.ini` a `[Row id, ...]` section
-//! applies to the listed `NpcThinkParam` row IDs only; any other section header
-//! goes back to the global lines. Same snapshot / restore logic for both.
-//!
-//! The first time it runs, each target row's bytes are saved; every later
-//! apply starts from that snapshot and writes the listed fields, so a line
-//! removed from the file goes back to the game's value (same baseline
-//! pattern as `ghost_color.rs`).
-//!
-//! The field table in `think_fields.rs` was generated from
-//! `NPC_THINK_PARAM_ST` (fromsoftware-rs): scalar fields and single-bit flags
-//! (`enableNaviFlg_*`, `isNoAvoidHugeEnemy`, ...; value 0 or 1).
+//! Spirit AI tweaks on the `NpcThinkParam` rows spirits use: the built-in
+//! bundles (`ImproveSenses`, `ImproveAggression`, `ImproveFollow`) and the
+//! optional experimental `SpiritThinkParam.ini` / `SpiritParam.ini` next to the
+//! DLL (set any scalar field or bit flag, checked once a second). Rows are
+//! addressed by index; each row's bytes are saved on the first run so a removed
+//! line goes back to the game's value. File format, row selection and the
+//! bundles' origin: `docs/think_override.md`.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -154,8 +121,11 @@ const FOLLOW: &[(&str, f64, Mode)] = &[
     ("enableNaviFlg_Edge_Ordinary", 1.0, Max),
 ];
 
+/// One bundle entry: field name, value, how it combines with the game's value.
+type Entry = (&'static str, f64, Mode);
+
 /// The bundles the ini keys switch on, as `(key, entries)`.
-const BUNDLES: [(&str, &[(&str, f64, Mode)]); 3] =
+const BUNDLES: [(&str, &[Entry]); 3] =
     [("ImproveSenses", SENSES), ("ImproveAggression", AGGRESSION), ("ImproveFollow", FOLLOW)];
 
 /// `NpcThinkParam` field table by normalized name.

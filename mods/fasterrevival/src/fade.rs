@@ -1,17 +1,8 @@
-//! Skips the pause after "YOU DIED" appears: sets
-//! `MenuCommonParam[0].soloPlayDeath_ToFadeOutTime` (paramdef/Smithbox name,
-//! "[YOU DIED] Fade Out Duration"; fromsoftware-rs accessor
-//! `solo_play_death_to_fade_out_time`, vanilla 3.8) to 0, once.
-//!
-//! Same effect as ImAxel0's FasterRespawn (MIT,
-//! https://github.com/ImAxel0/EldenRing-FasterRespawn-Mod), which patches
-//! `jz` -> `jmp` (AOB `74 ?? F3 0F 10 19`) in `sub_1405A7E00` (2.7.1.0), a
-//! step of `CSDeathRestartEvent::Start`: that jump decides whether the
-//! step's wait time (4th arg of `sub_1405942D0`, stage 4) comes from
-//! `sub_140D2FE90` - a pointer to this exact param field (param slot 143,
-//! row ID 0, first field) - or is `0.0`. Writing the param instead needs no
-//! code patch. `partyGhostDeath_ToFadeOutTime` (co-op, vanilla 3.3) is left alone, like
-//! the original.
+//! Skips the pause after "YOU DIED": sets
+//! `MenuCommonParam[0].soloPlayDeath_ToFadeOutTime` (vanilla 3.8s) to 0, once.
+//! The same effect as ImAxel0's FasterRespawn, which patches the jump that
+//! decides whether that wait comes from this param; writing the param needs no
+//! code patch. Why this field: `docs/respawn_fade.md`.
 
 use eldenring::cs::{MenuCommonParam, SoloParamRepository};
 use fromsoftware_shared::FromStatic;
@@ -23,9 +14,8 @@ pub struct FadeState {
     done: bool,
 }
 
-/// Writes the param once. Must only be called while the main player
-/// exists - `SoloParamRepository` reads before that can panic (see
-/// `common::player`).
+/// Writes the param once. Only call it while the main player exists:
+/// `SoloParamRepository` reads before that can panic (see `common::player`).
 pub fn apply(state: &mut FadeState) {
     if state.done {
         return;

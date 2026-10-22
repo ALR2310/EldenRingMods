@@ -1,69 +1,92 @@
+<div align="center">
+
 # DropMultiplier
 
-> Nexus mod 11075 · **đã phát hành** · đã test trong game
+**Chỉnh tỉ lệ rơi đồ của quái và số lượng nguyên liệu nhận được.**
 
-Mod DLL cho Elden Ring chỉnh hai thứ: **tỉ lệ rơi đồ của quái** (`ItemLotParam_enemy`)
-và **số lượng nguyên liệu** nhận được mỗi lần nhặt (`ItemLotParam_enemy` +
-`ItemLotParam_map`). Cấu hình trong `DropMultiplier.ini`, bấm `ReloadKey` để
-nạp lại mà không cần khởi động lại game.
+![Rust](https://img.shields.io/badge/Rust-cdylib-orange?logo=rust)
+![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)
+![Game](https://img.shields.io/badge/game-Elden_Ring-8a6d3b)
+
+</div>
+
+---
+
+## Giới thiệu
+
+DropMultiplier chỉnh hai thứ độc lập: **tỉ lệ rơi đồ** của quái và **số lượng nguyên
+liệu** nhận được mỗi lần nhặt. Mod sửa thẳng bảng dữ liệu của game khi đang chạy, không
+ghi đè `regulation.bin`, nên dùng được cả với các bản mod lớn như Convergence. Đổi cấu
+hình xong bấm phím reload là áp dụng ngay.
+
+## Tính năng
+
+### Tỉ lệ rơi đồ
+
+Chọn một trong hai cách (không dùng cả hai cùng lúc):
+
+| Cách | Hiệu ứng | Ví dụ |
+|---|---|---|
+| **Nhân hệ số** | nhân tỉ lệ rơi của mọi món | món rơi 1% với hệ số x3 thành 3% |
+| **Tỉ lệ cố định** | ép tỉ lệ "có rơi đồ" của mỗi con quái về một giá trị | đặt 50: món 1% và món 100% đều thành 50% |
+
+Đặt tỉ lệ cố định là 100 để quái luôn rơi đồ. Khi ép tỉ lệ cố định, tỉ lệ tương đối giữa
+các món của cùng một con quái được giữ nguyên.
+
+### Số lượng nguyên liệu
+
+Nhân số lượng nhận được, tách theo ba nhóm với hệ số riêng:
+
+| Nhóm | Gồm | Ví dụ |
+|---|---|---|
+| **Crafting** | nguyên liệu chế tạo có thể cày | Rowa Fruit, Herba, bướm, xương, nấm |
+| **Upgrade** | nguyên liệu nâng cấp có thể cày | Smithing Stone, Gloveworts |
+| **Unique** | nguyên liệu chỉ nhặt được một lần | Smithing Stone trên xác, Sacred Tear, Scadutree Fragment |
+
+Cả đồ rơi từ quái lẫn đồ hái ngoài thế giới mở đều được tính. Vũ khí, vật phẩm khoá và
+đồ tiêu thụ không bị đụng tới.
 
 ## Cấu hình
 
-Cấu hình trong `DropMultiplier.ini` cạnh DLL (tự tạo nếu thiếu; khi nâng cấp, key mới được thêm vào file có sẵn mà không ghi đè giá trị đã chỉnh). Có thể chỉnh:
+Cấu hình nằm trong `DropMultiplier.ini` cạnh DLL, tự tạo ở lần chạy đầu. Khi nâng cấp,
+key mới được thêm vào file có sẵn mà không ghi đè giá trị bạn đã chỉnh. Tên key, giá trị
+mặc định và ý nghĩa nằm ở chú thích trong [DropMultiplier.ini](DropMultiplier.ini), file
+mẫu nhúng sẵn trong DLL. Bấm phím reload để áp dụng, không cần khởi động lại game.
 
-- cách điều chỉnh tỉ lệ rơi: nhân hệ số, hoặc ép về một tỉ lệ cố định;
-- hệ số số lượng cho từng nhóm nguyên liệu: craft, nâng cấp, chỉ nhặt một lần;
-- phím nạp lại cấu hình (áp dụng không cần khởi động lại game) và việc hiện banner sau khi nạp;
-- ghi log để chẩn đoán.
+### Menu trong game (tùy chọn)
 
-Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong [`DropMultiplier.ini`](DropMultiplier.ini); file mẫu này được nhúng vào DLL nên là nguồn sự thật duy nhất, README không lặp lại để khỏi lệch.
-
-## Menu trong game (tùy chọn)
-
-Nếu `ERNativeUI.dll` (host menu dùng chung, https://github.com/Flammrock/ERNativeUI) đã được nạp trước mod, System >
-Game Options có thêm hàng **Drop Multiplier**: mở ra trang gồm nhóm **Drop Chance** (chế độ, hệ số, tỉ lệ cố định), nhóm **Materials** (hệ số nguyên liệu) và
-bật/tắt log (hệ số là hàng nhập số, gõ được số lẻ, tối đa 1000; tỉ lệ rơi cố định là thanh trượt 0-100). Đổi trong menu được ghi vào ini, rồi mod áp lại từ bảng
-gốc đúng một lần sau khi ngừng thao tác (cùng đường với phím reload). Không có host thì mod chạy bằng ini như trước.
-Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0. Client: `common::erui` ([shared/src/erui.rs](../../shared/src/erui.rs)), mod:
-[src/menu.rs](src/menu.rs), ghi chú dùng chung: [docs/ingame_menu.md](../../docs/ingame_menu.md).
+Nếu [ERNativeUI](https://github.com/Flammrock/ERNativeUI) được nạp trước mod, mục
+**Drop Multiplier** xuất hiện trong System > Game Options, gồm trang **Drop Chance**,
+trang **Materials** và công tắc ghi log. Không có ERNativeUI thì mod chạy bằng file như
+bình thường.
 
 ## Cách hoạt động
 
-- **Khởi động:** `DllMain` tạo 1 thread, nạp/tạo ini, mở log, chạy watcher
-  `ReloadKey` (`common::reload`), rồi chờ game sẵn sàng (`CSTaskImp`,
-  `SoloParamRepository`, `WorldChrMan.main_player`) **không giới hạn thời
-  gian**; chỉ nhắc trong log mỗi 30 giây. Nhờ đó mở game rồi vào world muộn vẫn
-  tự áp dụng.
-- **Tỉ lệ rơi (`src/drop_rate.rs`):** mỗi dòng `ItemLotParam_enemy` có tối đa 8
-  ô, ô N rơi với xác suất `lotItemBasePoint0N / tổng 8 ô`. Chỉ ô chứa đồ thật
-  (`lotItemId0N != 0`) được nhân; ô "không rơi gì" giữ nguyên (chế độ nhân) hoặc
-  làm điểm cố định để giải ra trọng số mới (chế độ ép tỉ lệ: tổng xác suất "có rơi gì
-  đó" đúng bằng tỉ lệ đã chọn, tỉ lệ tương đối giữa các món cùng dòng giữ
-  nguyên). Công thức đầy đủ và các trường hợp biên nằm ở comment đầu file.
-- **Nguyên liệu (`src/materials.rs`):** nhân `lotItemNum0N` (làm tròn, tối thiểu
-  1, tối đa 255), phân nhóm từng ô bằng `EquipParamGoods.goodsType` đọc lúc
-  chạy và cờ nhặt. Chi tiết phân loại: [docs/materials.md](docs/materials.md).
-- **Hot reload không cộng dồn:** trọng số/số lượng gốc được chụp một lần trước
-  mọi chỉnh sửa; mỗi lần áp hoặc reload tính lại từ bản chụp đó.
-- **Duyệt param an toàn:** dùng `common::params::for_each_row_mut` (duyệt theo
-  index), không dùng `rows_mut()` của fromsoftware-rs vì panic với regulation
-  bị lệch header: [docs/convergence_panic.md](docs/convergence_panic.md).
-- **Log:** ghi phiên bản game và danh sách DLL đã nạp (`common::diag`, không in
-  đường dẫn đầy đủ, ẩn DLL của game/Steam/bản crack).
+Mỗi con quái có một bảng "item lot" gồm tối đa 8 ô; mỗi ô có một trọng số và xác suất
+của ô là trọng số của nó chia cho tổng trọng số của bảng. Mod đổi các trọng số này, và
+với nguyên liệu thì đổi số lượng của ô. Trọng số và số lượng gốc được chụp một lần trước
+mọi chỉnh sửa, nên mỗi lần reload tính lại từ bản gốc và không bao giờ cộng dồn.
+
+Mod duyệt các bảng theo thứ tự dòng thay vì tra theo ID, vì cách tra của thư viện sẽ
+panic trên regulation có header lệch như Convergence. Công thức và các trường hợp biên:
+[docs/drop_rate.md](docs/drop_rate.md).
 
 ## Giới hạn
 
-- Chỉ chỉnh **tỉ lệ cơ bản**; chỉ số Discovery của người chơi vẫn cộng thêm như
-  vanilla.
-- Chế độ ép tỉ lệ cố định có thể biến một món vốn chắc chắn rơi (100%) thành rơi theo xác suất.
-- Chỉ ảnh hưởng `ItemLotParam_enemy` (tỉ lệ rơi, và số lượng) và
-  `ItemLotParam_map` (số lượng nguyên liệu); các bảng lot khác giữ nguyên.
-- Chỉ dùng ở chế độ offline, tắt EAC.
+- Chỉ chỉnh **tỉ lệ cơ bản**; chỉ số Discovery của người chơi vẫn cộng thêm như vanilla.
+- Tỉ lệ cố định có thể biến một món vốn chắc chắn rơi (100%) thành rơi theo xác suất.
+- Chỉ ảnh hưởng bảng rơi đồ của quái (tỉ lệ và số lượng) và bảng đồ hái ngoài thế giới
+  (số lượng nguyên liệu); các bảng khác giữ nguyên.
 
-## Tài liệu liên quan
+## Tài liệu
 
-- [HISTORY.md](HISTORY.md): dòng thời gian phát triển.
-- [docs/materials.md](docs/materials.md): thiết kế và phân loại nguyên liệu.
-- [docs/convergence_panic.md](docs/convergence_panic.md): panic với Convergence và cách sửa.
-- [CHANGELOG.md](CHANGELOG.md): ghi chú phát hành cho người dùng.
-- [nexus_page.bbcode](nexus_page.bbcode): mô tả trang Nexus.
+| Tài liệu | Nội dung |
+|---|---|
+| [docs/drop_rate.md](docs/drop_rate.md) | Mô hình bốc thăm của game, hai chế độ, công thức tỉ lệ cố định |
+| [docs/materials.md](docs/materials.md) | Thiết kế và phân loại nguyên liệu |
+| [docs/convergence_panic.md](docs/convergence_panic.md) | Panic với Convergence và cách sửa |
+| [HISTORY.md](HISTORY.md) | Dòng thời gian thay đổi |
+| [CHANGELOG.md](CHANGELOG.md) | Ghi chú phát hành cho người dùng |
+
+Mã nguồn: [src/drop_rate.rs](src/drop_rate.rs) (tỉ lệ rơi), [src/materials.rs](src/materials.rs)
+(nguyên liệu), [src/lot.rs](src/lot.rs) (đọc/ghi từng ô), [src/menu.rs](src/menu.rs).

@@ -5,16 +5,13 @@ mod menu;
 
 use common::{config, dll_dir, logger};
 
-// RuneMultiplier.ini is embedded verbatim into the binary at compile time via
-// include_str! - no resource compiler step needed (the original C++ used a
-// .rc RCDATA resource for the same purpose). This is the single source of
-// truth for the default config: edit RuneMultiplier.ini, rebuild, done.
+// The default config, embedded verbatim: the single source of truth for keys
+// and defaults.
 const DEFAULT_INI: &str = include_str!("../RuneMultiplier.ini");
 
 /// # Safety
 /// This is exposed this way so the library loader can call it. Do not call it
-/// yourself. Mirrors the entry point shape used across fromsoftware-rs's own
-/// examples (e.g. examples/apply-speffect).
+/// yourself.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     const DLL_PROCESS_ATTACH: u32 = 1;
@@ -25,16 +22,13 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
         let ini_path = format!("{dir}\\RuneMultiplier.ini");
-        let migrated = config::load_or_create_default(&ini_path, DEFAULT_INI);
+        let added_keys = config::load_or_create_default(&ini_path, DEFAULT_INI);
 
-        // [Logging] LogFile gates the log file entirely - see common::logger.
+        // `LogFile` gates the log file entirely, see common::logger.
         logger::init(&dir, "RuneMultiplier.log");
         logger::install_panic_hook();
-        logger::log("Activating RuneMultiplier...");
-        if migrated > 0 {
-            logger::log(&format!(
-                "RuneMultiplier.ini updated: added {migrated} new key(s) from a newer default template."
-            ));
+        if added_keys > 0 {
+            logger::log(&format!("RuneMultiplier.ini: added {added_keys} key(s) from the template"));
         }
 
         hook::run(ini_path, hmodule);

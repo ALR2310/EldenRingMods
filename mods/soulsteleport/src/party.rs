@@ -1,18 +1,7 @@
-//! Who is in the session, their role, and who can be teleported to.
-//!
-//! `CSSessionManager.players` is the authority for "in this session" (it
-//! works under Seamless Co-op - see README, co-op test 3) and gives each
-//! member's SteamID; `WorldChrMan.player_chr_set` gives the character name
-//! and `chr_type` of every member the game has a `PlayerIns` for (a far-away
-//! partner stays in it, only their position goes stale). The two are joined
-//! through `PlayerIns.session_manager_player_entry.steam_id`.
-//!
-//! Every other session member is listed with their role, except hostile
-//! ones (invaders, Bloody Fingers, Recusants - [is_hostile_type]): a pair
-//! can only teleport to each other when neither side is hostile, so a red
-//! can't warp straight to the host they're invading (2026-09-26, after a
-//! Nexus comment; 2026-09-25 had briefly allowed every role). Hunters
-//! (`BluePhantom`) are allies of the host and stay allowed.
+//! Who is in the session, their role, and who can be teleported to: every
+//! other member except hostile ones (invaders, Bloody Fingers, Recusants), so
+//! a pair can only teleport when neither side is hostile. The session and
+//! character lists and how they are joined: `docs/roles_and_invaders.md`.
 
 use std::collections::HashMap;
 use std::sync::Mutex;

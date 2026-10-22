@@ -13,11 +13,11 @@
 //!   Log file                 on/off
 //! ```
 //!
-//! Multipliers are text rows where a number is typed (the ini holds
-//! decimals); the percentage is a slider (whole percent). Changes are written to the ini once the player stops
-//! for a second, then the mod is told to re-apply from its original drop
-//! tables - the same path as the reload key - so it rescans once, not on
-//! every edit.
+//! The multipliers are native sliders (0..10, step 0.5) when the host has
+//! them, else typed text rows (the ini holds decimals up to 1000); the
+//! percentage is a whole-percent slider. Changes are written to the ini once
+//! the player stops for a second, then re-applied from the original drop
+//! tables through the same path as the reload key.
 
 use std::sync::OnceLock;
 

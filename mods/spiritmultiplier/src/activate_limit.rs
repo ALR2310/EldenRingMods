@@ -1,32 +1,8 @@
 //! Keeps the engine's cap on how many open-field characters get activated
-//! at once from being eaten by our spirits - ~60 summoned spirits crowded
-//! every nearby enemy out of it (Stormgate soldiers vanishing, confirmed
-//! 2026-09-26 by raising the cap to 120).
-//!
-//! Always on - enemies vanishing was a bug of this mod, not a setting
-//! (user decision 2026-09-26; an earlier `KeepEnemySlots` toggle was
-//! removed): every tick the cap becomes the game's own value plus the
-//! number of spirits currently out, so enemies keep exactly the slots
-//! they'd have in vanilla, and with no spirits out the game runs at its
-//! vanilla cap (no extra CPU) - user's choice over a fixed
-//! `60 + MaxSpirits`. `ActiveCharacterLimit` (> 0, debug only) overrides it
-//! with a fixed value.
-//!
-//! Found in IDA on `eldenring.exe` 2.7.1.0: `sub_14050F9E0` sorts the
-//! open-field activation candidates and activates only
-//! `limit - WorldChrMan[+0x1E618]` of them (that counter = characters
-//! already activated), cutting the rest. `limit` lives in the singleton at
-//! `qword_143D6A208`, set by its constructor (`sub_145AE6B75`):
-//! `+0xE8 = 1` (limit on), `+0xEC = 60`, `+0xF0 = 60` (the two limits
-//! `sub_14050F9E0` reads), `+0xF4` = alternate-mode flag, `+0xF8 = 40`,
-//! `+0xFC = 40` (the limits used in that mode).
-//!
-//! The singleton's address is read from the RIP-relative `mov rax,
-//! [qword_143D6A208]` right before `sub_14050F9E0`'s `cmp byte [rax+0xE8],0`
-//! ([LIMIT_READ_AOB]); its fields are (re)written on a tick rather than
-//! once, since the singleton may not exist yet at startup - which also
-//! makes the key hot-reloadable (F5), with 0 restoring the game's own
-//! values.
+//! at once from being eaten by our spirits: every tick the cap becomes the
+//! game's own value plus the number of spirits out (no extra cost with none),
+//! so enemies keep the slots they have in vanilla. Always on. The IDA findings,
+//! the singleton layout and the decision history: `docs/activate_limit.md`.
 
 use std::time::Duration;
 

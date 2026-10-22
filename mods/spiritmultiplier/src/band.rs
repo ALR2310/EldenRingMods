@@ -1,66 +1,10 @@
 //! Widens the local player's spirit-summon "band" in
-//! `WorldChrMan.summon_buddy_chr_set` from the engine's hard-coded 10
-//! slots to `MaxSpirits` ([band_len]) - the real reason no amount of chain lengthening
-//! (`chain.rs`, `sometweaks`'s `summon_count.rs`, `er10x.dll`) could ever
-//! spawn more than 10 spirits.
-//!
-//! Found in IDA on `eldenring.exe` 2.7.1.0 (2026-09-25), confirmed by
-//! `probe.rs`'s in-game slot log (see README):
-//!
-//! - `sub_140493380(chr_set, player_index, spawn_info, cursor)` - the
-//!   summon ChrSet's "spawn into my band" function, called once per spirit
-//!   from the SummonBuddyManager spawn routine (`sub_1404BAEA0`, which
-//!   passes the local player's session index, `< 6`, and
-//!   `SummonBuddyManager::last_buddy_slot` as `cursor`):
-//!   ```text
-//!   band_start = 10 * (player_index + 2)   // player 0 -> slot 20
-//!   cursor %= 10
-//!   for i in 0..10 { slot = band_start + (cursor + i) wrapped to 10;
-//!                    if entries[slot] is empty -> spawn there }
-//!   return null                             // band full - spirit dropped
-//!   ```
-//!   The ChrSet's capacity is 80 = 20 + 6 bands * 10, so offline (player 0
-//!   alone) slots 30..79 are never used by anything.
-//! - `sub_140493D60(spawned_chr)` - the next cursor:
-//!   `(slot_of(spawned_chr) - 20 + 1) % 10`.
-//!
-//! Patches:
-//! 1. [BAND_ALLOC_AOB]: the slot-search loop (everything from computing
-//!    `band_start` up to the "band full" exit) is replaced by a stub that
-//!    does the same search over the band [band_layout] gives the calling
-//!    player index, bounds-checked against the ChrSet's own `capacity`. Exits exactly where vanilla does: "found" jumps to
-//!    the original spawn code with `rbx` = entry, `edi` = slot index; "not
-//!    found" falls through to the original `mov rax, r15` (null) return.
-//! 2. [NEXT_CURSOR_AOB]: the next-cursor computation stops wrapping
-//!    (`(slot - 20 + 1) % 10` -> `slot - 20 + 1`): it has no idea which
-//!    player's band `slot` is in, so patch 1 turns that absolute value
-//!    back into a position inside the caller's own band instead. (First
-//!    version did `% band_len` here, which is only right for a band that
-//!    starts at slot 20 - partners' spirits ended up scattered across
-//!    their band, Seamless test 2026-09-26.)
-//!
-//! 3. [CAPACITY_INIT_AOB] (only when `MaxSpirits > 60`): the summon
-//!    ChrSet's own init (`sub_1404954B0`) allocates a fixed 80-entry array
-//!    (`alloc(0x500)`, `capacity = 0x50`, `memset(.., 0x500)`) - those
-//!    three imm32s are raised to `20 + MaxSpirits` so the game builds a
-//!    bigger array itself, instead of this mod reallocating a live one.
-//!    Must run before the world is created (the DLL loads at process
-//!    start); if it ran too late the array just stays at 80, and patch 1's
-//!    `slot < capacity` check keeps everything in bounds regardless. Slot
-//!    indices are encoded in FieldInsHandles with a 20-bit mask
-//!    (`0xFFFFF`), so large capacities are representable.
-//!
-//! Player index 0 is the host (and the only player offline). Co-op
-//! partners (index 1..5) get bands of their own, laid out by [band_layout]
-//! from the ChrSet's real capacity so they never overlap player 0's - a
-//! remote spirit is created on every machine at its OWNER's slot number
-//! (`sub_140493210`, which also does no bounds check), so bands must not
-//! overlap across players. With vanilla's 80-slot capacity that layout
-//! collapses to exactly vanilla's 10-slot bands; with Seamless Co-op's
-//! 1000 (observed 2026-09-25) every player gets up to 163. Limits: a
-//! partner WITHOUT this mod still uses vanilla's 30..79 bands, which do
-//! overlap player 0's widened band; and all machines are assumed to share
-//! the same capacity (true under Seamless, which sets it on everyone).
+//! `WorldChrMan.summon_buddy_chr_set` from the engine's hard-coded 10 slots to
+//! `MaxSpirits`: the real reason no chain lengthening could spawn more than 10
+//! spirits. Three patches (the slot search, the next-cursor wrap and, above 60,
+//! the ChrSet's capacity), with per-player bands from the real capacity so co-op
+//! partners never overlap. The functions, the patches and the limits:
+//! `docs/slots_and_band.md`.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};

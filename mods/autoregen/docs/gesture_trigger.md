@@ -1,6 +1,6 @@
 # Regen.PerTick: Trigger Idle (3) và Gesture (4)
 
-**Status 2026-10-08: hoạt động, đã test trong game (Kolagon, Nexus). Mã: `src/regen.rs` (`confirm_pending_gesture`, `is_idle`, `is_gesture_active`, `common::player::main_player_action_snapshot`).**
+**Status 2026-10-08: hoạt động, đã test trong game (Kolagon, Nexus). Mã: `src/trigger.rs` (`Triggers::update`, `confirm_pending`, `is_idle`, `is_gesture_active`; máy trạng thái thuần dùng đồng hồ truyền vào, có test cho từng kịch bản dưới đây) và `common::player::main_player_action_snapshot`.**
 
 ## Idle (`Trigger=3`)
 
@@ -10,14 +10,14 @@
 
 Mặc định 10 gesture ngồi: `80,90,91,92,93,94,95,97,100,101`. `requested_gesture` đúng bằng **1 nửa** `GESTURE_ID` trong CE table của The Grand Archives (Dejection 160 → 80, Rest 184 → 92, Sitting Sideways 186 → 93); hệ số /2 chỉ suy ra từ log thật, không có tài liệu. Danh sách đọc từ ini nên người dùng tự thêm/bớt gesture. Tính năng ban đầu tên "Sitting", đổi thành "Gesture" 2026-09-17 vì "ngồi" chỉ là giá trị mặc định.
 
-`requested_gesture` chỉ đúng **1 frame** khi `new_action_presses.gesture()` bắn, nên phải chốt (latch) `IS_GESTURE_ACTIVE`. Không có cách phân biệt "bắt đầu" với "huỷ" từ tín hiệu đó: nếu đang active thì lần bấm gesture kế (bất kể ID) là huỷ → đứng dậy xử lý ngay; huỷ chốt khi có input "busy" khác (di chuyển/tấn công/dùng đồ/đỡ/cưỡi ngựa).
+`requested_gesture` chỉ đúng **1 frame** khi `new_action_presses.gesture()` bắn, nên phải chốt (latch) `Triggers::gesture_active`. Không có cách phân biệt "bắt đầu" với "huỷ" từ tín hiệu đó: nếu đang active thì lần bấm gesture kế (bất kể ID) là huỷ → đứng dậy xử lý ngay; huỷ chốt khi có input "busy" khác (di chuyển/tấn công/dùng đồ/đỡ/cưỡi ngựa).
 
 ## Cơ chế xác nhận (lần thử thứ 4, thành công)
 
 Vấn đề: bấm gesture giữa lúc đang cast phép thì game chặn, nhưng `requested_gesture` vẫn được ghi → không được tính là ngồi (báo lỗi Kolagon 2026-09-13). Giải pháp: **xác nhận sau một khoảng trễ** bằng `CSChrTimeActModule::anim_queue[read_idx].anim_id` (TAE anim đang chạy). Không cần bảng map TAE↔gesture, chỉ cần "anim có đổi so với lúc bấm không".
 
 - Bấm khớp danh sách → chỉ ghi `PENDING_GESTURE_SINCE_MS` + `PENDING_GESTURE_ANIM_ID` (anim lúc bấm).
-- Chốt `IS_GESTURE_ACTIVE=true` khi `anim_id` **khác lúc bấm VÀ khác 0 VÀ giữ ổn định liên tục `ANIM_STABLE_MS` (1000ms)**; hết `GESTURE_CONFIRM_TIMEOUT_MS` (6000ms) thì bỏ pending. Đủ cả 2 điều kiện đầu vì: chỉ "khác 0" sai khi anim cast chưa kịp đổi; chỉ "khác lúc bấm" sai khi anim cast tự kết thúc về 0 trong lúc chờ.
+- Chốt `gesture_active = true` khi `anim_id` **khác lúc bấm VÀ khác 0 VÀ giữ ổn định liên tục `ANIM_STABLE_MS` (1000ms)**; hết `GESTURE_CONFIRM_TIMEOUT_MS` (6000ms) thì bỏ pending. Đủ cả 2 điều kiện đầu vì: chỉ "khác 0" sai khi anim cast chưa kịp đổi; chỉ "khác lúc bấm" sai khi anim cast tự kết thúc về 0 trong lúc chờ.
 - Bấm lặp lại khi còn pending bị **bỏ qua** (không đụng baseline/timer), để lần đầu chạy hết chu trình; nếu sau đó thành `true` thì lần bấm kế rơi vào nhánh "đang ngồi → huỷ". (Trước đó ghi đè baseline làm không bao giờ confirm, rồi confirm nhầm lúc đứng dậy.)
 - Timeout 3000 → 6000ms (2026-09-22): quay gấp ngay trước khi bấm làm anim xoay/dừng mất >3s để ổn định → xác nhận hết hạn, regen không hồi.
 - Test: 5/5 cast + bấm gesture bị chặn đúng, 2/2 ngồi thật, 2/2 đứng dậy ngay; nhiều lần bấm dồn dập đều đúng. Chi phí ≈ 0 khi không pending (1 biến atomic).

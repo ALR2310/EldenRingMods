@@ -27,3 +27,4 @@ sử git của `README.md`.
 | 2026-10-15 | Reload qua `common::reload` + banner coi như đã kiểm: các mod khác dùng cùng cơ chế và chạy ổn | |
 | 2026-10-19 | Sửa lỗi phím reload lọt ra ngoài game: `common::reload` đọc bằng `common::input` (`GetAsyncKeyState`, chỉ nhận phím khi cửa sổ game có focus) thay cho `GetKeyState` của `eldenring`, và antivirus gắn ít cờ hơn (RuneMultiplier 6 xuống 2 cờ trên VirusTotal); chưa test phím reload trong game | [docs](../../shared/docs/reload.md) |
 | 2026-10-22 | Log gọn lại theo kiểu ngắn, kỹ thuật cho dev: bỏ dòng lặp ý, địa chỉ patch, câu dài | |
+| 2026-10-22 | Dọn mã: `hook.rs` dùng `common::codepatch` (`absolute_jmp`, `alloc_executable`, `overwrite_bytes`) thay cho `VirtualAlloc`/`VirtualProtect` tự khai báo, bỏ các dòng log địa chỉ và dump byte, `build_stub` thành hàm thuần có test, doc đầu file chuyển sang `docs/addsoul_hook.md` | |

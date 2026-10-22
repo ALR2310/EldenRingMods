@@ -1,72 +1,80 @@
+<div align="center">
+
 # WeightMultiplier
 
-> Nexus mod 10549 · **đã phát hành** (trước là "Reduction Weight")
+**Nhân Trọng Tải (equip load) với một hệ số, hoặc đặt cứng nó bằng một số.**
 
-Mod DLL cho Elden Ring: **nhân Trọng Tải (equip load) hiện tại với một hệ số**,
-hoặc **đặt cứng nó bằng một số**, thay vì ghi đè thành một số tuỳ ý như các mod
-"NoWeight" thông thường. Một hook duy nhất, áp cho cả số hiển thị trên UI lẫn
-hành vi thật (roll, chạy). Đổi tên từ **ReductionWeight** ngày 2026-08-18 khi
-port sang Rust, vì hệ số < 1 giảm, > 1 tăng tải trọng.
+![Rust](https://img.shields.io/badge/Rust-cdylib-orange?logo=rust)
+![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)
+![Game](https://img.shields.io/badge/game-Elden_Ring-8a6d3b)
+
+</div>
+
+---
+
+## Giới thiệu
+
+WeightMultiplier đổi tổng Trọng Tải của người chơi theo hệ số bạn chọn, thay vì ghi đè thành
+một con số tuỳ ý như các mod "NoWeight" thông thường. Một hook duy nhất, áp cho cả số hiển
+thị trên giao diện lẫn hành vi thật (roll, chạy). Mod đổi tên từ **ReductionWeight** khi
+chuyển sang Rust, vì hệ số nhỏ hơn 1 giảm tải trọng còn lớn hơn 1 thì tăng.
+
+## Tính năng
+
+Hai chế độ, chọn một:
+
+| Chế độ | Hiệu ứng | Ví dụ |
+|---|---|---|
+| **Multiplier** (mặc định) | nhân tổng tải với một hệ số (cho phép số âm) | hệ số 0,5 với tải thật 100 hiện 50 |
+| **FixedValue** | đặt tổng tải bằng đúng một số, bất kể bạn mặc gì | đặt 0 để luôn nhẹ |
+
+Đổi chế độ, hệ số hoặc giá trị cố định rồi bấm phím reload là áp dụng ngay, không cần khởi
+động lại game.
 
 ## Cấu hình
 
-Cấu hình trong `WeightMultiplier.ini` cạnh DLL (tự tạo nếu thiếu). Có thể chỉnh:
+Cấu hình nằm trong `WeightMultiplier.ini` cạnh DLL, tự tạo ở lần chạy đầu. Tên key, giá trị
+mặc định và ý nghĩa nằm ở chú thích trong [WeightMultiplier.ini](WeightMultiplier.ini), file
+mẫu nhúng sẵn trong DLL. Mod còn có một độ trễ sau khi game khởi động trước khi áp dụng, và
+phím reload chỉ nhận khi cửa sổ game đang được focus.
 
-- chế độ: nhân tổng tải với một hệ số, hoặc đặt cứng bằng một số (hệ số cho phép số âm);
-- độ trễ sau khi game khởi động trước khi áp dụng mod;
-- phím nạp lại cấu hình (chỉ nhận khi cửa sổ game đang focus);
-- ghi log để chẩn đoán.
+### Menu trong game (tùy chọn)
 
-Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong [`WeightMultiplier.ini`](WeightMultiplier.ini); file mẫu này được nhúng vào DLL nên là nguồn sự thật duy nhất, README không lặp lại để khỏi lệch.
-
-Đổi chế độ, hệ số hoặc giá trị cố định rồi bấm phím reload là có hiệu lực ngay, không cần khởi động lại game.
-
-## Menu trong game (tùy chọn)
-
-Nếu `ERNativeUI.dll` (host menu dùng chung, https://github.com/Flammrock/ERNativeUI) đã được nạp trước mod, System >
-Game Options có thêm hàng **Weight Multiplier**: mở ra trang gồm chế độ (nhân hoặc đặt cứng), hệ số và giá trị cố định (gõ số vào ô văn bản, hệ số có thể là số thập phân) và bật/tắt log.
-Mod này không dùng task game nên menu đi cùng đường reload của chính nó: ghi ini (sau khi ngừng thao tác 1 giây) rồi cập nhật giá trị cho stub, giống bấm phím reload; đổi chế độ cũng vá lại opcode trong stub như khi reload. Không có host thì mod chạy bằng ini như trước.
-Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0. Client: `common::erui` ([shared/src/erui.rs](../../shared/src/erui.rs)), mod:
-[src/menu.rs](src/menu.rs), ghi chú dùng chung: [docs/ingame_menu.md](../../docs/ingame_menu.md).
+Nếu [ERNativeUI](https://github.com/Flammrock/ERNativeUI) được nạp trước mod, mục **Weight
+Multiplier** xuất hiện trong System > Game Options, gồm chế độ, hệ số, giá trị cố định (gõ
+số vào ô, hệ số có thể là số thập phân) và công tắc ghi log. Đổi trong menu được ghi vào file
+rồi áp dụng giống bấm phím reload. Không có ERNativeUI thì mod chạy bằng file như bình thường.
 
 ## Cách hoạt động
 
-- **Điểm hook:** game cộng trọng lượng 5 slot trong một vòng lặp rồi copy tổng ra
-  bằng `movaps xmm0,xmm6`. Mod patch đúng lệnh này (chạy một lần sau vòng lặp),
-  nên nhân hay ghi đè ở đó cho một con số sạch, không dồn qua từng slot. Hai
-  điểm hook thử trước đó đều sai (không tác dụng, hoặc chỉ đổi UI). Chi tiết:
-  [docs/hook_point.md](docs/hook_point.md).
-- **Tìm điểm patch bằng AOB** `FF C3 83 FB ?? 7C ?? 4C 8D 5C 24 ??` + 12 byte. Mẫu
-  duy nhất trên 2.6.2.0, 2.7.0.0 và 2.7.1.0, **cùng RVA** ở cả ba.
-- **Patch:** vì chỉ có 7 byte, dùng JMP tương đối 5 byte (`E9 rel32`) tới stub
-  được cấp phát gần đó (`common::codepatch`). Stub nhân hoặc ghi đè `xmm6` rồi chạy
-  lại hai lệnh gốc.
-- **Hot reload:** đổi giá trị chỉ cần ghi lại một biến mà stub đọc mỗi lần chạy.
-  Đổi `Mode` thì mod vá lại 4 byte opcode trong stub (`mulss` ↔ `movss`).
-- **Khởi động:** `DllMain` tạo một thread, nạp/tạo ini, mở log, chờ `LoadDelay`,
-  ghi phiên bản game và danh sách DLL (`common::diag`), rồi cài hook. Sau đó
-  `common::reload` giữ phím `ReloadKey` (xem [shared/docs/reload.md](../../shared/docs/reload.md)).
-- **Mod khác hook đè cùng chỗ:** nếu không tìm thấy neo, mod kiểm tra xem có phải
-  một mod trọng lượng khác đã hook không và ghi tên DLL đó vào log.
+Game cộng trọng lượng 5 ô trang bị trong một vòng lặp rồi sao chép tổng ra bằng lệnh
+`movaps xmm0,xmm6`. Mod vá đúng lệnh này, chạy một lần sau vòng lặp, nên nhân hay ghi đè ở
+đó cho một con số sạch, không bị dồn qua từng ô.
 
-Code: [src/hook.rs](src/hook.rs) (toàn bộ logic), [src/lib.rs](src/lib.rs) (entry point).
+| Bước | Cách làm |
+|---|---|
+| **Tìm điểm vá** | Quét AOB `FF C3 83 FB ?? 7C ?? 4C 8D 5C 24 ??` rồi đi 12 byte. Mẫu duy nhất trên 2.6.2.0, 2.7.0.0 và 2.7.1.0, cùng một RVA ở cả ba. |
+| **Vá** | Lệnh chỉ có 7 byte nên dùng lệnh nhảy tương đối 5 byte tới một đoạn mã cấp phát gần đó (`common::codepatch`). Đoạn mã nhân hoặc ghi đè `xmm6` rồi chạy lại hai lệnh gốc. |
+| **Reload** | Đổi giá trị chỉ cần ghi một biến mà đoạn mã đọc mỗi lần chạy. Đổi chế độ thì vá lại 4 byte opcode trong đoạn mã (`mulss` thành `movss` hoặc ngược lại). |
+
+Nếu không tìm thấy neo, mod kiểm tra xem có phải một mod trọng lượng khác đã hook cùng chỗ
+không, và ghi tên DLL đó vào log. Lịch sử tìm điểm hook (hai điểm thử trước đó đều sai) và
+bảng tương thích: [docs/hook_point.md](docs/hook_point.md).
 
 ## Giới hạn
 
-- Đây là patch code sống: nếu game đổi bố cục vùng này, mod không tìm thấy neo và
-  tự tắt cho phiên đó (log ghi lỗi); chưa kiểm chứng ngoài 2.6.2.0, 2.7.0.0, 2.7.1.0.
-- Đổi `Mode` lúc đang chạy ghi đè code có thể đang thực thi; người dùng đã chấp
-  nhận rủi ro này. Nếu vá thất bại, mod giữ `Mode` cũ.
-- Nếu mod trọng lượng khác đã hook cùng chỗ, mod này không cài được hook (có ghi
-  log). Một báo lỗi "anchor not found" trên Nexus (2026-09-26) chưa rõ nguyên
-  nhân.
-- Tài liệu phát triển cũ không ghi kết quả test in-game của bản Rust; khi sửa
-  hook cần kiểm cả số hiển thị trên UI và hành vi thật (roll, chạy).
-- Chỉ dùng ở chế độ offline, tắt EAC.
+- Đây là patch code sống: nếu game đổi bố cục vùng này, mod không tìm thấy neo và tự tắt
+  cho phiên đó (log ghi lỗi).
+- Đổi chế độ lúc đang chạy ghi đè code có thể đang thực thi. Nếu vá thất bại, mod giữ chế độ
+  cũ.
+- Nếu một mod trọng lượng khác đã hook cùng chỗ, mod này không cài được hook (có ghi log).
 
-## Tài liệu liên quan
+## Tài liệu
 
-- [CHANGELOG.md](CHANGELOG.md): ghi chú phát hành cho người dùng.
-- [HISTORY.md](HISTORY.md): dòng thời gian phát triển.
-- [docs/hook_point.md](docs/hook_point.md): lịch sử tìm điểm hook, stub, tương thích.
-- [nexus_page.bbcode](nexus_page.bbcode): mô tả trang Nexus.
+| Tài liệu | Nội dung |
+|---|---|
+| [docs/hook_point.md](docs/hook_point.md) | Lịch sử tìm điểm hook, đoạn mã, tương thích |
+| [HISTORY.md](HISTORY.md) | Dòng thời gian thay đổi |
+| [CHANGELOG.md](CHANGELOG.md) | Ghi chú phát hành cho người dùng |
+
+Mã nguồn: [src/hook.rs](src/hook.rs) (hook), [src/menu.rs](src/menu.rs) (menu).

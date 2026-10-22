@@ -69,27 +69,27 @@ pub fn run() {
         move |_data: &eldenring::fd4::FD4TaskData| {
             // Every frame, so a short-lived effect is not missed.
             if common::player::main_player_chr_ins_ptr().is_some() {
-                if let Ok(world_chr_man) = unsafe { WorldChrMan::instance() } {
-                    if let Some(player) = world_chr_man.main_player.as_ref() {
-                        let mut effects: Vec<i32> =
-                            player.chr_ins.special_effect.entries().map(|e| e.param_id).collect();
-                        effects.sort_unstable();
-                        effects.dedup();
-                        if effects != last_effects {
-                            let added: Vec<i32> =
-                                effects.iter().filter(|id| !last_effects.contains(id)).copied().collect();
-                            let removed: Vec<i32> =
-                                last_effects.iter().filter(|id| !effects.contains(id)).copied().collect();
-                            logger::log(&format!("Player SpEffects: +{added:?} -{removed:?}"));
-                            last_effects = effects;
-                        }
+                if let Ok(world_chr_man) = unsafe { WorldChrMan::instance() }
+                    && let Some(player) = world_chr_man.main_player.as_ref()
+                {
+                    let mut effects: Vec<i32> =
+                        player.chr_ins.special_effect.entries().map(|e| e.param_id).collect();
+                    effects.sort_unstable();
+                    effects.dedup();
+                    if effects != last_effects {
+                        let added: Vec<i32> =
+                            effects.iter().filter(|id| !last_effects.contains(id)).copied().collect();
+                        let removed: Vec<i32> =
+                            last_effects.iter().filter(|id| !effects.contains(id)).copied().collect();
+                        logger::log(&format!("Player SpEffects: +{added:?} -{removed:?}"));
+                        last_effects = effects;
                     }
                 }
-                if !logged_rows {
-                    if let Ok(repo) = unsafe { SoloParamRepository::instance() } {
-                        logged_rows = true;
-                        log_watched_rows(repo);
-                    }
+                if !logged_rows
+                    && let Ok(repo) = unsafe { SoloParamRepository::instance() }
+                {
+                    logged_rows = true;
+                    log_watched_rows(repo);
                 }
             }
         },
