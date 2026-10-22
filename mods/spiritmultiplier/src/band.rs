@@ -263,6 +263,9 @@ fn install_next_cursor() -> bool {
         return false;
     };
     let site = unsafe { anchor.add(NEXT_CURSOR_PATCH_OFFSET) };
+    if unsafe { crate::conflicts::check(site, "Spirit band (next slot)") } {
+        return false;
+    }
     if !unsafe { codepatch::overwrite_bytes(site, &build_next_cursor_patch()) } {
         logger::error("Band: next-cursor patch failed.");
         return false;
@@ -276,6 +279,9 @@ fn install_band_alloc() -> bool {
         return false;
     };
 
+    if unsafe { crate::conflicts::check(site, "Spirit band (slot search)") } {
+        return false;
+    }
     let not_found = unsafe { std::slice::from_raw_parts(site.add(BAND_ALLOC_REPLACED_LEN), 3) };
     let found_opcode = unsafe { *site.add(BAND_ALLOC_FOUND_OFFSET) };
     if not_found != BAND_ALLOC_NOT_FOUND_BYTES || found_opcode != CALL_REL32_OPCODE {

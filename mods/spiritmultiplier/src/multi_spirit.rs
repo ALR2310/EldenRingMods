@@ -525,7 +525,12 @@ fn install(name: &str, pattern: &str, offset: usize, build: impl Fn(u64) -> Vec<
     };
     let site = unsafe { anchor.add(offset) };
     // SAFETY: reads the 5 bytes of a call/jmp found in the game image.
-    let target = unsafe { codepatch::rel32_target(site) }?;
+    let Some(target) = (unsafe { codepatch::rel32_target(site) }) else {
+        if !unsafe { crate::conflicts::check(site, &format!("MultiSpirit ({name})")) } {
+            logger::error(&format!("MultiSpirit: {name} site is not a call."));
+        }
+        return None;
+    };
     // SAFETY: `site` is the scanned call in the game image; the length/offset is the one its pattern matched.
     if (unsafe { codepatch::redirect_rel32(site, &build(target)) }).is_none() {
         logger::error(&format!("MultiSpirit: {name} redirect failed."));

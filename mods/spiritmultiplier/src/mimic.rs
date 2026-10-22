@@ -66,6 +66,9 @@ fn install_hud_patch() -> bool {
     let site = unsafe { anchor.add(HUD_CALL_OFFSET) };
     // SAFETY: reads the 5 bytes of a call found in the game image.
     let Some(original) = (unsafe { codepatch::rel32_target(site) }) else {
+        if !unsafe { crate::conflicts::check(site, "Mimic HP bar") } {
+            logger::error("InstantMimic: HUD site is not a call");
+        }
         return false;
     };
     let stub = build_hud_stub(HUD_FLAG.as_ptr() as u64, original);
