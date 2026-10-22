@@ -1,20 +1,10 @@
-//! Seamless Co-op compatibility (2026-10-03, Nexus report from DrKSolo,
-//! reproduced by the user on 1.0.0 and the current build: under Seamless the
-//! log shows `animation_speed` set to 3.00, yet nothing in game speeds up).
-//!
-//! The game reads `CSChrBehaviorModule.animation_speed` in exactly one place
-//! (hardware-breakpoint probe, 2026-10-02): the per-frame behavior update
-//! `sub_14041DCA0` calls a one-instruction thunk, `sub_140417EA0: jmp
-//! <getter>`, and the getter returns `[rcx+0x18]` (rcx = behavior +0x17B0).
-//! Seamless (`ersc.dll`) rewrites that thunk's `jmp` to its own code (seen in
-//! the in-memory vs exe diff of 2026-10-02: `0x140417EA1`), so whatever we
-//! write is never read.
-//!
-//! Fix: once in game, if the thunk's `jmp` no longer goes to the game's own
-//! getter, point it (only its rel32, like SpiritMultiplier's Seamless fix)
-//! at a small stub: for the player's or Torrent's behavior it returns the
-//! field we set; any other character goes on to whoever hooked it, as
-//! before. Re-checked every tick, in case the hook is re-applied.
+//! Seamless Co-op compatibility: Seamless (`ersc.dll`) rewrites the one-
+//! instruction thunk the game uses to read `CSChrBehaviorModule.animation_speed`,
+//! so whatever this mod writes is never read. Once in game, if the thunk no
+//! longer jumps to the game's own getter, its `jmp` target is pointed (rel32
+//! only) at a small stub that returns the field we set for the player and
+//! Torrent, and goes on to whoever hooked it for anyone else. Re-checked every
+//! tick. The hardware-breakpoint finding and the diff: `docs/seamless.md`.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 

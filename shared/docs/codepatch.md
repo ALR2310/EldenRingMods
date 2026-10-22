@@ -9,7 +9,7 @@
 | Lệnh thay thế vừa khít cửa sổ byte gốc | `overwrite_bytes` | Không stub, không jump |
 | Vị trí patch là `call rel32` / `jmp rel32` | `redirect_rel32` | Chỉ đổi 4 byte displacement; xem bên dưới |
 | Cần stub nhưng vị trí không phải call, chỉ có >= 5 byte | `install_jmp_hook` | `E9 rel32` + NOP phần dư, stub phải nằm trong ±2 GiB |
-| Có >= ~12 byte chỗ trống | jump tuyệt đối (`mov reg, imm64; jmp reg`) | Không cần tìm vùng nhớ gần; xem `attack_hook.rs` của autoregen, `hook.rs` của runemultiplier |
+| Có >= ~12 byte chỗ trống | jump tuyệt đối (`mov reg, imm64; jmp reg`) | Không cần tìm vùng nhớ gần; xem `hit_hook.rs` của autoregen, `hook.rs` của runemultiplier |
 
 `install_jmp_hook` là phương án dự phòng khi thiếu chỗ cho jump tuyệt đối;
 `weightmultiplier` dùng nó vì patch site chỉ có 7 byte.

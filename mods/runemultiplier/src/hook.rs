@@ -1,74 +1,39 @@
-//! Multiplies rune gains from every source by a configurable factor, ported
-//! from RuneMultiplierEngine.cpp/CodePatch.cpp - same single hook on
-//! `AddSoul_Call` (the game's lowest-level "add this many runes" function,
-//! used by both enemy kills and rune items), but the redirect and stub-return
-//! jumps are now absolute 64-bit jumps (`mov reg, imm64; jmp reg` - the exact
-//! same technique `attack_hook.rs` in `autoregen`/`sometweaks` already uses)
-//! instead of relative `E9 rel32` jumps. That eliminates `CodePatch.cpp`'s
-//! entire "search nearby pages for `VirtualAlloc`-able memory within rel32
-//! range" routine: an absolute jump reaches any 64-bit address, so the stub
-//! can be allocated anywhere at all.
-//!
-//! Disassembly at `AddSoul_Call` (Ghidra, confirmed against the real
-//! eldenring.exe - see the original C++ README's "RE `AddSoul_Call`" section):
-//!
-//! ```text
-//! MOV R9D,[RCX+0x6C]      ; R9D = current rune count
-//! LEA R8D,[R9+RDX*1]      ; sum = current + amount (RDX = amount to add)
-//! CMP R8D,0x3B9AC9FF      ; clamp to the 999,999,999 cap
-//! ...
-//! MOV [RCX+0x6C],EAX      ; write new rune count - used by every source
-//! RET
-//! ```
-//!
-//! The multiply has to happen to EDX *before* any of that runs, so the first
-//! 3 instructions (12 bytes: `mov r9d,[rcx+0x6c]` + `xor r11d,r11d` +
-//! `mov [rsp+0x10],r11d` - none of which read RDX/EDX) are overwritten with a
-//! redirect to a generated stub that multiplies EDX, re-runs those 3
-//! instructions (copied live from the game, never hardcoded), then jumps back
-//! into `AddSoul_Call` right after them.
+//! Multiplies rune gains from every source by a configurable factor: one hook
+//! on `AddSoul_Call`, the game's lowest-level "add this many runes" function
+//! (enemy kills and rune items alike). Its first 12 bytes are replaced by an
+//! absolute jump into a generated stub that scales `EDX` (the amount), replays
+//! those bytes and jumps back. The disassembly, the anchor, why spends are
+//! never scaled and the history: `docs/addsoul_hook.md`.
 
-use std::ffi::c_void;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
 
 use eldenring::cs::CSTaskGroupIndex;
 
-use common::config;
-use common::logger;
-use common::memscan;
+use common::{codepatch, config, logger, memscan};
 
-unsafe extern "system" {
-    fn VirtualAlloc(lp_address: *mut c_void, dw_size: usize, fl_allocation_type: u32, fl_protect: u32) -> *mut c_void;
-    fn VirtualProtect(lp_address: *mut c_void, dw_size: usize, fl_new_protect: u32, lpfl_old_protect: *mut u32) -> i32;
-    fn FlushInstructionCache(h_process: *mut c_void, lp_base_address: *const c_void, dw_size: usize) -> i32;
-    fn GetCurrentProcess() -> *mut c_void;
-}
-
-const MEM_COMMIT: u32 = 0x1000;
-const MEM_RESERVE: u32 = 0x2000;
-const PAGE_EXECUTE_READWRITE: u32 = 0x40;
-
-// Only used to LOCATE AddSoul_Call - not patched itself. Matches the
-// "Rune Multiplier" CT table entry for the enemy-kill reward scaling step
-// (`mulss xmm0,xmm1`); kept purely as a stable anchor since AddSoul_Call
-// itself has no equally distinctive byte pattern of its own to scan for.
+/// Only used to LOCATE `AddSoul_Call` (not patched): the enemy-kill reward
+/// scaling step (`mulss xmm0,xmm1`) from the "Rune Multiplier" CE table entry,
+/// since `AddSoul_Call` has no distinctive byte pattern of its own.
 const ANCHOR_PATTERN: &str = "F3 0F 59 C1 F3 0F 2C F8 48 8B 8B";
 
-// "call AddSoul_Call" sits at anchor+0x11 (mulss[4] + cvttss2si[4] +
-// "mov rcx,[rbx+0x570]"[7] + "mov edx,edi"[2] = 17 bytes).
+/// `call AddSoul_Call` sits at anchor + 0x11 (`mulss` 4 + `cvttss2si` 4 +
+/// `mov rcx,[rbx+0x570]` 7 + `mov edx,edi` 2).
 const ADDSOUL_CALL_SITE_OFFSET: usize = 0x11;
 
-// First 3 instructions of AddSoul_Call that get overwritten - none of them
-// read RDX/EDX (the amount about to be multiplied), so the multiply can run
-// first and the copied originals re-run after with the new value in place.
-const ADDSOUL_PREFIX_LEN: usize = 12;
+/// The first 3 instructions of `AddSoul_Call` (`mov r9d,[rcx+0x6c]`,
+/// `xor r11d,r11d`, `mov [rsp+0x10],r11d`), overwritten. None reads `RDX`, so
+/// the multiply can run first and the copied originals replay after it.
+const ADDSOUL_PREFIX_LEN: usize = codepatch::ABSOLUTE_JMP_LEN;
 
-// The multiplier as a Q20 fixed-point integer (value = round(multiplier *
-// 2^20)), read by the injected stub through a pointer baked in at install
-// time. Hot-reload updates this value directly - the stub always re-reads it
-// through the pointer, so no re-patching is ever needed.
+/// The multiplier as a Q20 fixed-point integer (`round(multiplier * 2^20)`),
+/// read by the stub through a pointer baked in at install time. A reload
+/// updates it in place; the stub always re-reads it, so nothing is re-patched.
 static FIXED_Q20: AtomicI64 = AtomicI64::new(1 << 20);
+
+fn to_q20(multiplier: f64) -> i64 {
+    (multiplier * (1i64 << 20) as f64 + 0.5) as i64
+}
 
 fn init_multiplier() {
     let multiplier = config::get_double("Multiplier", 1.0);
@@ -78,13 +43,12 @@ fn init_multiplier() {
 
 /// Applies a multiplier live (also called from the in-game menu number row).
 pub fn set_multiplier(multiplier: f64) {
-    let fixed = (multiplier * (1i64 << 20) as f64 + 0.5) as i64;
-    FIXED_Q20.store(fixed, Ordering::Relaxed);
+    FIXED_Q20.store(to_q20(multiplier), Ordering::Relaxed);
 }
 
-/// Reads a 5-byte "E8 rel32" CALL instruction at `call_site` and returns its
-/// absolute target, or `None` if the byte there isn't 0xE8 (layout differs
-/// from expected - fail safe rather than jumping into the wrong place).
+/// The absolute target of the 5-byte `E8 rel32` call at `call_site`, or `None`
+/// if the byte there isn't `E8` (the layout differs: fail safe rather than
+/// jump somewhere wrong).
 fn resolve_call_target(call_site: *const u8) -> Option<*mut u8> {
     unsafe {
         if *call_site != 0xE8 {
@@ -95,162 +59,99 @@ fn resolve_call_target(call_site: *const u8) -> Option<*mut u8> {
     }
 }
 
-/// Builds the stub's machine code: multiply EDX by [`FIXED_Q20`] using
-/// integer-only Q20 fixed-point math (deliberately avoiding XMM registers -
-/// `AddSoul_Call` is called far more often, from far more call sites, than
-/// any single hook site, so nothing here should assume any XMM register is
-/// safe to clobber), then re-run `original_prefix` (the 12 bytes overwritten
-/// at the patch site) followed by an absolute jump back to
-/// `return_addr` (`addsoul_entry + ADDSOUL_PREFIX_LEN`).
+/// Length of the multiply block: `mov r10,imm64` + `mov r8,[r10]` + `imul` +
+/// `sar` + `mov edx,eax`. The `jle` before it skips exactly this much.
+const MULTIPLY_BLOCK_LEN: u8 = 10 + 3 + 4 + 4 + 2;
+
+/// The stub's machine code: scale `EDX` by the Q20 value at `fixed_q20_addr`
+/// with integer math only (no XMM register is assumed safe to clobber:
+/// `AddSoul_Call` is called from far more places than this hook), replay
+/// `original_prefix`, then jump to `return_addr` (`AddSoul_Call` + the prefix).
 ///
-/// `AddSoul_Call` is the single generic "current += amount" function, reused
-/// for every rune-count change - gains (kill rewards, item pickups) AND
-/// spends (level-up cost, shop purchases) alike, both passed as a signed
-/// EDX. The original Cheat Engine "Rune Multiplier" script this was expanded
-/// from only ever scaled the kill-reward computation feeding into this call,
-/// never the call itself, so spends were never touched. Multiplying
-/// unconditionally here scales spends too (over-deducting on level-up,
-/// inflating shop prices), so the multiply block is skipped whenever the
-/// amount is <= 0.
-fn build_stub(original_prefix: &[u8; ADDSOUL_PREFIX_LEN], return_addr: *const u8) -> Vec<u8> {
-    let mut body = Vec::with_capacity(50);
+/// `AddSoul_Call` serves every rune change, gains and spends alike (a signed
+/// `EDX`); only gains are scaled, so the multiply is skipped when the amount
+/// is `<= 0` and level-up costs and shop prices stay untouched.
+fn build_stub(original_prefix: &[u8; ADDSOUL_PREFIX_LEN], fixed_q20_addr: u64, return_addr: u64) -> Vec<u8> {
+    let mut body = Vec::with_capacity(55);
 
-    // movsxd rax, edx (sign-extend the amount to 64-bit)
-    body.extend_from_slice(&[0x48, 0x63, 0xC2]);
+    body.extend_from_slice(&[0x48, 0x63, 0xC2]); // movsxd rax, edx
+    body.extend_from_slice(&[0x85, 0xC0]); // test eax, eax
+    body.extend_from_slice(&[0x7E, MULTIPLY_BLOCK_LEN]); // jle skip_multiply
 
-    // test eax, eax; jle skip_multiply (rel8) - only scale gains (amount >
-    // 0); leave spends (amount <= 0) untouched so level-up costs and shop
-    // prices aren't affected.
-    body.extend_from_slice(&[0x85, 0xC0]);
-    let multiply_block_len: u8 = 10 + 3 + 4 + 4 + 2; // mov r10,imm64 + mov r8,[r10] + imul + sar + mov edx,eax
-    body.extend_from_slice(&[0x7E, multiply_block_len]);
+    body.extend_from_slice(&[0x49, 0xBA]); // mov r10, &FIXED_Q20
+    body.extend_from_slice(&fixed_q20_addr.to_le_bytes());
+    body.extend_from_slice(&[0x4D, 0x8B, 0x02]); // mov r8, [r10]
+    body.extend_from_slice(&[0x49, 0x0F, 0xAF, 0xC0]); // imul rax, r8
+    body.extend_from_slice(&[0x48, 0xC1, 0xF8, 0x14]); // sar rax, 20 (undo the Q20 scale)
+    body.extend_from_slice(&[0x89, 0xC2]); // mov edx, eax
 
-    // mov r10, &FIXED_Q20
-    body.extend_from_slice(&[0x49, 0xBA]);
-    body.extend_from_slice(&(&FIXED_Q20 as *const AtomicI64 as u64).to_le_bytes());
-
-    // mov r8, qword ptr [r10]
-    body.extend_from_slice(&[0x4D, 0x8B, 0x02]);
-
-    // imul rax, r8
-    body.extend_from_slice(&[0x49, 0x0F, 0xAF, 0xC0]);
-
-    // sar rax, 20 (undo the Q20 scale, arithmetic shift keeps sign)
-    body.extend_from_slice(&[0x48, 0xC1, 0xF8, 0x14]);
-
-    // mov edx, eax (write the scaled amount back where AddSoul_Call expects it)
-    body.extend_from_slice(&[0x89, 0xC2]);
-
-    // skip_multiply: re-run the original first 3 instructions we had to overwrite.
+    // skip_multiply: the overwritten instructions.
     body.extend_from_slice(original_prefix);
 
-    // mov r11, return_addr; jmp r11 - absolute jump back, so the stub can
-    // live anywhere in the 64-bit address space regardless of how far it
-    // ends up from AddSoul_Call.
-    body.extend_from_slice(&[0x49, 0xBB]);
-    body.extend_from_slice(&(return_addr as u64).to_le_bytes());
-    body.extend_from_slice(&[0x41, 0xFF, 0xE3]);
+    // Absolute jump back, so the stub can live anywhere in the address space.
+    body.extend_from_slice(&[0x49, 0xBB]); // mov r11, return_addr
+    body.extend_from_slice(&return_addr.to_le_bytes());
+    body.extend_from_slice(&[0x41, 0xFF, 0xE3]); // jmp r11
 
     body
 }
 
-fn hex_dump(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02X} ")).collect()
-}
-
-/// Scans for the anchor pattern, resolves `AddSoul_Call` from it, and patches
-/// its first 12 bytes to redirect into a freshly allocated stub. Returns
-/// `false` (and logs why) on any failure - the original bytes are left
-/// untouched in that case.
-fn install(debug_log: bool) -> bool {
+/// Finds `AddSoul_Call` from the anchor and redirects its first 12 bytes into
+/// a freshly allocated stub. `false` (logged) on any failure, with the
+/// original bytes left untouched.
+fn install() -> bool {
     let Some(anchor) = memscan::find_pattern_in_module(ANCHOR_PATTERN) else {
         logger::error("Hook: anchor not found, game may need a mod update, check Nexus.");
         return false;
     };
-    if debug_log {
-        logger::log(&format!("Hook: anchor at {anchor:p}"));
-    }
 
     let call_site = unsafe { anchor.add(ADDSOUL_CALL_SITE_OFFSET) };
     let Some(addsoul_entry) = resolve_call_target(call_site) else {
         logger::error("Hook: AddSoul_Call not resolved (byte layout differs)");
         return false;
     };
-    if debug_log {
-        logger::log(&format!("Hook: AddSoul_Call at {addsoul_entry:p}"));
-    }
 
+    // Copied live from the game, never hardcoded.
     let original_prefix: [u8; ADDSOUL_PREFIX_LEN] =
         unsafe { std::slice::from_raw_parts(addsoul_entry, ADDSOUL_PREFIX_LEN) }
             .try_into()
             .unwrap();
-    if debug_log {
-        logger::log(&format!("Hook: original prefix {}", hex_dump(&original_prefix)));
-    }
+    let return_addr = unsafe { addsoul_entry.add(ADDSOUL_PREFIX_LEN) } as u64;
+    let stub_body = build_stub(&original_prefix, &FIXED_Q20 as *const AtomicI64 as u64, return_addr);
 
-    let return_addr = unsafe { addsoul_entry.add(ADDSOUL_PREFIX_LEN) };
-    let stub_body = build_stub(&original_prefix, return_addr);
-    if debug_log {
-        logger::log(&format!("Hook: stub body {}", hex_dump(&stub_body)));
-    }
-
-    let stub = unsafe {
-        VirtualAlloc(std::ptr::null_mut(), stub_body.len(), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)
-    };
-    if stub.is_null() {
-        logger::error("Hook: stub alloc failed (VirtualAlloc)");
+    let Some(stub) = codepatch::alloc_executable(stub_body.len()) else {
+        logger::error("Hook: stub alloc failed");
         return false;
-    }
-    unsafe { std::ptr::copy_nonoverlapping(stub_body.as_ptr(), stub as *mut u8, stub_body.len()) };
+    };
+    unsafe { std::ptr::copy_nonoverlapping(stub_body.as_ptr(), stub, stub_body.len()) };
 
-    // Patch: mov rax, <stub>; jmp rax (10 + 2 = 12 bytes) - fills the entire
-    // overwritten region exactly, no NOP padding needed.
-    let mut patch = [0u8; ADDSOUL_PREFIX_LEN];
-    patch[0] = 0x48;
-    patch[1] = 0xB8; // mov rax, imm64
-    patch[2..10].copy_from_slice(&(stub as u64).to_le_bytes());
-    patch[10] = 0xFF;
-    patch[11] = 0xE0; // jmp rax
-
-    let mut old_protect: u32 = 0;
-    let ok = unsafe { VirtualProtect(addsoul_entry as *mut c_void, ADDSOUL_PREFIX_LEN, PAGE_EXECUTE_READWRITE, &mut old_protect) };
-    if ok == 0 {
+    // The jump fills the whole overwritten region exactly, no NOP padding.
+    if !unsafe { codepatch::overwrite_bytes(addsoul_entry, &codepatch::absolute_jmp(stub as u64)) } {
         logger::error("Hook: patch failed (VirtualProtect)");
         return false;
-    }
-    unsafe {
-        std::ptr::copy_nonoverlapping(patch.as_ptr(), addsoul_entry, ADDSOUL_PREFIX_LEN);
-        VirtualProtect(addsoul_entry as *mut c_void, ADDSOUL_PREFIX_LEN, old_protect, &mut old_protect);
-        FlushInstructionCache(GetCurrentProcess(), addsoul_entry as *const c_void, ADDSOUL_PREFIX_LEN);
-        FlushInstructionCache(GetCurrentProcess(), stub as *const c_void, stub_body.len());
     }
 
     logger::log("Hook: installed");
     true
 }
 
-/// Installs the hook, then re-reads `Multiplier` every time
-/// [`common::reload`] reloads the ini (it owns the `ReloadKey` watcher and the
-/// "Config reloaded" banner). Meant to run on its own worker thread spawned
-/// from `DllMain`; never returns (except early, if the hook fails to install).
+/// Installs the hook, then re-reads `Multiplier` on every reload (the reload
+/// key and banner belong to `common::reload`). Run it on its own worker thread;
+/// never returns, except early when the hook fails to install.
 pub fn run(ini_path: String, hmodule: u64) {
     init_multiplier();
     // Right away: ERNativeUI only accepts registrations during its startup window.
     crate::menu::start(hmodule, ini_path.clone());
 
-    let debug_log = config::get_bool("LogFile", false);
-    if !install(debug_log) {
+    if !install() {
         logger::error("Hook: install failed, disabled");
-        // Right away, not after CSTaskImp - this path never gets there.
+        // Right away, not after CSTaskImp: this path never gets there.
         common::diag::log_environment();
         return;
     }
 
-    let hotkey_name = config::get_string("ReloadKey", "F5");
-    logger::log(&format!("Hook: active, reload key {hotkey_name}"));
-
-    // `common::reload` must stay the only watcher of `ReloadKey` (see its module
-    // doc), so this module just follows `RELOAD_GENERATION`.
+    // `common::reload` must stay the only watcher of the reload key, so this
+    // just follows `RELOAD_GENERATION`.
     let mut last_seen_generation = common::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
     std::thread::spawn(move || common::reload::run(ini_path));
 
@@ -276,5 +177,40 @@ pub fn run(ini_path: String, hmodule: u64) {
 
     loop {
         std::thread::sleep(Duration::from_secs(60));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn q20_conversion_rounds_to_the_nearest_step() {
+        assert_eq!(to_q20(1.0), 1 << 20);
+        assert_eq!(to_q20(2.0), 2 << 20);
+        assert_eq!(to_q20(0.5), 1 << 19);
+        assert_eq!(to_q20(0.0), 0);
+        assert_eq!(to_q20(1.5), 3 << 19);
+    }
+
+    #[test]
+    fn the_stub_has_the_expected_shape() {
+        let prefix: [u8; ADDSOUL_PREFIX_LEN] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        let stub = build_stub(&prefix, 0xAAAA_BBBB_CCCC_DDDD, 0x1111_2222_3333_4444);
+
+        // movsxd rax, edx; test eax, eax; jle +MULTIPLY_BLOCK_LEN
+        assert_eq!(stub[..7], [0x48, 0x63, 0xC2, 0x85, 0xC0, 0x7E, MULTIPLY_BLOCK_LEN]);
+        // The multiply block loads the address of the multiplier...
+        assert_eq!(stub[7..9], [0x49, 0xBA]);
+        assert_eq!(stub[9..17], 0xAAAA_BBBB_CCCC_DDDDu64.to_le_bytes());
+        // ...and the jle lands exactly on the replayed prefix.
+        let skip_target = 7 + MULTIPLY_BLOCK_LEN as usize;
+        assert_eq!(stub[skip_target..skip_target + ADDSOUL_PREFIX_LEN], prefix);
+        // After it: mov r11, return_addr; jmp r11, and nothing else.
+        let tail = &stub[skip_target + ADDSOUL_PREFIX_LEN..];
+        assert_eq!(tail[..2], [0x49, 0xBB]);
+        assert_eq!(tail[2..10], 0x1111_2222_3333_4444u64.to_le_bytes());
+        assert_eq!(tail[10..], [0x41, 0xFF, 0xE3]);
+        assert_eq!(stub.len(), skip_target + ADDSOUL_PREFIX_LEN + 13);
     }
 }

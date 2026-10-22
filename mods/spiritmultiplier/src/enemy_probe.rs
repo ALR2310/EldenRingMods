@@ -1,34 +1,8 @@
-//! Debug-only (`EnemyProbe`, off by default) diagnostics for "enemies near
-//! the player vanish when ~60 spirits are summoned" (reported at Stormgate,
-//! 2026-09-26) - no gameplay change, only logging.
-//!
-//! Candidates, from `fromsoftware-rs`'s reflected types:
-//! - Omission (update LOD): `ChrIns::omission_mode` (Normal / 30 / 20 / 5 /
-//!   1 FPS / NoUpdate), handed out per frame from
-//!   `WorldChrMan::omission_update_budget_near/far`, whose size depends on
-//!   `WorldChrManDbg::omission_update_num_type` (Normal / Overload /
-//!   Emergency, "changed depending on current performance load").
-//! - Activation: `ChrIns::chr_activate_threshold` compared against
-//!   `CSOpenChrActivateThresholdRegionMan` (open-field characters), result
-//!   in `chr_flags1ca.activate_threshold_exceeded`; plus
-//!   `chr_activation_flags.activation_enabled`.
-//! - Unloading: `ChrSetEntry::chr_load_status`, or the character simply
-//!   disappearing from its ChrSet.
-//!
-//! - Activation COUNT limit (found in IDA 2026-09-26, ER 2.7.1.0):
-//!   `sub_14050F9E0` sorts open-field activation candidates and only
-//!   activates `limit - already_active` of them (the rest get
-//!   `sub_1403E93A0(chr, 2)` = cut, `load_state.evaluation_value_cutoff`);
-//!   `limit` is 60 (hard-coded in the singleton ctor `sub_145AE6B75`,
-//!   `+0xEC`/`+0xF0`; 40 in an alternate mode) and `already_active` is
-//!   the counter at `WorldChrMan+0x1E618` (124440), bumped for every
-//!   always-active character - logged here as `active_count`.
-//!
-//! Every tick this collects every non-summon character within
-//! [RADIUS_M] of the player across all of `WorldChrMan.chr_sets`, and logs
-//! a summary line (plus the per-character list) whenever the summary
-//! changes, together with the live summon count - so summoning at a spot
-//! with enemies shows which of the above actually happens to them.
+//! Debug-only `EnemyProbe` (off by default) for "enemies near the player vanish
+//! when ~60 spirits are summoned": every tick it collects the non-summon
+//! characters near the player and logs a summary (plus the per-character list)
+//! when it changes, with the live summon count. No gameplay change. The
+//! candidates it checks and what it found: `docs/activate_limit.md`.
 
 use std::collections::BTreeMap;
 use std::time::Duration;

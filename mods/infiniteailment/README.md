@@ -1,65 +1,93 @@
+<div align="center">
+
 # InfiniteAilment
 
-> Nexus mod 11087 · **đã phát hành** · đã test trong game, người dùng báo chạy tốt trên Convergence
+**Chỉnh thời lượng và sát thương của Poison, Scarlet Rot, Black Flame và Destined Death.**
 
-Mod DLL cho Elden Ring: chỉnh **thời lượng** và **sát thương** của hiệu ứng
-damage-over-time **Poison**, **Scarlet Rot** và **Black Flame** và **Destined Death** do người chơi gây ra (mặc định
-thời lượng vô hạn). Cấu hình trong `InfiniteAilment.ini`, bấm `ReloadKey` để
-nạp lại mà không cần khởi động lại game.
+![Rust](https://img.shields.io/badge/Rust-cdylib-orange?logo=rust)
+![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)
+![Game](https://img.shields.io/badge/game-Elden_Ring-8a6d3b)
+
+</div>
+
+---
+
+## Giới thiệu
+
+Poison và Scarlet Rot trong Elden Ring chỉ kéo dài 90 giây, Black Flame và Destined Death
+chỉ cháy vài giây. InfiniteAilment cho bạn chỉnh **thời lượng** (kể cả vô hạn) và **sát
+thương mỗi nhịp** của bốn hiệu ứng đó khi chính **người chơi gây ra** cho kẻ địch. Mod sửa
+thẳng bảng dữ liệu của game khi đang chạy, không ghi đè `regulation.bin`, và chạy được trên
+các bản mod lớn như Convergence.
+
+## Tính năng
+
+Bốn hiệu ứng, mỗi hiệu ứng chỉnh riêng:
+
+| Hiệu ứng | Thời lượng mặc định của mod | Thời lượng vanilla |
+|---|---|---|
+| **Scarlet Rot** | vô hạn | 90 giây |
+| **Poison** | vô hạn | 90 giây |
+| **Black Flame** | 10 giây | 2 giây |
+| **Destined Death** (cháy) | 10 giây | 2 giây |
+
+Với mỗi hiệu ứng bạn chỉnh được ba thứ:
+
+| Thiết lập | Ý nghĩa |
+|---|---|
+| **Thời lượng** | số giây, hoặc vô hạn |
+| **% máu tối đa mỗi nhịp** | phần trăm máu tối đa của kẻ địch mất mỗi nhịp |
+| **Sát thương cố định mỗi nhịp** | cộng thêm vào mỗi nhịp; số âm thì hồi máu thay vì gây sát thương |
+
+Destined Death còn có thiết lập riêng cho **thời gian giảm máu tối đa** (vanilla 15 và 45
+giây, mặc định vô hạn).
 
 ## Cấu hình
 
-Cấu hình trong `InfiniteAilment.ini` cạnh DLL (tự tạo nếu thiếu). Có thể chỉnh, riêng cho Scarlet Rot, Poison, Black Flame và Destined Death (cháy; Destined Death còn có thời gian giảm máu tối đa):
+Cấu hình nằm trong `InfiniteAilment.ini` cạnh DLL, tự tạo ở lần chạy đầu. Tên key, giá
+trị mặc định và giá trị vanilla nằm ở chú thích trong
+[InfiniteAilment.ini](InfiniteAilment.ini), file mẫu nhúng sẵn trong DLL. Bấm phím reload
+để áp dụng, không cần khởi động lại game.
 
-- thời lượng DoT (theo giây, hoặc vô hạn);
-- % máu tối đa mất mỗi tick;
-- sát thương cố định cộng thêm mỗi tick;
-- phím nạp lại cấu hình (áp dụng không cần khởi động lại game), việc hiện banner, và ghi log.
+### Menu trong game (tùy chọn)
 
-Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong [`InfiniteAilment.ini`](InfiniteAilment.ini); file mẫu này được nhúng vào DLL nên là nguồn sự thật duy nhất, README không lặp lại để khỏi lệch.
-
-## Menu trong game (tùy chọn)
-
-Nếu `ERNativeUI.dll` (host menu dùng chung, https://github.com/Flammrock/ERNativeUI) đã được nạp trước mod, System >
-Game Options có thêm hàng **Infinite Ailment**: mở ra trang gồm nhóm **Scarlet Rot**, **Poison**, **Black Flame** và **Destined Death** (mỗi nhóm: thời lượng, phần trăm máu tối đa mỗi nhịp, sát thương cố định mỗi nhịp) và bật/tắt log. Cả ba giá trị đều gõ số vào ô văn bản (thời lượng tính bằng giây, -1 = vô hạn; phần trăm có thể là số thập phân như 0.18; sát thương cố định từ -1000 đến 1000, âm thì hồi máu).
-Đổi trong menu được ghi vào ini rồi mod áp lại lên param đúng một lần sau khi ngừng thao tác (cùng đường với phím reload); nếu đang ở màn hình chính thì chờ đến khi vào thế giới. Không có host thì mod chạy bằng ini như trước.
-Host chỉ hỗ trợ exe 2.7.0.0 và 2.7.1.0. Client: `common::erui` ([shared/src/erui.rs](../../shared/src/erui.rs)), mod:
-[src/menu.rs](src/menu.rs), ghi chú dùng chung: [docs/ingame_menu.md](../../docs/ingame_menu.md).
+Nếu [ERNativeUI](https://github.com/Flammrock/ERNativeUI) được nạp trước mod, mục
+**Infinite Ailment** xuất hiện trong System > Game Options: một trang cho mỗi hiệu ứng (ba
+thiết lập ở trên, gõ số vào ô, kể cả số thập phân như 0.18) và công tắc ghi log. Nếu đang ở
+màn hình chính thì thay đổi được chờ đến khi vào thế giới. Không có ERNativeUI thì mod chạy
+bằng file như bình thường.
 
 ## Cách hoạt động
 
-- **Khởi động:** `DllMain` tạo 1 thread, nạp/tạo ini, mở log, chạy watcher
-  `ReloadKey` (`common::reload`), rồi chờ `SoloParamRepository` được nạp
-  (**không giới hạn thời gian**) trước khi áp dụng.
-- **Chọn dòng cần sửa (`src/status_effect.rs`):** duyệt `SpEffectParam` đang
-  chạy và lấy mọi dòng khớp chữ ký của từng ailment (`SpCategory`, `StateInfo`,
-  `ChangeHpRate != 0`, `EffectEndurance == 90`): hàng trăm dòng mỗi loại (số cụ thể trong [docs/row_discovery.md](docs/row_discovery.md)). Chữ ký này loại các dòng của quái, hồ độc/hồ rot và boss
-  (Malenia). Danh sách ID được **lưu lại sau lần quét đầu**, vì chính điều kiện
-  `EffectEndurance == 90` sẽ không còn khớp sau khi đã ghi đè.
-- **Black Flame** và Destined Death không có chữ ký riêng nên mod chỉ xét một danh sách ID cố định (vũ khí và phép lửa đen của người chơi; dòng cháy và giảm máu tối đa của Destined Death), xem [docs/black_flame.md](docs/black_flame.md).
-- **Ghi 3 field** mỗi dòng: `EffectEndurance`, `ChangeHpRate`, `ChangeHpPoint`.
-  Giá trị là tuyệt đối (không phải hệ số nhân), nên reload không cộng dồn.
-- **Reload:** task lặp trên `FrameBegin` đọc lại ini và áp lại cả hai ailment
-  mỗi khi `ReloadKey` được bấm.
-- Cách tìm ra đúng tập dòng này (kèm hướng sai đã bỏ) nằm ở
-  [docs/row_discovery.md](docs/row_discovery.md).
-- **Log:** ghi phiên bản game và danh sách DLL đã nạp (`common::diag`, không in
-  đường dẫn đầy đủ, ẩn DLL của game/Steam/bản crack).
+Mỗi hiệu ứng được lưu thành nhiều dòng trong bảng `SpEffectParam` của game. Mod chọn đúng
+những dòng do người chơi gây ra:
+
+- **Poison và Scarlet Rot:** lọc theo chữ ký các trường (`SpCategory`, `StateInfo`, có hút
+  máu, thời lượng vanilla 90). Chữ ký này loại các dòng của quái, hồ độc, hồ rot và boss
+  (Malenia).
+- **Black Flame và Destined Death:** không có chữ ký riêng nên mod chỉ xét một danh sách ID
+  cố định (vũ khí và phép lửa đen của người chơi).
+
+Mod ghi ba trường mỗi dòng (thời lượng, % máu, sát thương cố định). Giá trị là tuyệt đối chứ
+không phải hệ số nhân, nên reload không cộng dồn. Danh sách dòng được tìm một lần rồi lưu
+lại, vì chính điều kiện thời lượng 90 sẽ không còn khớp sau khi đã ghi đè. Cách tìm ra tập
+dòng này: [docs/row_discovery.md](docs/row_discovery.md).
 
 ## Giới hạn
 
-- Chỉ sửa các dòng "người chơi tự gây ra"; Poison/Rot của quái, hồ độc, hồ rot
-  và Malenia giữ nguyên.
-- Chữ ký lọc dựa trên giá trị vanilla (`EffectEndurance == 90`): regulation
-  overhaul đổi giá trị gốc này có thể khiến mod không khớp dòng nào.
-- Tìm dòng theo index qua `common::params`, không qua `rows()` (panic trên regulation bị mod, xem
-  [dropmultiplier](../dropmultiplier/docs/convergence_panic.md)).
-- Chỉ dùng ở chế độ offline, tắt EAC.
+- Chỉ sửa các dòng "người chơi tự gây ra"; Poison, Rot của quái, hồ độc, hồ rot và Malenia
+  giữ nguyên.
+- Chữ ký lọc dựa trên giá trị vanilla (thời lượng 90): regulation đổi giá trị gốc này có
+  thể khiến mod không khớp dòng nào.
 
-## Tài liệu liên quan
+## Tài liệu
 
-- [CHANGELOG.md](CHANGELOG.md): ghi chú phát hành cho người dùng.
-- [HISTORY.md](HISTORY.md): dòng thời gian phát triển.
-- [docs/row_discovery.md](docs/row_discovery.md): tìm đúng các dòng `SpEffectParam`.
-- [docs/black_flame.md](docs/black_flame.md): các dòng Black Flame.
-- [nexus_page.bbcode](nexus_page.bbcode): mô tả trang Nexus.
+| Tài liệu | Nội dung |
+|---|---|
+| [docs/row_discovery.md](docs/row_discovery.md) | Tìm đúng các dòng `SpEffectParam`, chữ ký từng hiệu ứng, hướng đã bỏ |
+| [docs/black_flame.md](docs/black_flame.md) | Các dòng Black Flame và Destined Death |
+| [HISTORY.md](HISTORY.md) | Dòng thời gian thay đổi |
+| [CHANGELOG.md](CHANGELOG.md) | Ghi chú phát hành cho người dùng |
+
+Mã nguồn: [src/status_effect.rs](src/status_effect.rs) (chọn và ghi dòng),
+[src/menu.rs](src/menu.rs).

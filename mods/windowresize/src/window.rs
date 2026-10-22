@@ -1,25 +1,10 @@
-//! Makes the game's windowed-mode window resizable by dragging its edges.
-//!
-//! The game creates its window without `WS_THICKFRAME`, so Windows gives it
-//! no resize border at all - its smallest in-game resolution (800x450) is
-//! also the smallest the window ever gets. An outside `SetWindowPos` test
-//! (2026-09-29) showed the game keeps rendering the full scene at any window
-//! size (DXGI scales the swapchain into the client area), so nothing inside
-//! the game needs patching: adding the style bit back is enough for Windows
-//! to handle the drag itself.
-//!
-//! Two things still need the window procedure subclassed:
-//! - `WM_SETCURSOR`: the game forces its own cursor for every hit-test
-//!   code, so the resize arrows never showed even though the border worked
-//!   (hit-test on the edges already returned HTLEFT/HTBOTTOMRIGHT/...).
-//!   Sizing codes are handed to `DefWindowProcW` instead.
-//! - `WM_GETMINMAXINFO`/`WM_SIZING`: the `MinWidth`/`MinHeight` floor and
-//!   the optional `AspectWidth`:`AspectHeight` lock, both measured on the
-//!   client area (the game image), not the outer window.
-//!
-//! The style bit is (re)applied from a 1s watchdog rather than once: the
-//! game rewrites its window style whenever the screen mode or resolution
-//! changes in its settings, which would silently drop the border again.
+//! Makes the game's windowed-mode window resizable by dragging its edges:
+//! adds `WS_THICKFRAME` back (the game creates its window without it) and
+//! subclasses the window procedure for the resize cursor, the minimum size and
+//! the aspect lock. The border is re-applied from a 1s watchdog because the
+//! game drops it whenever the screen mode or resolution changes. Why this
+//! works and what was tried: `docs/resize_approach.md`; the size math is in
+//! `geometry.rs`.
 
 use std::ffi::c_void;
 use std::ptr::null_mut;
@@ -28,16 +13,9 @@ use std::time::{Duration, Instant};
 
 use common::{config, logger};
 
-type Hwnd = *mut c_void;
+use crate::geometry::{self, Limits, Rect};
 
-#[repr(C)]
-#[derive(Default)]
-struct Rect {
-    left: i32,
-    top: i32,
-    right: i32,
-    bottom: i32,
-}
+type Hwnd = *mut c_void;
 
 #[repr(C)]
 #[allow(dead_code)] // only written, read by Windows
@@ -104,14 +82,6 @@ const WM_ENTERSIZEMOVE: u32 = 0x0231;
 // Hit-test codes of the resize border, HTLEFT..=HTBOTTOMRIGHT.
 const HT_SIZE_FIRST: u32 = 10;
 const HT_SIZE_LAST: u32 = 17;
-
-// WM_SIZING wParam: which edge/corner is being dragged.
-const WMSZ_LEFT: usize = 1;
-const WMSZ_TOP: usize = 3;
-const WMSZ_TOPLEFT: usize = 4;
-const WMSZ_TOPRIGHT: usize = 5;
-const WMSZ_BOTTOM: usize = 6;
-const WMSZ_BOTTOMLEFT: usize = 7;
 
 /// The game's own window procedure, called for everything we don't handle.
 static ORIG_WNDPROC: AtomicIsize = AtomicIsize::new(0);
@@ -247,27 +217,6 @@ fn frame_size(hwnd: Hwnd) -> (i32, i32) {
     (rect.right - rect.left, rect.bottom - rect.top)
 }
 
-/// Client size from `Width`/`Height`; `None` if both are empty. With only
-/// one set, the other follows `AspectWidth`:`AspectHeight` (or keeps the
-/// current size if the aspect lock is off).
-fn start_client_size(current: (i32, i32)) -> Option<(i32, i32)> {
-    let w = config::get_int("Width", 0);
-    let h = config::get_int("Height", 0);
-    let aspect_w = config::get_int("AspectWidth", 16) as i64;
-    let aspect_h = config::get_int("AspectHeight", 9) as i64;
-    let aspect = aspect_w > 0 && aspect_h > 0;
-    let size = match (w > 0, h > 0) {
-        (false, false) => return None,
-        (true, true) => (w, h),
-        (true, false) if aspect => (w, ((w as i64 * aspect_h + aspect_w / 2) / aspect_w) as i32),
-        (false, true) if aspect => (((h as i64 * aspect_w + aspect_h / 2) / aspect_h) as i32, h),
-        (true, false) => (w, current.1),
-        (false, true) => (current.0, h),
-    };
-    let (min_w, min_h) = min_client();
-    Some((size.0.max(min_w), size.1.max(min_h)))
-}
-
 /// Resizes the window so its client area is the ini's startup size, keeping
 /// its position. No-op when already that size, minimized, or not windowed.
 fn apply_start_size(hwnd: Hwnd) {
@@ -282,7 +231,8 @@ fn apply_start_size(hwnd: Hwnd) {
         GetWindowRect(hwnd, &mut window);
     }
     let current = (client.right - client.left, client.bottom - client.top);
-    let Some((w, h)) = start_client_size(current) else {
+    let (width, height) = (config::get_int("Width", 0), config::get_int("Height", 0));
+    let Some((w, h)) = geometry::start_client_size(width, height, current, &Limits::from_config()) else {
         return;
     };
     if current == (w, h) {
@@ -296,56 +246,6 @@ fn apply_start_size(hwnd: Hwnd) {
         SetWindowPos(hwnd, null_mut(), 0, 0, w + frame_w, h + frame_h, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
     logger::log(&format!("Window: set to {w}x{h} (was {}x{})", current.0, current.1));
-}
-
-fn min_client() -> (i32, i32) {
-    (config::get_int("MinWidth", 160).max(1), config::get_int("MinHeight", 90).max(1))
-}
-
-/// Resizes the dragged `rect` (outer window, screen coords) so its client
-/// area respects the minimum and, if set, the aspect ratio - moving only
-/// the edges the user is actually dragging.
-fn constrain(hwnd: Hwnd, edge: usize, rect: &mut Rect) {
-    let (frame_w, frame_h) = frame_size(hwnd);
-    let (min_w, min_h) = min_client();
-    let mut w = (rect.right - rect.left - frame_w).max(min_w);
-    let mut h = (rect.bottom - rect.top - frame_h).max(min_h);
-
-    let aspect_w = config::get_int("AspectWidth", 16);
-    let aspect_h = config::get_int("AspectHeight", 9);
-    if aspect_w > 0 && aspect_h > 0 {
-        let (aw, ah) = (aspect_w as i64, aspect_h as i64);
-        let height_for = |w: i32| ((w as i64 * ah + aw / 2) / aw) as i32;
-        let width_for = |h: i32| ((h as i64 * aw + ah / 2) / ah) as i32;
-        // Top/bottom edges drive the width; every other edge and corner
-        // drives the height from the width.
-        if matches!(edge, WMSZ_TOP | WMSZ_BOTTOM) {
-            w = width_for(h);
-        } else {
-            h = height_for(w);
-        }
-        if h < min_h {
-            h = min_h;
-            w = width_for(h);
-        }
-        if w < min_w {
-            w = min_w;
-            h = height_for(w);
-        }
-    }
-
-    let outer_w = w + frame_w;
-    let outer_h = h + frame_h;
-    if matches!(edge, WMSZ_LEFT | WMSZ_TOPLEFT | WMSZ_BOTTOMLEFT) {
-        rect.left = rect.right - outer_w;
-    } else {
-        rect.right = rect.left + outer_w;
-    }
-    if matches!(edge, WMSZ_TOP | WMSZ_TOPLEFT | WMSZ_TOPRIGHT) {
-        rect.top = rect.bottom - outer_h;
-    } else {
-        rect.bottom = rect.top + outer_h;
-    }
 }
 
 unsafe extern "system" fn wnd_proc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize {
@@ -362,14 +262,14 @@ unsafe extern "system" fn wnd_proc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: 
             WM_GETMINMAXINFO => {
                 let result = unsafe { CallWindowProcW(orig, hwnd, msg, wparam, lparam) };
                 let (frame_w, frame_h) = frame_size(hwnd);
-                let (min_w, min_h) = min_client();
+                let (min_w, min_h) = Limits::from_config().min;
                 let info = unsafe { &mut *(lparam as *mut MinMaxInfo) };
                 info.min_track_size = Point { x: min_w + frame_w, y: min_h + frame_h };
                 return result;
             }
             WM_SIZING => {
                 unsafe { CallWindowProcW(orig, hwnd, msg, wparam, lparam) };
-                constrain(hwnd, wparam, unsafe { &mut *(lparam as *mut Rect) });
+                geometry::constrain(wparam, unsafe { &mut *(lparam as *mut Rect) }, frame_size(hwnd), &Limits::from_config());
                 return 1;
             }
             _ => {}

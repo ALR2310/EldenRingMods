@@ -1,148 +1,35 @@
-//! Adjusts enemy item-drop weights in `ItemLotParam_enemy`, two mutually
-//! exclusive ways picked by `Mode` (never both at once):
-//! - `Mode=0`: `Multiplier` scales every real item's own weight by a factor.
-//! - `Mode=1`: `Percentage` forces every row's combined "any real item"
-//!   chance to exactly this %, preserving each item's relative share against
-//!   its row-mates.
-//!
-//! Supports `General.ReloadKey` hot reload via [`common::reload`], so
-//! re-reads the ini and recomputes on every press instead of only once at
-//! startup.
-//!
-//! FromSoft's item-lot roll is a weighted lottery **relative to the row's own
-//! total**: each of a row's up to 8 slots holds a weight
-//! (`lot_item_base_point0N`), and the chance of slot N is
-//! `lot_item_base_point0N / sum(lot_item_base_point01..08)`. A dedicated
-//! "nothing drops" outcome, when a row has one, is just another explicit
-//! slot (`lot_item_id0N == 0`) that participates in the same sum - confirmed
-//! against a real exported `ItemLotParam_enemy.csv` row (SmithBox), whose
-//! own displayed "% chance to occur" per slot matches this formula exactly
-//! (e.g. `985/(985+15) = 98.5%`, and after editing the second slot's weight
-//! `15 -> 30`: `30/(985+30) = 2.96%`, `985/(985+30) = 97.04%` - the first
-//! slot's % necessarily drops since it didn't get scaled but the row's total
-//! did, not a bug).
-//!
-//! `cumulate_lot_point0N` is deliberately left untouched: the same real
-//! export shows it shipping as `0` on every slot of every row, and SmithBox
-//! computes its "% chance" purely from `lot_item_base_point`, never reading
-//! `cumulate_lot_point` - so despite `ITEMLOT_PARAM_ST`'s field name (and
-//! older Souls-game documentation describing a precomputed running-sum
-//! roll), this field is not what Elden Ring's own roll consults. Writing
-//! non-vanilla values into it would risk relying on behavior no released
-//! version of the game has ever actually exercised, for zero known benefit.
-//!
-//! Scaling every slot in a row uniformly (including a "nothing" slot) would
-//! change nothing - the ratios that decide the roll are unaffected when
-//! numerator and denominator scale together. Only slots holding a real item
-//! (`lot_item_id0N != 0`) are scaled; a "nothing" slot's weight is left
-//! untouched (`Multiplier`) or used as the fixed pivot to solve for the new
-//! item weight (`Percentage`).
-//!
-//! `Percentage`'s algebra, per row: with `itemSum` = the row's own total
-//! real-item weight and `otherSum` = its "nothing" slot's weight
-//! (unchanged), solving `target = itemSum_new / (itemSum_new + otherSum)`
-//! for `itemSum_new` gives `itemSum_new = target * otherSum / (1 - target)`;
-//! every real item's weight is then scaled by `itemSum_new / itemSum`,
-//! preserving each item's share relative to its row-mates while the group's
-//! combined chance lands on exactly `target`. Two edges need explicit
-//! handling: `target >= 100%` divides by zero in that formula, so instead
-//! every "nothing" slot's weight is zeroed directly (guarantees something
-//! drops, without needing to know what "infinite" item weight would mean);
-//! and a row with no "nothing" slot at all (`otherSum == 0`) can't have its
-//! combined chance reduced below 100% - always drops something already -
-//! so `target < 100%` is a no-op for that row (nothing to redistribute the
-//! removed chance into).
-//!
-//! Hot reload needs the game's own *original* weights, captured once before
-//! any edit, to recompute from on every `ReloadKey` press - recomputing from
-//! the already-modified live values would compound (2x then reload at 2x
-//! again would become 4x, not stay at 2x).
-//!
-//! Ported from [`sometweaks::drop_rate`](../sometweaks) (2026-09-14) into its
-//! own standalone mod - same feature, same algebra, only the ini key names
-//! changed (no `DropRate.` prefix needed when the whole ini is this one
-//! feature) and the shared plumbing (`player`/`task`/`reload`) now comes
-//! from [`common`] instead of this crate's own copy. Log lines also don't
-//! prefix themselves with "DropMultiplier:" the way `sometweaks` prefixes
-//! its own lines with a feature name - that's only useful when one log file
-//! is shared by many features; this crate's whole log file already is this
-//! one feature.
+//! Adjusts enemy drop chances in `ItemLotParam_enemy`, in one of two ways
+//! picked by `Mode`: `Multiplier` scales every real item's weight, or
+//! `Percentage` forces a row's combined "any real item" chance to a fixed
+//! percent. The lottery model, the algebra and the edge cases:
+//! `docs/drop_rate.md`.
 
-use std::sync::atomic::Ordering;
 use std::sync::Mutex;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use eldenring::cs::{CSTaskGroupIndex, ItemLotParam_enemy, SoloParamRepository};
-use eldenring::param::ITEMLOT_PARAM_ST;
 use fromsoftware_shared::FromStatic;
 
-use common::config;
-use common::logger;
+use common::{config, logger};
 
-type Points = [u16; 8];
-type ItemIds = [i32; 8];
+use crate::lot::{self, ItemIds, Points};
 
-// The game's own original `lot_item_base_point0N` values, keyed by row index
-// (see [`common::params`] for why not by row ID via `rows_mut()`) -
-// captured once (lazily, on the first call to `apply`) before any edit, so
-// every later `ReloadKey` press rescales from the true baseline instead of
-// compounding on top of an already-scaled value. Guarded by a `Mutex`
-// because the initial capture runs on this module's own worker thread while
-// later reloads run on whichever thread the game's `FrameBegin` task group
-// executes the recurring closure on.
+/// The game's own original weights by row index (see `common::params` for why
+/// not by ID), captured once before any edit, so every reload rescales from the
+/// true baseline instead of compounding.
 static ORIGINAL_BASE_POINTS: Mutex<Option<Vec<Points>>> = Mutex::new(None);
-
-fn get_base_points(row: &ITEMLOT_PARAM_ST) -> Points {
-    [
-        row.lot_item_base_point01(),
-        row.lot_item_base_point02(),
-        row.lot_item_base_point03(),
-        row.lot_item_base_point04(),
-        row.lot_item_base_point05(),
-        row.lot_item_base_point06(),
-        row.lot_item_base_point07(),
-        row.lot_item_base_point08(),
-    ]
-}
-
-pub(crate) fn get_item_ids(row: &ITEMLOT_PARAM_ST) -> ItemIds {
-    [
-        row.lot_item_id01(),
-        row.lot_item_id02(),
-        row.lot_item_id03(),
-        row.lot_item_id04(),
-        row.lot_item_id05(),
-        row.lot_item_id06(),
-        row.lot_item_id07(),
-        row.lot_item_id08(),
-    ]
-}
-
-fn set_base_points(row: &mut ITEMLOT_PARAM_ST, points: Points) {
-    row.set_lot_item_base_point01(points[0]);
-    row.set_lot_item_base_point02(points[1]);
-    row.set_lot_item_base_point03(points[2]);
-    row.set_lot_item_base_point04(points[3]);
-    row.set_lot_item_base_point05(points[4]);
-    row.set_lot_item_base_point06(points[5]);
-    row.set_lot_item_base_point07(points[6]);
-    row.set_lot_item_base_point08(points[7]);
-}
 
 fn clamp_u16(value: f64) -> u16 {
     value.round().clamp(0.0, u16::MAX as f64) as u16
 }
 
-/// The two mutually exclusive ways to adjust drop weights, selected by
-/// `Mode` - see the module doc comment for the algebra behind
-/// [Mode::FixedPercent].
+/// The two mutually exclusive adjustments, selected by `Mode`.
 enum Mode {
-    /// `Mode=0`: scale every real item's own weight by `factor`
-    /// (`Multiplier`).
+    /// `Mode=0`: scale every real item's weight by this factor.
     Multiplier(f64),
-    /// `Mode=1`: force every row's combined "any real item" chance to
-    /// exactly this percent (`Percentage`, `0.0..=100.0`), preserving
-    /// each item's share relative to its row-mates.
+    /// `Mode=1`: force each row's combined real-item chance to this percent
+    /// (`0..=100`), keeping each item's share against its row-mates.
     FixedPercent(f64),
 }
 
@@ -153,30 +40,34 @@ fn build_mode() -> Mode {
     }
 }
 
-/// Applies `mode` to a single row's weights, always derived from `original`
-/// (never from an already-scaled value), so this is safe to call repeatedly
-/// with a different `mode` (hot reload) without compounding.
-fn scale_row(original: &Points, item_ids: &ItemIds, mode: &Mode) -> Points {
+/// `original` with every real item's weight (slot id != 0) scaled by `factor`.
+fn scale_items(original: &Points, item_ids: &ItemIds, factor: f64) -> Points {
     let mut scaled = *original;
-    match *mode {
-        Mode::Multiplier(factor) => {
-            for i in 0..8 {
-                if item_ids[i] != 0 {
-                    scaled[i] = clamp_u16(original[i] as f64 * factor);
-                }
-            }
+    for i in 0..8 {
+        if item_ids[i] != 0 {
+            scaled[i] = clamp_u16(original[i] as f64 * factor);
         }
+    }
+    scaled
+}
+
+/// One row's new weights for `mode`, always derived from `original` (never
+/// from an already-scaled value), so reloading with another mode is safe.
+fn scale_row(original: &Points, item_ids: &ItemIds, mode: &Mode) -> Points {
+    match *mode {
+        Mode::Multiplier(factor) => scale_items(original, item_ids, factor),
         Mode::FixedPercent(percent) => {
             let target = (percent / 100.0).min(1.0);
-            let item_sum: u32 = (0..8).filter(|&i| item_ids[i] != 0).map(|i| original[i] as u32).sum();
-            let other_sum: u32 = (0..8).filter(|&i| item_ids[i] == 0).map(|i| original[i] as u32).sum();
+            let sum = |real: bool| -> u32 {
+                (0..8).filter(|&i| (item_ids[i] != 0) == real).map(|i| original[i] as u32).sum()
+            };
+            let (item_sum, other_sum) = (sum(true), sum(false));
             if item_sum == 0 {
-                return scaled; // no real item in this row - nothing to force a chance onto
+                return *original; // no real item: nothing to force a chance onto
             }
             if target >= 1.0 {
-                // 100%: guarantee a drop by zeroing the "nothing" slot(s)
-                // instead of dividing by zero below - item weights need no
-                // change, since they'll be the only nonzero weight left.
+                // 100%: zero the "nothing" slots instead of dividing by zero.
+                let mut scaled = *original;
                 for i in 0..8 {
                     if item_ids[i] == 0 {
                         scaled[i] = 0;
@@ -185,40 +76,28 @@ fn scale_row(original: &Points, item_ids: &ItemIds, mode: &Mode) -> Points {
                 return scaled;
             }
             if other_sum == 0 {
-                return scaled; // no "nothing" slot to shrink - already drops 100% of the time
+                return *original; // no "nothing" slot to shrink: already drops every time
             }
-            let factor = target * other_sum as f64 / ((1.0 - target) * item_sum as f64);
-            for i in 0..8 {
-                if item_ids[i] != 0 {
-                    scaled[i] = clamp_u16(original[i] as f64 * factor);
-                }
-            }
+            scale_items(original, item_ids, target * other_sum as f64 / ((1.0 - target) * item_sum as f64))
         }
     }
-    scaled
 }
 
-/// Applies `mode` to every `ItemLotParam_enemy` row, from a cached snapshot
-/// of the game's own original weights (captured on the first call, before
-/// any mutation). Returns how many rows were touched, for logging, or `None`
-/// if the param slot doesn't hold what we expect (nothing written then).
-///
-/// Walks rows through [`common::params::for_each_row_mut`], not
-/// `repo.rows_mut()`: the latter panicked inside fromsoftware-rs on
-/// Convergence's regulation.bin (2026-09-27).
+/// Applies `mode` to every `ItemLotParam_enemy` row from the snapshot of the
+/// original weights (taken on the first call). Returns the number of rows
+/// touched, or `None` if the param slot isn't what we expect (nothing written).
 fn apply(repo: &mut SoloParamRepository, mode: &Mode) -> Option<usize> {
     if let Err(reason) = common::params::check::<ItemLotParam_enemy>(repo) {
-        logger::error(&format!("{reason} - drop rates left unchanged."));
+        logger::error(&format!("{reason} - drop rates left unchanged"));
         return None;
     }
 
-    // Recover from poisoning instead of `unwrap()`: a panic while holding
-    // this lock must not turn every later reload into a second panic.
+    // A poisoned lock is recovered: one panic must not break every reload.
     let mut snapshot_guard = ORIGINAL_BASE_POINTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if snapshot_guard.is_none() {
         logger::log(&format!("Snapshot: {}", common::params::describe::<ItemLotParam_enemy>(repo)));
         let mut points = Vec::new();
-        common::params::for_each_row_mut::<ItemLotParam_enemy>(repo, |_, row| points.push(get_base_points(row)));
+        common::params::for_each_row_mut::<ItemLotParam_enemy>(repo, |_, row| points.push(lot::base_points(row)));
         *snapshot_guard = Some(points);
     }
     let snapshot = snapshot_guard.as_ref()?;
@@ -226,32 +105,25 @@ fn apply(repo: &mut SoloParamRepository, mode: &Mode) -> Option<usize> {
     let mut changed = 0;
     common::params::for_each_row_mut::<ItemLotParam_enemy>(repo, |index, row| {
         let Some(original) = snapshot.get(index) else {
-            return; // shouldn't happen - every row was snapshotted above
+            return;
         };
-        let item_ids = get_item_ids(row);
-        let scaled = scale_row(original, &item_ids, mode);
-        set_base_points(row, scaled);
+        lot::set_base_points(row, scale_row(original, &lot::item_ids(row), mode));
         changed += 1;
     });
     Some(changed)
 }
 
 fn log_mode(mode: &Mode, changed: usize, suffix: &str) {
-    match mode {
-        Mode::Multiplier(factor) => {
-            logger::log(&format!("Multiplier={factor:.3} applied to {changed} ItemLotParam_enemy row(s){suffix}."))
-        }
-        Mode::FixedPercent(percent) => logger::log(&format!(
-            "Percentage={percent:.3} applied to {changed} ItemLotParam_enemy row(s){suffix}."
-        )),
-    }
+    let setting = match mode {
+        Mode::Multiplier(factor) => format!("Multiplier={factor:.3}"),
+        Mode::FixedPercent(percent) => format!("Percentage={percent:.3}"),
+    };
+    logger::log(&format!("Drops: {setting} -> {changed} row(s){suffix}"));
 }
 
-/// Applies `Mode`'s selected mode once, then watches `General.ReloadKey`
-/// (via [`common::reload`]) on the game's own `FrameBegin` task group for
-/// the rest of the DLL's lifetime, recomputing from the cached original
-/// weights on every press. Meant to run on its own worker thread spawned
-/// from `DllMain`; never returns.
+/// Applies the config once the world is loaded, then follows
+/// `RELOAD_GENERATION` for the rest of the DLL's life (`common::reload` owns
+/// the reload key). Run it on its own worker thread; never returns.
 pub fn run() {
     let mut last_seen_generation = common::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
 
@@ -269,18 +141,12 @@ pub fn run() {
         "DropMultiplier",
         CSTaskGroupIndex::FrameBegin,
         move |_data: &eldenring::fd4::FD4TaskData| {
-            // Poll `common::reload::RELOAD_GENERATION` instead of calling
-            // `input::is_key_pressed(ReloadKey)` ourselves - see that
-            // module's doc comment for why: it debounces per VK code in one
-            // map shared by every caller, so a second caller checking the
-            // same key `reload` already checked this frame would always see
-            // `false`, never picking up a reload at all.
             let generation = common::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
             if generation == last_seen_generation {
                 return;
             }
-            // Not in the world (e.g. a change made from the title screen's
-            // menu): keep the request and apply it once the world is loaded.
+            // Not in the world (a change made from the title screen's menu):
+            // keep the request and apply it once the world is loaded.
             if common::player::main_player_chr_ins_ptr().is_none() {
                 if !waiting_logged {
                     logger::warn("Reload: deferred, not in world");
@@ -297,13 +163,79 @@ pub fn run() {
             };
             let mode = build_mode();
             if let Some(changed) = apply(repo, &mode) {
-                log_mode(&mode, changed, " (hotkey pressed)");
+                log_mode(&mode, changed, " (reload)");
             }
-            crate::materials::apply(repo, " (hotkey pressed)");
+            crate::materials::apply(repo, " (reload)");
         },
     );
 
     loop {
         std::thread::sleep(Duration::from_secs(60));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Slot 0 holds a real item, slot 1 is the "nothing" slot.
+    const IDS: ItemIds = [1, 0, 0, 0, 0, 0, 0, 0];
+
+    fn points(a: u16, b: u16) -> Points {
+        [a, b, 0, 0, 0, 0, 0, 0]
+    }
+
+    #[test]
+    fn multiplier_scales_real_items_and_leaves_the_nothing_slot() {
+        let scaled = scale_row(&points(100, 900), &IDS, &Mode::Multiplier(3.0));
+        assert_eq!(scaled, points(300, 900));
+    }
+
+    #[test]
+    fn multiplier_saturates_at_u16() {
+        assert_eq!(scale_row(&points(60_000, 0), &IDS, &Mode::Multiplier(10.0))[0], u16::MAX);
+        assert_eq!(scale_row(&points(100, 0), &IDS, &Mode::Multiplier(0.0))[0], 0);
+    }
+
+    #[test]
+    fn fixed_percent_lands_on_the_target_chance() {
+        // 100 real / 900 nothing is a 10% drop; forcing 50% needs 900 real.
+        let scaled = scale_row(&points(100, 900), &IDS, &Mode::FixedPercent(50.0));
+        assert_eq!(scaled, points(900, 900));
+        let chance = scaled[0] as f64 / (scaled[0] + scaled[1]) as f64;
+        assert!((chance - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn fixed_percent_keeps_each_items_share_of_the_row() {
+        let ids: ItemIds = [1, 2, 0, 0, 0, 0, 0, 0];
+        let scaled = scale_row(&[100, 300, 600, 0, 0, 0, 0, 0], &ids, &Mode::FixedPercent(50.0));
+        // Real items' combined weight equals the nothing slot's (50%), 1:3 as before.
+        assert_eq!(scaled[0] + scaled[1], 600);
+        assert_eq!((scaled[0], scaled[1]), (150, 450));
+    }
+
+    #[test]
+    fn fixed_hundred_percent_zeroes_the_nothing_slots() {
+        let scaled = scale_row(&points(100, 900), &IDS, &Mode::FixedPercent(100.0));
+        assert_eq!(scaled, points(100, 0));
+        assert_eq!(scale_row(&points(100, 900), &IDS, &Mode::FixedPercent(250.0)), points(100, 0));
+    }
+
+    #[test]
+    fn fixed_percent_edges_change_nothing() {
+        // A row without a real item, or without a "nothing" slot (already
+        // drops every time), is left as it is below 100%.
+        assert_eq!(scale_row(&points(0, 900), &IDS, &Mode::FixedPercent(50.0)), points(0, 900));
+        assert_eq!(scale_row(&points(100, 0), &IDS, &Mode::FixedPercent(50.0)), points(100, 0));
+    }
+
+    #[test]
+    fn rescaling_from_the_original_never_compounds() {
+        let original = points(100, 900);
+        let once = scale_row(&original, &IDS, &Mode::Multiplier(2.0));
+        let again = scale_row(&original, &IDS, &Mode::Multiplier(2.0));
+        assert_eq!(once, again);
+        assert_eq!(once[0], 200);
     }
 }

@@ -27,3 +27,42 @@ Log vanilla: `106 spirit NpcParam row(s) from 107 BuddyParam NPC id(s); tint vfx
 ## Tra cứu liên quan: cờ hành vi spirit
 
 Mọi spirit có `297000` "Follow & Warp to Player" (ô 28). Kiểu đi theo ở ô 29: `297100` WALK_FOLLOW (Putrid Corpse), `297101` REAR_FOLLOW (23 spirit đánh xa/phép/hỗ trợ), `297102` FLY_FOLLOW (Winged Misbegotten, Jellyfish, Warhawk, Stormhawk), `297103` NO_FOLLOW (Latenna); không cờ = đi theo mặc định. `297200` INTERCEPT_LONGRANGE (ô 24) là cờ cách đánh. Chưa đổi thử trong game.
+
+## Ghi chú kỹ thuật chuyển từ code: `ghost_color.rs` (2026-10-22)
+
+Nội dung này trước đây là doc đầu file `.rs`; chuyển sang đây nguyên văn (tiếng Anh) để doc code chỉ còn vài dòng.
+
+`GhostColor` (default `true` = vanilla): `false` removes the ghostly
+tint every summoned spirit ash carries, so spirits look like ordinary
+characters.
+
+What the tint is: a SpEffect on the spirit whose visual (`vfxId` ..
+`vfxId7` -> SpEffectVfxParam) forces a PhantomParam onto the model
+(`phantomParamOverwriteType` != 0, `phantomParamOverwriteId` = the
+colour). Vanilla: NpcParam `spEffectID26` = 295000 "[Spirit Summon]
+Color" -> vfx 57000 -> PhantomParam 200 (Puppet: 295200 -> 57100 ->
+201). ELDEN RING Reforged 2.3.5.3 (checked on its param exports,
+2026-09-30): no 295000; each Ash's own balance SpEffect in
+`spEffectID4` (200100, 201100, ... 292100) carries vfx 70000 / 70010 /
+70020 -> PhantomParam 2000 / 2010 / 420 - 121 of its 125 spirits, and
+those vfx rows are used by no other NpcParam row.
+
+So this edits the vfx, not the SpEffect: `phantomParamOverwriteType`
+is set to 0 (no overwrite) on every SpEffectVfx row reached from a
+spirit, keeping the SpEffect itself - in Reforged it also carries the
+Ash's stat adjustments and effect chains, which removing it would lose.
+
+Which rows: spirits = NpcParam rows some `BuddyParam` row spawns
+(`npcParamId` / `npcParamId_ridden`, not row names - a param mod's
+names can be wrong), all 32 `spEffectID` slots, every `vfxId` of those
+SpEffects. IDs come from `common::params::row_ids`, rows are addressed
+by index - never through the runtime lookup table (`get_mut` /
+`rows_mut`), which can misbehave on modded regulations.
+
+History: first version (2026-09-27) copied `sometweaks`'s
+`spirit/color.rs` (strip the SpEffect from live spirits every frame);
+then (same day) cleared `spEffectID26` when it held 295000-295999 -
+which found nothing in Reforged (Nexus report, 2026-09-30).
+
+Original values are captured once, before the first write, and every
+later change is applied from that snapshot, so F5 works both ways.

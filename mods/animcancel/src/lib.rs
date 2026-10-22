@@ -31,36 +31,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         // registrations in its first seconds. No-op without ERNativeUI.
         menu::start(hmodule);
 
-        logger::log("Activating AnimCancel...");
-        if report.created {
-            logger::log("AnimCancelV1.toml created with the default settings.");
-        }
-        if report.added_keys > 0 {
-            logger::log(&format!(
-                "AnimCancelV1.toml updated: added {} new key(s) from a newer default template.",
-                report.added_keys
-            ));
-        }
-        if let Some((from, to)) = report.migrated {
-            logger::log(&format!("AnimCancelV1.toml updated from format version {from} to {to}."));
-        }
-        if let Some((file, current)) = report.newer {
-            logger::warn(&format!(
-                "AnimCancelV1.toml: newer format {file} (supported {current}), left as is"
-            ));
-        }
-        if !report.unknown.is_empty() {
-            logger::warn(&format!(
-                "AnimCancelV1.toml: {} unused key(s) moved to comments:\n  {}",
-                report.unknown.len(),
-                report.unknown.join("\n  ")
-            ));
-        }
-        if let Some(err) = report.error {
-            logger::error(&format!(
-                "AnimCancelV1.toml: error, using defaults:\n{err}"
-            ));
-        }
+        report.log("AnimCancelV1.toml");
 
         std::thread::spawn(|| {
             common::reload::run_with(

@@ -2,7 +2,7 @@
 //! coarse action group, shared by `speedmultiplier` and `animcancel`. Why each
 //! range is what it is: `mods/speedmultiplier/docs/action_groups.md`.
 
-use eldenring::cs::ChrIns;
+use eldenring::cs::{CSChrTimeActModuleAnim, ChrIns};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Group {
@@ -23,6 +23,11 @@ pub enum Group {
 /// Special-weapon movesets whose TAE number falls inside the Sword Arts range.
 const WEAPON_TAES_IN_SKILL_RANGE: [i32; 6] = [831, 832, 839, 852, 935, 953];
 
+/// Whether a TAE prefix (`aXXX`) is an Ash of War / Sword Art moveset.
+pub fn is_skill_tae(prefix: i32) -> bool {
+    (600..1000).contains(&prefix) && !WEAPON_TAES_IN_SKILL_RANGE.contains(&prefix)
+}
+
 /// Classifies a player anim id: by TAE prefix for spells/Sword Arts, by
 /// action suffix for everything else.
 pub fn group_of(anim_id: i32) -> Group {
@@ -38,7 +43,7 @@ pub fn group_of(anim_id: i32) -> Group {
     if (400..600).contains(&prefix) {
         return Group::Cast;
     }
-    if (600..1000).contains(&prefix) && !WEAPON_TAES_IN_SKILL_RANGE.contains(&prefix) {
+    if is_skill_tae(prefix) {
         return Group::Skill;
     }
     match suffix {
@@ -63,16 +68,35 @@ pub fn group_of(anim_id: i32) -> Group {
     }
 }
 
-/// The anim id currently playing, off `CSChrTimeActModule.anim_queue`.
-pub fn current_anim_id(chr: &ChrIns) -> i32 {
+/// An animation id as `aXXX_YYYYYY` for logs (`-1` and other negatives as is).
+pub fn format_anim_id(id: i32) -> String {
+    if id < 0 {
+        return id.to_string();
+    }
+    format!("a{:03}_{:06}", id / 1_000_000, id % 1_000_000)
+}
+
+/// The animation currently playing, off `CSChrTimeActModule.anim_queue`.
+pub fn current_anim(chr: &ChrIns) -> &CSChrTimeActModuleAnim {
     let time_act = &chr.modules.time_act;
-    let idx = (time_act.read_idx as usize) % time_act.anim_queue.len();
-    time_act.anim_queue[idx].anim_id
+    &time_act.anim_queue[(time_act.read_idx as usize) % time_act.anim_queue.len()]
+}
+
+/// The anim id currently playing.
+pub fn current_anim_id(chr: &ChrIns) -> i32 {
+    current_anim(chr).anim_id
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn animation_ids_are_formatted_as_a_tae_and_a_suffix() {
+        assert_eq!(format_anim_id(20_032_000), "a020_032000");
+        assert_eq!(format_anim_id(2_100), "a000_002100");
+        assert_eq!(format_anim_id(-1), "-1");
+    }
 
     #[test]
     fn jumps_are_their_own_group() {

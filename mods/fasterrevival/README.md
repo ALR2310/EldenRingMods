@@ -1,70 +1,77 @@
+<div align="center">
+
 # FasterRevival
 
-> Nexus mod 11160 · **đã phát hành** · đã test trong game
+**Rút ngắn thời gian từ lúc hết máu đến khi hồi sinh.**
 
-Mod DLL cho Elden Ring: **rút ngắn thời gian từ lúc nhân vật hết máu tới khi
-hồi sinh**, không sửa file animation (`.anibnd` / `.tae`). Hồi sinh sau chết
-thường từ 12.2-14.4s (vanilla) còn khoảng **4.2-4.7s**. Mod **luôn bật**, cài
-vào là chạy, không có gì để chỉnh.
+![Rust](https://img.shields.io/badge/Rust-cdylib-orange?logo=rust)
+![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)
+![Game](https://img.shields.io/badge/game-Elden_Ring-8a6d3b)
 
-## Cấu hình
+</div>
 
-Mod **luôn bật**, không có công tắc; file `FasterRevival.ini` cạnh DLL (tự tạo nếu thiếu) chỉ có hai việc, và **đổi ini cần khởi động lại game** (không có hot reload):
+---
 
-- chế độ dò animation chết, ghi vết (anim ID, play time, độ dài) vào log để chẩn đoán;
-- ghi log.
+## Giới thiệu
 
-Tên key, giá trị mặc định và ý nghĩa nằm ở chú thích trong [`FasterRevival.ini`](FasterRevival.ini); file mẫu này được nhúng vào DLL nên là nguồn sự thật duy nhất, README không lặp lại để khỏi lệch.
+Khi chết, Elden Ring bắt bạn xem hết animation ngã, đợi màn "YOU DIED" hiện, rồi đợi
+thêm một khoảng dừng trước khi hồi sinh. FasterRevival cắt hai khoảng chờ đó, không
+sửa file animation (`.anibnd`, `.tae`) nên không xung đột với các mod animation khác.
 
-Mỗi lần chết luôn có các dòng log `Died`, `Killed early`, `Death registered by the game: +X ms`, `Respawned: X ms after HP hit 0`, nên so sánh thời gian không cần bật chế độ dò animation.
+| | Thời gian từ lúc hết máu đến khi hồi sinh |
+|---|---|
+| Vanilla | 12,2 - 14,4 giây |
+| Có mod | khoảng 4,2 - 4,7 giây |
+
+Mod **luôn bật**: cài vào là chạy, không có gì phải chỉnh.
 
 ## Cách hoạt động
 
 Hai việc độc lập, cộng lại ra mức tiết kiệm trên.
 
-- **Kéo mốc "chết" lên sớm (`src/death.rs`).** Game "giết" nhân vật bằng một
-  event TAE gần cuối animation chết, nên màn "YOU DIED" chỉ hiện sau khi animation
-  phát hết (~4-6s). Mod gọi trực tiếp hàm kill của game ngay khi HP về 0 và
-  animation chết bắt đầu. Hàm kill idempotent nên event TAE về sau thành no-op,
-  animation vẫn phát bình thường. Hàm được tìm bằng AOB (duy nhất trên cả
-  2.7.1.0 và 2.6.2.0, không phụ thuộc phiên bản). Chỉ kill khi animation đang
-  phát thuộc tập có event "Kill Character" (`a000_017xxx`, `070xxx`, `075003`,
-  `117xxx`, `000150`). Chi tiết: [docs/death_flow.md](docs/death_flow.md).
-- **Bỏ khoảng dừng sau "YOU DIED" (`src/fade.rs`).** Ghi 1 lần
-  `MenuCommonParam[0].soloPlayDeath_ToFadeOutTime = 0` (vanilla 3.8s) khi nhân
-  vật đã có trong thế giới; không cần patch code. Chi tiết:
-  [docs/respawn_fade.md](docs/respawn_fade.md).
-- **Khởi động:** `DllMain` tạo 1 thread, nạp/tạo ini, mở log, ghi phiên bản game
-  và danh sách DLL (`common::diag`), tìm hàm kill, chờ `CSTaskImp`, rồi đăng ký
-  task lặp trên `FrameBegin`. Không có `ReloadKey`: mod chạm vào game ít nhất có
-  thể.
+| Việc | Cách làm | Mã |
+|---|---|---|
+| **Kéo mốc "chết" lên sớm** | Game chỉ "giết" nhân vật bằng một sự kiện gần cuối animation chết, nên "YOU DIED" hiện muộn. Mod gọi thẳng hàm giết của game ngay khi HP về 0 và animation chết bắt đầu; animation vẫn phát bình thường. | [src/death.rs](src/death.rs) |
+| **Bỏ khoảng dừng sau "YOU DIED"** | Đặt thời gian chờ trước khi mờ màn hình (`soloPlayDeath_ToFadeOutTime`, mặc định 3,8 giây) về 0, một lần, khi nhân vật đã vào thế giới. Không cần patch code. | [src/fade.rs](src/fade.rs) |
+
+Hàm giết của game được tìm bằng AOB, chạy được trên 2.7.1.0 và 2.6.2.0. Mod chỉ giết
+khi animation đang phát là kiểu chết có sự kiện đó, nên không làm sai các kiểu chết khác.
+
+## Cấu hình
+
+`FasterRevival.ini` cạnh DLL (tự tạo ở lần chạy đầu) chỉ có hai việc: ghi log, và chế
+độ dò animation chết để chẩn đoán (ghi từng bước của animation vào log, mặc định tắt). Tên
+key và ý nghĩa nằm ở chú thích trong [FasterRevival.ini](FasterRevival.ini). Mod không có
+phím reload: đổi file thì khởi động lại game.
+
+Mỗi lần chết đều có dòng log ghi thời gian từ lúc hết máu đến khi game ghi nhận chết và
+đến khi hồi sinh, nên so sánh thời gian không cần bật chế độ dò.
 
 ## Giới hạn
 
-- Chỉ tác dụng với kiểu chết có animation chứa event "Kill Character" (chết
-  thường khi bị đánh, đòn tóm). **Rơi vực không đổi** vì game kill ngay frame
-  đầu.
-- **Chưa test khi đang cưỡi Torrent.**
-- Mod không kiểm tra một điều kiện nội bộ của game trước khi kill (nằm trong
-  vùng Arxan, chưa hiểu), nên có thể kill sai lúc trong trường hợp hiếm mà điều
+- Chỉ tác dụng với kiểu chết có animation chứa sự kiện đó (chết khi bị đánh, đòn tóm).
+  Rơi vực không đổi vì game giết ngay từ frame đầu.
+- Chưa kiểm tra khi đang cưỡi Torrent.
+- Mod không kiểm tra một điều kiện nội bộ của game trước khi giết (nằm trong vùng bảo
+  vệ chống can thiệp, chưa hiểu), nên có thể giết sai lúc trong trường hợp hiếm mà điều
   kiện đó từng chặn.
-- Không dời event "Send Ghost Info" của mod gốc: dùng mod DLL phải tắt EAC nên
-  không có bloodstain/ghost để gửi.
-- Nếu game cập nhật làm mất mẫu AOB của hàm kill, log ghi lỗi "game version not
-  supported" và phần kill sớm bị tắt (phần bỏ khoảng dừng vẫn chạy).
-- Chỉ dùng ở chế độ offline, tắt EAC.
+- Không dời sự kiện "Send Ghost Info" của mod gốc: dùng mod DLL phải tắt EAC nên không
+  có bloodstain hay ghost để gửi.
+- Nếu game cập nhật làm mất mẫu AOB của hàm giết, log ghi lỗi và phần giết sớm bị tắt;
+  phần bỏ khoảng dừng vẫn chạy.
 
 ## Nguồn ý tưởng
 
 - **FasterDeathAnimation** của 0-F ([Nexus 3367](https://www.nexusmods.com/eldenring/mods/3367),
   [GitHub](https://github.com/0-F/FasterDeathAnimation))
 - **FasterRespawn** của ImAxel0 ([Nexus 501](https://www.nexusmods.com/eldenring/mods/501),
-  [GitHub](https://github.com/ImAxel0/EldenRing-FasterRespawn-Mod)).
+  [GitHub](https://github.com/ImAxel0/EldenRing-FasterRespawn-Mod))
 
-## Tài liệu liên quan
+## Tài liệu
 
-- [CHANGELOG.md](CHANGELOG.md): ghi chú phát hành cho người dùng.
-- [HISTORY.md](HISTORY.md): dòng thời gian phát triển.
-- [docs/death_flow.md](docs/death_flow.md): luồng chết của game, điều kiện kích hoạt, kết quả test.
-- [docs/respawn_fade.md](docs/respawn_fade.md): khoảng dừng sau "YOU DIED".
-- [nexus_page.bbcode](nexus_page.bbcode): mô tả trang Nexus.
+| Tài liệu | Nội dung |
+|---|---|
+| [docs/death_flow.md](docs/death_flow.md) | Luồng chết của game, điều kiện kích hoạt, kết quả test |
+| [docs/respawn_fade.md](docs/respawn_fade.md) | Khoảng dừng sau "YOU DIED" |
+| [HISTORY.md](HISTORY.md) | Dòng thời gian thay đổi |
+| [CHANGELOG.md](CHANGELOG.md) | Ghi chú phát hành cho người dùng |

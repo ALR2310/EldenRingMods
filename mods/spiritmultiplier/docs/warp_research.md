@@ -46,3 +46,48 @@ Báo cáo Nexus, tái hiện được: bật Seamless + triệu hồi Mimic Tear
 ## Không phụ thuộc phiên bản game (2026-10-22)
 
 Warp tìm hàm của game bằng AOB và kiểm bố cục node (`layout_known`), nên không gắn với một bản game. Chỗ duy nhất gắn phiên bản là `WorldChrMan::chr_ins_by_handle` của `fromsoftware-rs`: nó ép kiểu chr qua `rva::get()` (chỉ có bảng cho 2.7.1.0), nên trên 2.7.2.0 Warp panic mỗi frame ngay khi có spirit. `resolvable` giờ gọi thẳng `get_chr_ins_by_handle` của ChrSet (vtable slot 3, không ép kiểu). Đã rà: SpiritMultiplier và `shared/` không còn gọi API nào của `eldenring` đi qua `rva::get()` (GameMan, GameDataMan, `ChrInsExt`, `as_subclass`...). Chưa test trên 2.7.2.0.
+
+## Ghi chú kỹ thuật chuyển từ code: `warp.rs` (2026-10-22)
+
+Nội dung này trước đây là doc đầu file `.rs`; chuyển sang đây nguyên văn (tiếng Anh) để doc code chỉ còn vài dòng.
+
+Spirit warp-to-player (experimental; analysis and results in
+`docs/warp_research.md`).
+
+The engine keeps `SummonBuddyManager.warp_manager`, a machine that
+teleports a spirit back to the player. It only fires when the spirit's
+line of sight to the player is blocked or the spirit is stuck - one that is
+merely far away runs after the player on foot. Three parts here:
+
+- `WarpDistance` / `WarpBlockedTime` / `WarpStuckTime` / `WarpStuckRange`
+  (0 = the game's own value, hot reload): written every second into the
+  manager's runtime copy of the `GameSystemCommonParam` `buddyWarp_*`
+  thresholds, so spirits warp back sooner. The game resets them on area
+  load, hence the periodic write; its value is remembered and put back
+  when a key goes to 0.
+- `WarpWhenFar` (hot reload): ten times a second, a spirit of the local player
+  that sits idle (stage 0) while one of the engine's own warp conditions
+  holds gets its stage set to 1 (RequestWarp), see [request_warps].
+- `WarpProbe` (diagnostics only): logs the manager's state when it changes.
+
+What IDA shows (2.7.1.0, `sub_1404C2890` = the warp manager's update;
+entries = an `std::map<FieldInsHandle, entry>` at `a1 + 8` (sentinel
+node); node: left +0, parent +8, right +16, isnil byte +25, key +32,
+stage byte +48, flags dword +96):
+- every frame `sub_1404C28D0` rebuilds the flag dword from zero: bit0 = a
+  flag from the chr, bit1 = the chr has no live group entry in
+  `SummonBuddyManager`, bit2 = the chr's `vtable[464]()->+192 ->+55752
+  ->+40 == 82`, bit3 = path-stuck time (node +132) > `a1+32`, bit4 = a ray
+  from the chr to the player is blocked (time accumulates in node +100),
+  bit5 = that time > `a1+24`, bit6 = squared distance to the player >=
+  `a1+28` squared, bit7 = some game state, bit8 = far for 1.5 s;
+- `sub_1404C2FD0` raises the stage from 0 to 1 (RequestWarp) when
+  (flags & 7) == 7 and one of: (bit3 and (bit4 or bit6)), bit5, or (bit7
+  and ...) - bit 2 is often 0, so spirits blocked for 5 s still stayed;
+- `sub_1404C3180` then moves stage 1 -> 2 (spawn point from
+  `sub_1404C0EC0`, chr teleported) -> 3 (fade in) -> 0.
+
+The node layout is hard-coded, so it is checked first: [layout_known]
+looks for the engine's own code that reads those offsets and, if it is not
+there (the game was updated), the entry features stay off. Every node is
+also checked to be readable before it is touched.

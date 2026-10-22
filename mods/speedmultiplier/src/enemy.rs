@@ -1,19 +1,11 @@
-//! `[Enemy] All` (2026-10-07): one speed for hostile enemies and bosses, by
-//! writing their `animation_speed` like the player's and Torrent's. See
-//! `docs/enemy_speed.md`.
-//!
-//! Which characters count: `chr_type` Npc or Unk7 = boss (not the player, nor
-//! other players' phantoms) whose `team_type` isn't one of the friendly / neutral / summon
-//! teams below, and whose `NpcParam.threatLv` is above 0 (it is 0 for
-//! scarabs, deer, goats, birds, wandering nobles, dummies...). `threatLv`
-//! is a param column, not a `ChrIns` field, so the id -> threat table is
-//! built once from the param rows (by row index, not the lookup table - see
-//! `common::params`).
+//! `[Enemy] All`: one speed for hostile enemies and bosses, by writing their
+//! `animation_speed` like the player's and Torrent's. Which characters count
+//! (type, team, `NpcParam.threatLv > 0`) and why: `docs/enemy_speed.md`.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use eldenring::cs::{ChrIns, ChrLoadStatus, ChrType, NpcParam, SoloParamRepository, WorldChrMan};
+use eldenring::cs::{ChrIns, ChrType, NpcParam, SoloParamRepository, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
 use common::logger;
@@ -34,7 +26,7 @@ fn build_threat_table() -> HashMap<i32, u32> {
         return HashMap::new();
     };
     let Some(ids) = common::params::row_ids::<NpcParam>(repo) else {
-        logger::warn("Enemy: couldn't read the NpcParam row ids, enemy speed is off.");
+        logger::warn("Enemy: couldn't read the NpcParam row ids, enemy speed is off");
         return HashMap::new();
     };
     let mut table = HashMap::with_capacity(ids.len());
@@ -43,7 +35,7 @@ fn build_threat_table() -> HashMap<i32, u32> {
             table.insert(id as i32, row.threat_lv());
         }
     }
-    logger::log(&format!("Enemy: read the threat level of {} NpcParam rows.", table.len()));
+    logger::log(&format!("Enemy: threat level of {} NpcParam rows", table.len()));
     table
 }
 
@@ -60,24 +52,10 @@ fn is_enemy(chr: &ChrIns, threat: &HashMap<i32, u32>) -> bool {
         && threat.get(&chr.npc_param_id).is_some_and(|&level| level > 0)
 }
 
-/// `f(chr)` for every active character in `WorldChrMan::chr_sets`. Only
-/// `Active` / `ReadyForActivation` entries are dereferenced (anything else
-/// can be stale, see spiritmultiplier's `regen.rs`).
+/// `f(chr)` for every active character in `WorldChrMan::chr_sets`.
 pub fn for_each_active(world_chr_man: &WorldChrMan, mut f: impl FnMut(&mut ChrIns)) {
     for set in world_chr_man.chr_sets.iter().flatten() {
-        for slot in 0..set.capacity {
-            let entry = unsafe { set.entries.add(slot as usize).as_ref() };
-            let Some(mut chr) = entry.chr_ins else {
-                continue;
-            };
-            if !matches!(
-                entry.chr_load_status,
-                ChrLoadStatus::Active | ChrLoadStatus::ReadyForActivation
-            ) {
-                continue;
-            }
-            f(unsafe { chr.as_mut() });
-        }
+        common::player::for_each_active_chr(set, &mut f);
     }
 }
 
@@ -105,4 +83,24 @@ pub fn apply(world_chr_man: &WorldChrMan, speed: f32, sped: &mut Vec<usize>) {
         }
     });
     *sped = seen;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_npcs_and_bosses_can_be_enemies() {
+        assert!(is_enemy_type(ChrType::Npc));
+        assert!(is_enemy_type(ChrType::Unk7)); // bosses
+        assert!(!is_enemy_type(ChrType::Local)); // the player
+    }
+
+    #[test]
+    fn friendly_and_summon_teams_are_not_enemies() {
+        assert!(NOT_ENEMY_TEAMS.contains(&10)); // Torrent
+        assert!(NOT_ENEMY_TEAMS.contains(&47)); // spirit summon
+        assert!(!NOT_ENEMY_TEAMS.contains(&6)); // a hostile team
+        assert!(NOT_ENEMY_TEAMS.windows(2).all(|w| w[0] < w[1]), "keep the list sorted and unique");
+    }
 }

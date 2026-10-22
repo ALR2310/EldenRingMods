@@ -1,12 +1,8 @@
-//! In-game menu (Dear ImGui drawn over the game's own DX12 frames via
-//! hudhook - the same stack SoulsChat uses) listing co-op partners; clicking
-//! one teleports there.
-//!
-//! Threading: [MenuRenderLoop] runs on the game's render thread (inside the
-//! hooked `Present`); everything touching the session, Steam and the warp
-//! stays on the game task in `warp.rs`. The two only share [SHARED] (a
-//! snapshot the task refreshes while the menu is open, plus status text) and
-//! [REQUEST] (the partner the player clicked, picked up by the task).
+//! In-game menu (Dear ImGui over the game's DX12 frames via hudhook) listing
+//! co-op partners; clicking one teleports there. The menu runs on the render
+//! thread and only shares [SHARED] (a snapshot plus status text) and
+//! [REQUEST] (the partner clicked) with the game task in `warp.rs`. Details:
+//! `docs/menu_ui.md`.
 
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -433,18 +429,16 @@ impl ImguiRenderLoop for MenuRenderLoop {
             self.layout_seen = Some(now);
         }
         let mouse_held = self.buttons_down[0];
-        if !mouse_held {
-            if let Some(seen) = self.layout_seen {
-                let changed = self.layout_saved.is_none_or(|(p, s)| {
-                    (p[0] - seen.0[0]).abs() >= 1.0
-                        || (p[1] - seen.0[1]).abs() >= 1.0
-                        || (s[0] - seen.1[0]).abs() >= 1.0
-                        || (s[1] - seen.1[1]).abs() >= 1.0
-                });
-                if changed {
-                    save_layout(seen.0, seen.1);
-                    self.layout_saved = Some(seen);
-                }
+        if !mouse_held && let Some(seen) = self.layout_seen {
+            let changed = self.layout_saved.is_none_or(|(p, s)| {
+                (p[0] - seen.0[0]).abs() >= 1.0
+                    || (p[1] - seen.0[1]).abs() >= 1.0
+                    || (s[0] - seen.1[0]).abs() >= 1.0
+                    || (s[1] - seen.1[1]).abs() >= 1.0
+            });
+            if changed {
+                save_layout(seen.0, seen.1);
+                self.layout_saved = Some(seen);
             }
         }
 

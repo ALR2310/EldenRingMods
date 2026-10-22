@@ -23,3 +23,4 @@ sử git của `README.md`.
 | 2026-10-16 | Mặc định `BlackFlame.Duration` và `DestinedDeath.Duration` đổi từ -1 (mãi) thành 10 giây vì cháy mãi quá mạnh; trang Nexus nói lại cho đúng | [docs](docs/black_flame.md) |
 | 2026-10-16 | Log gọn lại theo kiểu ngắn, kỹ thuật cho dev: bỏ dòng lặp ý, địa chỉ patch, câu dài; chỉ ghi 1 lần khi chờ thế giới | |
 | 2026-10-19 | Sửa lỗi phím reload lọt ra ngoài game: `common::reload` đọc bằng `common::input` (`GetAsyncKeyState`, chỉ nhận phím khi cửa sổ game có focus) thay cho `GetKeyState` của `eldenring`, và antivirus gắn ít cờ hơn (RuneMultiplier 6 xuống 2 cờ trên VirusTotal); chưa test phím reload trong game | [docs](../../shared/docs/reload.md) |
+| 2026-10-22 | Dọn mã: `Ailment` dùng `Target` (chữ ký hoặc danh sách ID) thay cho `Option` rải rác, 5 ailment gộp vào `AILMENTS`, `scan` tách khỏi `apply`, test mặc định trong code khớp ini; doc đầu file chuyển sang `docs/`, log gọn lại | [docs](docs/row_discovery.md) |

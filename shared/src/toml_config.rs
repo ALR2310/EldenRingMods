@@ -10,6 +10,7 @@
 use std::fs;
 use std::sync::{Arc, RwLock};
 
+use crate::logger;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use toml_edit::{DocumentMut, Item, Table};
@@ -55,6 +56,35 @@ pub struct LoadReport {
     pub unknown: Vec<String>,
     /// Parse error - the mod is running on the template's values.
     pub error: Option<String>,
+}
+
+impl LoadReport {
+    /// Logs what loading `file` did, one short line each; call it once the
+    /// logger is up. Nothing is logged for a file that loaded unchanged.
+    pub fn log(&self, file: &str) {
+        if self.created {
+            logger::log(&format!("{file}: created"));
+        }
+        if self.added_keys > 0 {
+            logger::log(&format!("{file}: added {} key(s) from the template", self.added_keys));
+        }
+        if let Some((from, to)) = self.migrated {
+            logger::log(&format!("{file}: migrated format v{from} -> v{to}"));
+        }
+        if let Some((found, supported)) = self.newer {
+            logger::warn(&format!("{file}: newer format v{found} (supported v{supported}), left as is"));
+        }
+        if !self.unknown.is_empty() {
+            logger::warn(&format!(
+                "{file}: {} unused key(s) moved to comments ({})",
+                self.unknown.len(),
+                self.unknown.join(", ")
+            ));
+        }
+        if let Some(err) = &self.error {
+            logger::error(&format!("{file}: parse failed, using defaults\n{err}"));
+        }
+    }
 }
 
 impl<T> TomlConfig<T>

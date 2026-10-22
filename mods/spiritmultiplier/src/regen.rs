@@ -1,25 +1,14 @@
 //! `RegenMode` / `RegenValue` (hot reload): every second, heals every
-//! character in `WorldChrMan::summon_buddy_chr_set` - spirit ashes and
-//! Torrent (user's choice, 2026-09-29). `RegenValue` 0 = off. Modes (2026-10-09):
-//!
-//! - 1: `RegenValue` HP per second (flat);
-//! - 2 (default): `RegenValue` percent of the character's max HP;
-//! - 3: `RegenValue` percent of the HP it is missing (heals fast when badly
-//!   hurt, slowly when nearly full).
-//!
-//! The first version had a single `Regen` key (percent of max HP, mode 2);
-//! it is carried over to `RegenValue` when the ini is updated.
-//!
-//! Same technique as `sometweaks`'s `spirit/regen.rs`, kept as a separate
-//! copy here rather than moved to `common` at the user's request
-//! (2026-09-29). One difference: only `Active` / `ReadyForActivation`
-//! entries are dereferenced (a `ChrIns` behind any other load status can be
-//! stale - see `enemy_probe.rs`'s crashes), where `regen.rs` walks
-//! `characters()`, which reads every occupied entry.
+//! character in `WorldChrMan::summon_buddy_chr_set` (spirit ashes and Torrent).
+//! `RegenValue` 0 = off. Modes: 1 = `RegenValue` HP per second; 2 (default) =
+//! `RegenValue` percent of max HP; 3 = percent of the HP it is missing (fast when
+//! badly hurt, slow when nearly full). The old single `Regen` key is carried over
+//! to `RegenValue` when the ini is updated. Only `Active` / `ReadyForActivation`
+//! entries are touched (any other `ChrIns` can be stale).
 
 use std::time::Duration;
 
-use eldenring::cs::{CSTaskGroupIndex, ChrLoadStatus, WorldChrMan};
+use eldenring::cs::{CSTaskGroupIndex, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
 use common::config;
@@ -70,22 +59,12 @@ fn heal_summons(mode: Mode, value: f64) {
     let Ok(world_chr_man) = (unsafe { WorldChrMan::instance_mut() }) else {
         return;
     };
-    let chr_set = &world_chr_man.summon_buddy_chr_set;
-    for slot in 0..chr_set.capacity {
-        let entry = unsafe { chr_set.entries.add(slot as usize).as_ref() };
-        let Some(mut chr) = entry.chr_ins else { continue };
-        if !matches!(
-            entry.chr_load_status,
-            ChrLoadStatus::Active | ChrLoadStatus::ReadyForActivation
-        ) {
-            continue;
+    common::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| {
+        let data = &mut chr.modules.data;
+        if data.hp > 0 {
+            data.hp += heal_amount(mode, value, data.hp, data.max_hp);
         }
-        let data = &mut unsafe { chr.as_mut() }.modules.data;
-        if data.hp <= 0 {
-            continue;
-        }
-        data.hp += heal_amount(mode, value, data.hp, data.max_hp);
-    }
+    });
 }
 
 pub fn run() {

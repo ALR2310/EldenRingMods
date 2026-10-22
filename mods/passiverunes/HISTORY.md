@@ -27,3 +27,4 @@ sử git của `README.md`.
 | 2026-10-15 | Chữ của menu trong game chuyển sang hệ đa ngôn ngữ (`locales/en.json`, `vi.json`): hiện tiếng Việt khi game chạy tiếng Việt, ngôn ngữ khác dùng tiếng Anh | [docs](../../shared/docs/i18n.md) |
 | 2026-10-19 | Sửa lỗi phím reload lọt ra ngoài game: `common::reload` đọc bằng `common::input` (`GetAsyncKeyState`, chỉ nhận phím khi cửa sổ game có focus) thay cho `GetKeyState` của `eldenring`, và antivirus gắn ít cờ hơn (RuneMultiplier 6 xuống 2 cờ trên VirusTotal); chưa test phím reload trong game | [docs](../../shared/docs/reload.md) |
 | 2026-10-22 | Log gọn lại theo kiểu ngắn, kỹ thuật cho dev: bỏ dòng lặp ý, địa chỉ patch, câu dài | |
+| 2026-10-22 | Dọn mã: công thức và đồng hồ (mốc, chu kỳ, lãi kép) tách sang `math.rs` thành hàm thuần có test, `rune.rs` còn vòng tick, doc đầu file chuyển sang `docs/`, log gọn lại | |

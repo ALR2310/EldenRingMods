@@ -5,23 +5,20 @@ mod menu;
 mod weapon;
 
 use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use eldenring::cs::{CSTaskGroupIndex, SoloParamRepository};
 use fromsoftware_shared::FromStatic;
 
 use common::{config, dll_dir, logger};
 
-// RiseArcher.ini is embedded verbatim into the binary at compile time via
-// include_str! - no resource compiler step needed. This is the single
-// source of truth for the default config: edit RiseArcher.ini, rebuild,
-// done.
+// The default config, embedded verbatim: the single source of truth for keys
+// and defaults.
 const DEFAULT_INI: &str = include_str!("../RiseArcher.ini");
 
 /// # Safety
 /// This is exposed this way so the library loader can call it. Do not call it
-/// yourself. Mirrors the entry point shape used across fromsoftware-rs's own
-/// examples (e.g. examples/apply-speffect).
+/// yourself.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     const DLL_PROCESS_ATTACH: u32 = 1;
@@ -32,23 +29,18 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
         let ini_path = format!("{dir}\\RiseArcher.ini");
-        let migrated = config::load_or_create_default(&ini_path, DEFAULT_INI);
+        let added_keys = config::load_or_create_default(&ini_path, DEFAULT_INI);
 
-        // [Logging] LogFile gates the log file entirely - see common::logger.
+        // `LogFile` gates the log file entirely, see common::logger.
         logger::init(&dir, "RiseArcher.log");
         logger::install_panic_hook();
-        logger::log("Activating RiseArcher...");
-        if migrated > 0 {
-            logger::log(&format!(
-                "RiseArcher.ini updated: added {migrated} new key(s) from a newer default template."
-            ));
+        if added_keys > 0 {
+            logger::log(&format!("RiseArcher.ini: added {added_keys} key(s) from the template"));
         }
 
-        // `common::reload` owns General.ReloadKey watching for the whole DLL
-        // (see its module doc comment for why only one module may poll the
-        // same key) - `run` below only polls `RELOAD_GENERATION`.
-        // The menu registers right away (the host only accepts registrations
-        // at startup); its changes reach `run` through the same generation.
+        // The menu registers right away (the host only accepts menu
+        // registrations at startup); its changes reach `run` through
+        // `RELOAD_GENERATION`, which `common::reload` bumps (it owns the reload key).
         menu::start(hmodule, ini_path.clone());
         std::thread::spawn(move || common::reload::run(ini_path));
 
@@ -59,33 +51,20 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     true
 }
 
-/// Waits for the player to actually be in the game world (see
-/// `common::player::wait_for_solo_param_repository` for why that, not just
-/// `SoloParamRepository::instance_mut()`, is the right gate), applies every
-/// weapon/bullet buff, then watches `common::reload::RELOAD_GENERATION` for the rest
-/// of the DLL's lifetime, reapplying from each row's cached original values
-/// (see `weapon::Baseline`/`bullet::Baseline`) on every `ReloadKey` press.
-///
-/// Unlike `autoregen`, this doesn't need to run on the game's own frame
-/// scheduler for the buff itself: regulation param rows are loaded once at
-/// startup and never reloaded mid-session, so a single edit right after they
-/// become available is all a normal run ever needs. The per-frame task below
-/// exists only to detect the reload hotkey, same as every other
-/// hot-reloadable feature in `sometweaks` (2026-09-08).
+/// Waits for the player to be in the world, applies every buff, then follows
+/// `RELOAD_GENERATION` for the rest of the DLL's life, reapplying from the
+/// cached original values. Regulation rows are loaded once at startup, so the
+/// buff itself needs no per-frame task; the one below only notices reloads.
 fn run() {
     let mut last_seen_generation = common::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
 
     let repo = common::player::wait_for_solo_param_repository();
 
     let Some((weapon_changed, bullet_changed)) = apply_with_retry(repo, Duration::from_secs(30)) else {
-        logger::error(
-            "apply kept panicking for 30s, disabled for this session",
-        );
+        logger::error("Apply: kept panicking for 30s, disabled for this session");
         return;
     };
-    logger::log(&format!(
-        "Applied: {weapon_changed} weapon, {bullet_changed} bullet row(s)"
-    ));
+    logger::log(&format!("Applied: {weapon_changed} weapon, {bullet_changed} bullet row(s)"));
 
     let cs_task = common::task::wait_for_cs_task();
     let _handle = common::task::run_recurring_safe(
@@ -106,9 +85,7 @@ fn run() {
             };
             let weapon_changed = weapon::apply(repo);
             let bullet_changed = bullet::apply(repo);
-            logger::log(&format!(
-                "Reload: {weapon_changed} weapon, {bullet_changed} bullet row(s)"
-            ));
+            logger::log(&format!("Reload: {weapon_changed} weapon, {bullet_changed} bullet row(s)"));
         },
     );
 
@@ -117,27 +94,20 @@ fn run() {
     }
 }
 
-/// Runs `weapon::apply`/`bullet::apply`, retrying (up to `timeout`) if either
-/// panics - see `run`'s doc comment for why they can: a param whose res_cap
-/// hasn't finished loading yet panics rather than returning an `Err`, so this
-/// is the only way to ride out that window instead of just crashing this
-/// thread once. Safe to retry: a panic here always happens before any row is
-/// actually mutated for that attempt (see `weapon::ORIGINALS`/
-/// `bullet::ORIGINALS`'s own doc comments for the accompanying mutex-poison
-/// recovery this relies on).
+/// Runs both `apply`s, retrying for up to `timeout` if either panics: a param
+/// whose res cap hasn't finished loading panics instead of returning an
+/// `Err`. A panic happens before any row is mutated, so a retry is safe.
 fn apply_with_retry(repo: &mut SoloParamRepository, timeout: Duration) -> Option<(usize, usize)> {
-    let step = Duration::from_millis(200);
-    let mut waited = Duration::ZERO;
+    let deadline = Instant::now() + timeout;
     loop {
         let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (weapon::apply(repo), bullet::apply(repo))));
         match attempt {
             Ok(counts) => return Some(counts),
-            Err(_) => logger::warn("apply panicked, retrying"),
+            Err(_) => logger::warn("Apply: panicked, retrying"),
         }
-        if waited >= timeout {
+        if Instant::now() >= deadline {
             return None;
         }
-        std::thread::sleep(step);
-        waited += step;
+        std::thread::sleep(Duration::from_millis(200));
     }
 }

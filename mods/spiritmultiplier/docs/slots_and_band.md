@@ -41,3 +41,128 @@
 
 - Xung đột: hook "buddy slot-reserve" của Solid Uncapper (`0x1404933A9`) nằm trong đúng `sub_140493380` → không dùng chung khi họ bật Max Spirits Out / Multi Spirit.
 - [activate_limit.md](activate_limit.md): vì sao 60 spirit làm kẻ địch biến mất.
+
+## Ghi chú kỹ thuật chuyển từ code: `band.rs` (2026-10-22)
+
+Nội dung này trước đây là doc đầu file `.rs`; chuyển sang đây nguyên văn (tiếng Anh) để doc code chỉ còn vài dòng.
+
+Widens the local player's spirit-summon "band" in
+`WorldChrMan.summon_buddy_chr_set` from the engine's hard-coded 10
+slots to `MaxSpirits` ([band_len]) - the real reason no amount of chain lengthening
+(`chain.rs`, `sometweaks`'s `summon_count.rs`, `er10x.dll`) could ever
+spawn more than 10 spirits.
+
+Found in IDA on `eldenring.exe` 2.7.1.0 (2026-09-25), confirmed by
+`probe.rs`'s in-game slot log (see README):
+
+- `sub_140493380(chr_set, player_index, spawn_info, cursor)` - the
+  summon ChrSet's "spawn into my band" function, called once per spirit
+  from the SummonBuddyManager spawn routine (`sub_1404BAEA0`, which
+  passes the local player's session index, `< 6`, and
+  `SummonBuddyManager::last_buddy_slot` as `cursor`):
+  ```text
+  band_start = 10 * (player_index + 2)   // player 0 -> slot 20
+  cursor %= 10
+  for i in 0..10 { slot = band_start + (cursor + i) wrapped to 10;
+                   if entries[slot] is empty -> spawn there }
+  return null                             // band full - spirit dropped
+  ```
+  The ChrSet's capacity is 80 = 20 + 6 bands * 10, so offline (player 0
+  alone) slots 30..79 are never used by anything.
+- `sub_140493D60(spawned_chr)` - the next cursor:
+  `(slot_of(spawned_chr) - 20 + 1) % 10`.
+
+Patches:
+1. [BAND_ALLOC_AOB]: the slot-search loop (everything from computing
+   `band_start` up to the "band full" exit) is replaced by a stub that
+   does the same search over the band [band_layout] gives the calling
+   player index, bounds-checked against the ChrSet's own `capacity`. Exits exactly where vanilla does: "found" jumps to
+   the original spawn code with `rbx` = entry, `edi` = slot index; "not
+   found" falls through to the original `mov rax, r15` (null) return.
+2. [NEXT_CURSOR_AOB]: the next-cursor computation stops wrapping
+   (`(slot - 20 + 1) % 10` -> `slot - 20 + 1`): it has no idea which
+   player's band `slot` is in, so patch 1 turns that absolute value
+   back into a position inside the caller's own band instead. (First
+   version did `% band_len` here, which is only right for a band that
+   starts at slot 20 - partners' spirits ended up scattered across
+   their band, Seamless test 2026-09-26.)
+
+3. [CAPACITY_INIT_AOB] (only when `MaxSpirits > 60`): the summon
+   ChrSet's own init (`sub_1404954B0`) allocates a fixed 80-entry array
+   (`alloc(0x500)`, `capacity = 0x50`, `memset(.., 0x500)`) - those
+   three imm32s are raised to `20 + MaxSpirits` so the game builds a
+   bigger array itself, instead of this mod reallocating a live one.
+   Must run before the world is created (the DLL loads at process
+   start); if it ran too late the array just stays at 80, and patch 1's
+   `slot < capacity` check keeps everything in bounds regardless. Slot
+   indices are encoded in FieldInsHandles with a 20-bit mask
+   (`0xFFFFF`), so large capacities are representable.
+
+Player index 0 is the host (and the only player offline). Co-op
+partners (index 1..5) get bands of their own, laid out by [band_layout]
+from the ChrSet's real capacity so they never overlap player 0's - a
+remote spirit is created on every machine at its OWNER's slot number
+(`sub_140493210`, which also does no bounds check), so bands must not
+overlap across players. With vanilla's 80-slot capacity that layout
+collapses to exactly vanilla's 10-slot bands; with Seamless Co-op's
+1000 (observed 2026-09-25) every player gets up to 163. Limits: a
+partner WITHOUT this mod still uses vanilla's 30..79 bands, which do
+overlap player 0's widened band; and all machines are assumed to share
+the same capacity (true under Seamless, which sets it on everyone).
+
+## Ghi chú kỹ thuật chuyển từ code: `chain.rs` (2026-10-22)
+
+Nội dung này trước đây là doc đầu file `.rs`; chuyển sang đây nguyên văn (tiếng Anh) để doc code chỉ còn vài dòng.
+
+Lengthens every Ash's SpEffect -> BuddyParam chain so one cast asks for
+more spirits - the other half of this mod, next to `band.rs` (which
+makes room for them).
+
+Same technique as `sometweaks`'s `spirit/summon_count.rs` (itself
+ported from `x10_summon/er10x.dll`'s "chain rebuild"), kept as a
+separate copy here rather than moved to `common` at the user's request
+(2026-09-25). The only behavioral difference is the cap:
+[crate::band::band_len] (`MaxSpirits`) instead of 10. See `summon_count.rs`'s module
+doc comment for the full reasoning; in short:
+
+- `WorldChrMan.summon_buddy_manager.trigger_speffect_to_buddy_map` maps
+  an Ash's summon SpEffect to a linked chain of BuddyParam IDs, one per
+  creature. The game's own head node is left untouched; only its `next`
+  is redirected to a `Box::leak`'d extension that cycles through the
+  original IDs (never freed - the game may still hold the old chain).
+- Original chains are snapshotted once per SpEffect ID and every rebuild
+  is computed from that snapshot, never from the (possibly already
+  rebuilt) current chain - otherwise `Multiplier` compounds every tick
+  (the bug `summon_count.rs` hit on 2026-08-26).
+- Re-checked on a periodic tick (cheap and idempotent), which also
+  picks up ini changes after a hot reload.
+
+## Ghi chú kỹ thuật chuyển từ code: `probe.rs` (2026-10-22)
+
+Nội dung này trước đây là doc đầu file `.rs`; chuyển sang đây nguyên văn (tiếng Anh) để doc code chỉ còn vài dòng.
+
+Debug-only (`SlotProbe`, off by default) diagnostics that located the
+10-spirit cap (see `band.rs`) - no gameplay
+change at all, only logging.
+
+`sometweaks`'s `spirit::summon_count` (and `x10_summon/er10x.dll`
+before it) can lengthen an Ash's SpEffect -> BuddyParam chain freely, but
+the engine only ever spawns 10: per `er10x.ini`, each player gets a fixed
+"band" of 10 slots inside `WorldChrMan.summon_buddy_chr_set`, whose start
+and length are engine constants. Before deciding between widening that
+band inside the ChrSet's existing capacity or reallocating the ChrSet's
+`entries` array outright, we need two facts this module logs:
+
+1. The ChrSet's real capacity (both the `capacity` field and the vtable's
+   own `get_capacity()`, in case they disagree) - logged once, the first
+   time the player is in the world.
+2. Which slot indices summoned spirits (and Torrent) actually land in -
+   logged every time the occupied-slot layout changes, so summoning a
+   multi-creature Ash shows where the local player's band starts.
+
+Also logs the SpEffect -> BuddyParam chain-length histogram once (how
+many vanilla Ashes summon 1, 2, 3... creatures), plus a few
+`SummonBuddyManager` fields that look slot-related (`last_buddy_slot`,
+`active_summon_speffect_id`) alongside each layout change.
+
+The player SpEffect log is in `effect_probe.rs` (`EffectProbe`).

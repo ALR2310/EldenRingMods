@@ -1,24 +1,8 @@
-//! "Warp to an exact position, with a loading screen" - used to land right
-//! next to a co-op partner picked in the menu (see `ui`, `net`, README).
-//!
-//! Reuses the game's own sequence, found by static analysis of eldenring.exe
-//! 2.7.1.0 (the game calls it when a multiplayer session ends, to put you back
-//! where you stood - sub_1405F36E0/sub_1405F34A0):
-//! 1. `RequestMoveMap` (sub_14067BA20) - writes `GameMan.move_map_target`,
-//!    normalizing overworld (area 50..88) block ids the way the engine expects.
-//! 2. `SetCustomSpawn` (sub_14067B970) - writes `GameMan+0xC90` (block-local
-//!    position, w = 1.0), `+0xCA0` (orientation) and sets the `+0xCB0` flag the
-//!    post-load spawn resolver (sub_140AFE280) checks before falling back to
-//!    region/grace spawn points.
-//! 3. `GameMan.warp_requested = true` - done directly rather than through the
-//!    game's own trigger (sub_1405F89C0), which also calls into the session
-//!    manager when online and might drop a Seamless Co-op session.
-//!
-//! No version lock: both functions are found by AOB (same unique pattern in
-//! exe 2.6.2.0, 2.7.0.0 and 2.7.1.0), and the `GameMan` static itself is read
-//! off `SetCustomSpawn`'s own `mov rax, [rip+disp32]` - fromsoftware-rs's
-//! `GameMan::instance()` goes through its version-gated RVA table and panics
-//! on any exe it has no table for (it did, on 2.7.0.0).
+//! "Warp to an exact position, with a loading screen", used to land next to
+//! a co-op partner picked in the menu. It replays the game's own sequence
+//! (`RequestMoveMap`, `SetCustomSpawn`, then `GameMan.warp_requested`), both
+//! functions found by AOB, so there is no version lock. The sequence and why
+//! it avoids the game's own trigger: `docs/warp_mechanism.md`.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
@@ -26,12 +10,8 @@ use std::time::{Duration, Instant};
 use eldenring::cs::CSTaskGroupIndex;
 use eldenring::fd4::FD4TaskData;
 
-// `common::input`, not fromsoftware-rs's `eldenring::util::input`: that one
-// uses `GetKeyState`, which called from the game's task thread (no input
-// queue of its own) reflects the whole desktop's key state - co-op test 4
-// (2026-09-24): one hotkey press in 1 window made BOTH game instances warp.
-// `common::input::is_key_pressed` checks that this process owns the
-// foreground window before even polling.
+// `common::input`, not `eldenring::util::input` (`GetKeyState` reflects the whole
+// desktop: one hotkey press made BOTH game instances warp, `shared/docs/input.md`).
 use common::input::{self, parse_virtual_key};
 use common::{config, logger, memscan};
 
@@ -47,11 +27,11 @@ const MENU_REFRESH_EVERY: Duration = Duration::from_millis(500);
 // ~10s at 60fps - Steam is up long before the player can reach the world.
 const STEAM_LOAD_ATTEMPTS: u32 = 600;
 
-// sub_14067BA20 in 2.7.1.0. The `cmp byte [rcx+0xB28], 0` tail pins the
-// GameMan field layout the function (and the offsets below) assume.
+// `RequestMoveMap`. The `cmp byte [rcx+0xB28], 0` tail pins the GameMan field
+// layout the offsets below assume.
 const AOB_REQUEST_MOVE_MAP: &str =
     "40 53 48 83 EC 20 8B 02 48 8B D9 89 01 48 8B 0D ?? ?? ?? ?? 80 B9 28 0B 00 00 00";
-// sub_14067B970 in 2.7.1.0 - writes +0xC90 / +0xCA0 and sets the +0xCB0 flag.
+// `SetCustomSpawn`: writes +0xC90 / +0xCA0 and sets the +0xCB0 flag.
 const AOB_SET_CUSTOM_SPAWN: &str = "0F 28 01 48 8B 05 ?? ?? ?? ?? 0F 11 80 90 0C 00 00 \
      0F 28 02 0F 11 80 A0 0C 00 00 C6 80 B0 0C 00 00 01";
 // Offset of `mov rax, [rip+disp32]`'s disp32 within AOB_SET_CUSTOM_SPAWN, and
@@ -234,7 +214,7 @@ pub fn run() {
         logger::error("Warp: AOB not found, disabled (game update?)");
         return;
     };
-    logger::log("Warp: AOB found");
+    logger::log("Warp: ready");
     GAME_MAN_STATIC.store(fns.game_man_static as usize, Ordering::Relaxed);
 
     let cs_task = common::task::wait_for_cs_task();

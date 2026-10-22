@@ -1,11 +1,7 @@
 //! Minimal binding to Steam's `ISteamNetworkingMessages`, resolved at runtime
-//! from the `steam_api64.dll` the game itself already loaded and initialized
-//! (flat C API exports, so no Steamworks SDK / crate dependency).
-//!
-//! Used to sync each player's own position to the rest of the session: a
-//! Seamless Co-op test (2026-09-24, see README) showed a far-away partner's
-//! position is simply not available locally (havok position drops to 0,
-//! `PlayerIns` block/position are never filled in for non-main players).
+//! from the `steam_api64.dll` the game already loaded (flat C exports, so no
+//! Steamworks SDK dependency). Used for the position exchange
+//! (`docs/position_exchange.md`).
 
 use std::ffi::c_void;
 

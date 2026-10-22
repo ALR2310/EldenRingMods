@@ -54,3 +54,48 @@ Ba key ini bật/tắt (hot reload bằng F5) nạp sẵn các field của Age o
 - `ImproveFollow`: quay về chỗ chủ khi xa hơn ~30 m (gốc 9999), quyền đi thang / hố / tường navmesh / mép vực. Bỏ Lava có chủ ý.
 
 Mỗi mục có chế độ: `Max` chỉ nâng giá trị gốc lên, `Min` chỉ hạ xuống, `Set` luôn ghi, để không làm hỏng các mod đã chỉnh sẵn các field này (vd. Age of Spirit đặt giá trị riêng cho healer). Các bộ được ghi trước, `SpiritThinkParam.ini` / `SpiritParam.ini` ghi sau nên thắng. Không đưa vào bộ: `isBuddyAI`, `disableDark` (gốc đã là 1), `enableNaviFlg_Lava`, nhóm `goalAction_*` (người dùng quyết định bỏ), `fallDamageDump` (không có tác dụng).
+
+## Ghi chú kỹ thuật chuyển từ code: `think_override.rs` (2026-10-22)
+
+Nội dung này trước đây là doc đầu file `.rs`; chuyển sang đây nguyên văn (tiếng Anh) để doc code chỉ còn vài dòng.
+
+Spirit AI tweaks, on the `NpcThinkParam` rows spirits use (the AI:
+aggressiveness, sight, battle start distance, ...). Hot reload, no F5 for
+the files below:
+
+- `ImproveSenses` / `ImproveAggression` / `ImproveFollow` (ini keys,
+  default `true`): built-in bundles of those fields, see [SENSES],
+  [AGGRESSION] and [FOLLOW]. Values were taken from the Age of Spirit
+  mod's regulation (its spirits notice enemies from farther away, engage
+  together and keep up with the player) and tried in game 2026-10-09.
+- `SpiritThinkParam.ini` and `SpiritParam.ini` (optional, experimental):
+  set any scalar field / bit flag of the `NpcThinkParam` / `NpcParam` rows
+  spirits use, so tweaks can be tried in-game without rebuilding the DLL.
+  They are written after the bundles and win over them.
+
+The files live next to the DLL, are never created and are only read if they exist. One
+`Name=value` per line, `;`/`#` comments. `Name` is the
+field name as in Smithbox's parentheses (`TeamAttackEffectivity`,
+`BattleStartDist`, `isGuard_Act`) or the Rust one
+(`team_attack_effectivity`) - case and underscores are ignored when
+matching. The file is checked once a second; saving it re-applies it.
+Spirits already out keep the old values: re-summon them.
+
+Which rows: every `npcThinkParamId` / `npcThinkParamId_ridden` of
+`BuddyParam` (the rows a spirit spawns with). Rows are addressed by index
+(`common::params`), never through the runtime lookup table.
+
+`SpiritParam.ini` (NpcParam: fields as in Smithbox, e.g. `fallDamageDump`)
+hits the `NpcParam` rows of the same spirits (`npcParamId` /
+`npcParamId_ridden`). In `SpiritThinkParam.ini` a `[Row id, ...]` section
+applies to the listed `NpcThinkParam` row IDs only; any other section header
+goes back to the global lines. Same snapshot / restore logic for both.
+
+The first time it runs, each target row's bytes are saved; every later
+apply starts from that snapshot and writes the listed fields, so a line
+removed from the file goes back to the game's value (same baseline
+pattern as `ghost_color.rs`).
+
+The field table in `think_fields.rs` was generated from
+`NPC_THINK_PARAM_ST` (fromsoftware-rs): scalar fields and single-bit flags
+(`enableNaviFlg_*`, `isNoAvoidHugeEnemy`, ...; value 0 or 1).

@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use eldenring::cs::{SoloParamRepository, WorldChrMan};
+use eldenring::cs::{ChrIns, ChrLoadStatus, ChrSet, SoloParamRepository, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
 /// The pad-input bits read each frame off the main player's
@@ -68,6 +68,22 @@ pub fn main_player_chr_ins_ptr() -> Option<*const u8> {
         .main_player
         .as_ref()
         .map(|p| &p.chr_ins as *const _ as *const u8)
+}
+
+/// Calls `f` on every character of `set` that is safe to touch. Only
+/// `Active` / `ReadyForActivation` entries are dereferenced: any other
+/// entry can be stale.
+pub fn for_each_active_chr(set: &ChrSet<ChrIns>, mut f: impl FnMut(&mut ChrIns)) {
+    for slot in 0..set.capacity {
+        let entry = unsafe { set.entries.add(slot as usize).as_ref() };
+        let Some(mut chr) = entry.chr_ins else {
+            continue;
+        };
+        if !matches!(entry.chr_load_status, ChrLoadStatus::Active | ChrLoadStatus::ReadyForActivation) {
+            continue;
+        }
+        f(unsafe { chr.as_mut() });
+    }
 }
 
 /// Waits, forever like [`crate::task::wait_for_cs_task`], for

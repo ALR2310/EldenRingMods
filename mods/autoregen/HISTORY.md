@@ -38,3 +38,4 @@ lịch sử git của `README.md`.
 | 2026-10-15 | `ReloadKey` đổi sang `common::input::is_key_pressed` (chỉ nhận phím khi cửa sổ game của process này đang focus), để bấm ở instance game khác không reload nhầm | [docs](../../shared/docs/input.md) |
 | 2026-10-16 | Log gọn lại theo kiểu ngắn, kỹ thuật cho dev: bỏ dòng lặp ý, địa chỉ patch, câu dài; chỉ ghi 1 lần khi chờ thế giới | |
 | 2026-10-20 | Bỏ watcher `ReloadKey` riêng trong `regen.rs`, dùng `common::reload` như các mod khác (một nơi duy nhất đọc phím reload; bản cũ gọi `eldenring::util::input` / `GetKeyState`, nằm trong nhóm gây cờ antivirus) | [docs](../../shared/docs/reload.md) |
+| 2026-10-22 | Dọn mã: `regen.rs` tách thành `heal.rs` (tính lượng hồi, thuần), `trigger.rs` (combat/idle/gesture thành máy trạng thái có test, không còn rải static) và vòng tick; `hit_hook.rs` dùng `RwLock` cho tham số, `codepatch` cho patch và bỏ đoạn debug đã comment; log cấu hình ngắn lại | [docs](docs/gesture_trigger.md) |

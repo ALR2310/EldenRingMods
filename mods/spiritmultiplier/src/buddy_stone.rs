@@ -1,71 +1,11 @@
-//! Spirit summoning pools (`BuddyStoneParam` - one row per summoning pool
-//! area), two hot-reload toggles:
-//!
-//! - `NoRestResummon`: re-summon after the spirits die (or are sent back)
-//!   without resting at a Site of Grace. The once-per-rest lock is the
-//!   row's `summonedEventFlagId` (+0xC): the game raises that event flag on
-//!   a summon and refuses the pool while it is on; resting clears it.
-//!   Written as 0 = no flag, so nothing ever locks the pool.
-//! - `SummonAnywhere`: summon outside the vanilla areas. Every row gets
-//!   `activateRange` (+0x1C) = 65535, `overwriteReturnRange` (+0x1E) = -1
-//!   (no override), `overwriteActivateRegionEntityId` (+0x20) = 0 (use the
-//!   range, not a map region) and `eliminateTargetEntityId` (+0x8) = 0 (the
-//!   pool no longer closes once its boss is dead).
-//!
-//! Both are exactly what Solid Uncapper 2.3.3 writes for its `No-Rest
-//! Re-Summon` / `Summon Anywhere` settings (`sub_180031EC0` /
-//! `sub_1800321B0`, snapshot in `sub_180031D30` - see README 2026-09-29);
-//! re-implemented here. Rows are walked by index (`common::params`), and
-//! the original values are captured once before the first write, so every
-//! later change is applied from that snapshot (F5 works both ways).
-//!
-//! The param edits alone only work while some pool's stone object is
-//! loaded near the player (Nexus reports 2026-09-30: nothing outside pools
-//! in the Shadowlands, or anywhere for one player). Three more things in
-//! `SummonBuddyManager` depend on a loaded stone (2.7.1.0):
-//!
-//! 1. `GetBuddyState` (`sub_1404B72F0`) - and the HUD's
-//!    `sub_1404B7610` - require the player to carry a SpEffect with
-//!    stateInfo 373 (`sub_1404FA370(.., 0x175)`), which the pool area puts
-//!    on the player. [STATE_CALL_AOB] / [STATE_TAIL_AOB]: that check
-//!    answers true while Anywhere is on.
-//! 2. The current stone `+0x38` is cleared every frame by
-//!    `sub_1404B6E80` (called from the talk-script update `sub_140EAFDE0`)
-//!    and set again only by a loaded stone's own talk script (ESD command
-//!    122 -> `sub_1404B8050`) - with none loaded it stays 0 and
-//!    `GetBuddyState` says -1 (greyed out). The same stateInfo stub inside
-//!    `GetBuddyState` fills an empty `+0x38` right before `GetBuddyState`
-//!    reads it - every summon path asks `GetBuddyState` first - with the
-//!    active stone `+0x3C` while spirits are out (so `+0x38 == +0x3C` and
-//!    the state stays 2 = "this group is out"), else [FALLBACK_STONE] (the
-//!    last real stone seen, or a default row). A BuddyStoneParam row id is the stone's entity id (param 134
-//!    is looked up with it directly, `sub_140D28320`). (First try wrote
-//!    `+0x38` from the FrameBegin tick - the clear ran after it; 1.1.1-1.1.3
-//!    then patched the clear itself, an inline hook.)
-//! 3. `sub_1404BD870` recomputes "in the active stone's range" (`+0xB5`)
-//!    every frame by finding the stone object; unloaded -> false -> the
-//!    "left the summoning area" dismiss-all. [INRANGE_AOB]: right after it,
-//!    while Anywhere is on, `+0xB5` is set to 1 **only** when spirits are
-//!    out (`+0xB4`) and the game found neither range (`+0xB5` and `+0xB7`
-//!    both 0 - the stone is unloaded). Until 2026-10-01 it forced
-//!    `+0xB5 = 1, +0xB7 = 0` every frame, spirits out or not: the 0 -> 1
-//!    edge on `+0xB5` that `sub_1404B8EB0` turns into the "entered the
-//!    summoning range" SpEffects (GameSystemCommonParam
-//!    `onBuddySummon_inActivateRange_spEffectId_pc/_buddy`, 9540/9541) never
-//!    happened, which broke ELDEN RING Reforged's Fortune of the
-//!    Spiritcaller (no Spirit Ring, Ash + Spirit-Severing Blade greyed out
-//!    while spirits were out) - found by toggling each part in game.
-//!
-//! 4. With `NoRestResummon=false` the vanilla lock must survive Anywhere:
-//!    vanilla greys the Ash out after a recall/death until a rest because the
-//!    summoned flag turns the pool's stateInfo 373 off, and the stub in 1.
-//!    would hide that. While no spirit is out and the current stone's
-//!    original `summonedEventFlagId` is raised, [ANYWHERE] is set to 0 so the
-//!    stubs pass the game's own answers through (greyed, like vanilla).
-//!
-//! All three only redirect an existing `call` / `jmp`
-//! (`codepatch::redirect_rel32`, see `multi_spirit.rs` - Seamless Co-op
-//! aborts the game when its own byte signatures stop matching).
+//! Spirit summoning pools (`BuddyStoneParam`), two hot-reload toggles:
+//! `NoRestResummon` (re-summon without resting, by clearing the pool's
+//! once-per-rest event flag) and `SummonAnywhere` (summon outside the vanilla
+//! areas: wide pool range plus redirected calls in `SummonBuddyManager`).
+//! Both re-implement what Solid Uncapper does. Rows are walked by index and
+//! the original values are snapshotted before the first write. Every patch only
+//! redirects an existing `call` / `jmp` (`codepatch::redirect_rel32`). The
+//! reverse engineering behind each part: `docs/summon_anywhere.md`.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, AtomicU8, Ordering};
@@ -314,13 +254,13 @@ pub fn run() {
             }
 
             // Every frame: remember the last real stone as the fallback (2.).
-            if ANYWHERE.load(Ordering::Relaxed) != 0 {
-                if let Ok(world_chr_man) = unsafe { WorldChrMan::instance() } {
-                    let current = world_chr_man.summon_buddy_manager.buddy_stone_entity_id;
-                    if current != 0 && Some(current) != fallback_stone {
-                        fallback_stone = Some(current);
-                        FALLBACK_STONE.store(current, Ordering::Relaxed);
-                    }
+            if ANYWHERE.load(Ordering::Relaxed) != 0
+                && let Ok(world_chr_man) = unsafe { WorldChrMan::instance() }
+            {
+                let current = world_chr_man.summon_buddy_manager.buddy_stone_entity_id;
+                if current != 0 && Some(current) != fallback_stone {
+                    fallback_stone = Some(current);
+                    FALLBACK_STONE.store(current, Ordering::Relaxed);
                 }
             }
 
@@ -357,10 +297,10 @@ pub fn run() {
             let Some(rows) = originals.get_or_insert_with(|| capture(repo)) else {
                 return;
             };
-            if lock_flags.is_empty() {
-                if let Some(ids) = common::params::row_ids::<BuddyStoneParam>(repo) {
-                    lock_flags = rows.iter().map(|r| (ids[r.index], r.summoned_event_flag_id)).collect();
-                }
+            if lock_flags.is_empty()
+                && let Some(ids) = common::params::row_ids::<BuddyStoneParam>(repo)
+            {
+                lock_flags = rows.iter().map(|r| (ids[r.index], r.summoned_event_flag_id)).collect();
             }
             if fallback_stone.is_none() {
                 fallback_stone = default_stone(repo);

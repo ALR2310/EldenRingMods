@@ -1,16 +1,12 @@
 //! Research probes, off by default (`[Logging]` `CancelProbe` / `FlagProbe`,
-//! read every frame so a hot reload turns them on or off). They only write to
-//! the log file, to work out how the game decides a cancel and to see why an
-//! animation doesn't cancel.
+//! read every frame so a hot reload switches them). They only write to the
+//! log, to see why an animation doesn't cancel.
 //!
-//! - `CancelProbe`: a `WINDOW` line every time the animation, the cancel
-//!   windows or the pressed actions change: the animation and how far into
-//!   it, its group (`grp=`) and the group of the queue's id (`qgrp=`, the one
-//!   the mod goes by: the two differ while a spell shows the legs' animation),
-//!   what the mod did this frame (`mod=`), the masks and the queue entries for
-//!   the queue's id (`q=<id>`, `qin` = the requests the HKS reads, `qcan` =
-//!   the permissions it checks). Also a `STYLE` line when how the weapons are
-//!   held or which weapons are equipped changes.
+//! - `CancelProbe`: a `WINDOW` line whenever the animation, the cancel windows
+//!   or the pressed actions change (animation and progress, its group `grp=`
+//!   and the queue id's group `qgrp=` that the mod goes by, what the mod did
+//!   `mod=`, the masks, and the queue entries `qin`/`qcan` for the queue id),
+//!   plus a `STYLE` line when the grip or the equipped weapons change.
 //! - `FlagProbe`: a `FLAG` line for every word of `CSChrActionFlagModule` that
 //!   changes (the flags animation events set).
 //!
@@ -19,7 +15,7 @@
 use bitfield::BitRange;
 use eldenring::cs::{ActionQueueEntry, CSTaskGroupIndex, ChrActions, ChrIns};
 
-use common::anim::{current_anim_id, group_of};
+use common::anim::{current_anim, format_anim_id, group_of};
 use common::logger;
 
 use crate::cancel;
@@ -31,13 +27,6 @@ const TAE_CANCEL_DISABLE: u32 = 1 << 11;
 
 /// Size of `CSChrActionFlagModule` (fromsoftware-rs test_size_of).
 const ACTION_FLAG_SIZE: usize = 0x258;
-
-fn fmt_anim(id: i32) -> String {
-    if id < 0 {
-        return format!("{id}");
-    }
-    format!("a{:03}_{:06}", id / 1_000_000, id % 1_000_000)
-}
 
 /// An action set as one number, for the log.
 fn mask(actions: &ChrActions) -> u64 {
@@ -79,8 +68,7 @@ struct Snapshot {
 impl WindowProbe {
     fn tick(&mut self, chr: &ChrIns) {
         let request = &chr.modules.action_request;
-        let time_act = &chr.modules.time_act;
-        let anim = &time_act.anim_queue[(time_act.read_idx as usize) % time_act.anim_queue.len()];
+        let anim = current_anim(chr);
         let tae: u32 = request.tae_cancels.bit_range(31, 0);
         let id = cancel::queue_id(request);
         let queue = &request.action_request_queue;
@@ -104,7 +92,7 @@ impl WindowProbe {
         }
         logger::log(&format!(
             "WINDOW {} t={:.2}/{:.2} grp={:?} qgrp={:?} mod={} inputs={:#x} cancels={:#x} queued={:#x} ready={:#x} press={:#x} tae={:#x} disabled={:#x} q={} qin={:#x} qcan={:#x} held={:#x} gblock={}",
-            fmt_anim(now.anim),
+            format_anim_id(now.anim),
             anim.play_time,
             anim.anim_length,
             group_of(now.anim),
@@ -161,14 +149,12 @@ impl FlagProbe {
         // SAFETY: `ACTION_FLAG_SIZE` is the module's size, and it is read-only here.
         let now = unsafe { std::slice::from_raw_parts(module as *const _ as *const u8, ACTION_FLAG_SIZE) };
         if self.prev.len() == ACTION_FLAG_SIZE {
-            let anim = current_anim_id(chr);
-            let time_act = &chr.modules.time_act;
-            let play_time = time_act.anim_queue[(time_act.read_idx as usize) % time_act.anim_queue.len()].play_time;
+            let anim = current_anim(chr);
             for off in (0x10..ACTION_FLAG_SIZE).step_by(4) {
                 let old = u32::from_le_bytes(self.prev[off..off + 4].try_into().unwrap());
                 let new = u32::from_le_bytes(now[off..off + 4].try_into().unwrap());
                 if old != new {
-                    logger::log(&format!("FLAG {} t={play_time:.2} +{off:#x} {old:#x}->{new:#x}", fmt_anim(anim)));
+                    logger::log(&format!("FLAG {} t={:.2} +{off:#x} {old:#x}->{new:#x}", format_anim_id(anim.anim_id), anim.play_time));
                 }
             }
         }

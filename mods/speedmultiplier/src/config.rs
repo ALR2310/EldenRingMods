@@ -1,23 +1,10 @@
-//! `SpeedMultiplier.toml` (2026-10-02, replaces `SpeedMultiplier.ini`):
-//! loaded through `common::toml_config`, so the per-SpEffect overrides can
-//! be a list of tables instead of numbered ini keys. Key names stay
-//! PascalCase, as in the ini.
-//!
-//! Tables `[Player]` / `[Torrent]` (2026-10-02, the user's layout - before
-//! release it was one `[Speed]` with `Player*` / `Torrent` keys).
-//! `General.ConfigVersion` is the file format version for future
-//! migrations ([STEPS]); 1 is the first released format.
-//!
-//! `[[Override]]` (2026-10-02, Nexus request from Lwingr): `SpEffect` is
-//! one id or a list (the player has ANY of them -> active), plus any
-//! `Player.*` / `Torrent.*` key as a dotted key (`Player.Roll = 1.5`).
-//! Every active override applies, top to bottom, so a later one wins on a
-//! key both set - see [Config::effective_speed].
-//!
-//! Defaults live only in the embedded template (2026-10-02): `Default` on
-//! these structs is the derived zero value `common::toml_config` needs
-//! while parsing, never a config in use - see [template] and the test
-//! `template_sets_every_field`.
+//! `SpeedMultiplier.toml`, loaded through `common::toml_config` so the
+//! per-SpEffect overrides can be a list of tables. Defaults live only in the
+//! embedded template: `Default` on these structs is the derived zero value the
+//! loader needs while parsing, never a config in use (see [template] and the
+//! test `template_sets_every_field`). `[[Override]]` entries apply top to
+//! bottom, so a later one wins on a key both set ([Config::effective_speed]).
+//! Layout, the file format version and the overrides: `docs/config_toml.md`.
 
 use std::sync::{Arc, OnceLock};
 

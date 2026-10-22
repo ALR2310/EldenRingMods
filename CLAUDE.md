@@ -4,13 +4,15 @@
 
 Mỗi mod có 4 loại tài liệu, mỗi loại 1 vai trò, không trộn lẫn:
 
-- `mods/<mod>/README.md` = **mô tả chung, ít đổi** (không phải nhật ký): Nexus
-  ID và trạng thái (đã phát hành / nội bộ / đã bỏ), mod làm gì, cấu hình ở mức
-  khái niệm, cách hoạt động, giới hạn; link tới CHANGELOG, HISTORY và docs.
+- `mods/<mod>/README.md` = **mô tả chung, ít đổi** (không phải nhật ký): mod làm
+  gì, cấu hình ở mức khái niệm, cách hoạt động, giới hạn; link tới CHANGELOG,
+  HISTORY và docs. **Không** ghi Nexus ID, trạng thái phát hành hay "đã test"
+  (Nexus ID nằm ở danh sách bên dưới và README gốc). Kiểu trình bày: header căn
+  giữa + badge, Giới thiệu, Tính năng, Cấu hình, Cách hoạt động, Giới hạn, Tài liệu.
   **Không** ghi bảng key, giá trị mặc định hay số phiên bản: tên key và mặc
   định nằm ở chú thích của file config `.ini`/`.toml` (nguồn sự thật duy nhất), phiên bản ở
   `CHANGELOG.md` và `Cargo.toml`. Số liệu hay đổi (số dòng param, RVA, bảng
-  tương thích) để ở `docs/`. Khuôn mẫu: `mods/dropmultiplier/README.md`.
+  tương thích) để ở `docs/`. Khuôn mẫu: `mods/spiritmultiplier/README.md`.
 - `mods/<mod>/CHANGELOG.md` = ghi chú phát hành cho **người dùng cuối**, theo
   từng version (mới nhất ở trên); mục `## [Unreleased]` gom các thay đổi chưa
   phát hành. Mỗi bullet 1 dòng ngắn, văn bản thuần không định dạng, nói điều

@@ -1,21 +1,9 @@
-//! On-demand position exchange over Steam P2P (see `steam`), replacing the
-//! test-phase broadcast (every player sent its position to the whole session
-//! every 500 ms - see README).
-//!
-//! - Requester: [Net::request] sends `WHERE` to one partner's SteamID and
-//!   waits up to [REPLY_TIMEOUT].
-//! - Responder: on `WHERE` from anyone else in the session (whatever their
-//!   role), replies `HERE` (right away, or once settled back in the world if
-//!   it arrived mid-load) with our own main player's block + block-local
-//!   position (the only `PlayerIns` whose position fields are maintained)
-//!   and character name. Someone not in the session gets no answer, so a
-//!   position is only ever sent when a session member asks for it.
-//!
-//! Hardening (review 2026-09-25): a packet's claimed sender must match the
-//! sender Steam reports; request ids are random (were 1, 2, 3...), so a
-//! forged `HERE` can't just guess one; a `HERE` with a missing block or
-//! non-finite / absurd coordinates is dropped; at most one deferred `WHERE`
-//! is kept per asker.
+//! On-demand position exchange over Steam P2P (`steam`): the requester sends
+//! `WHERE` to one partner and waits up to [REPLY_TIMEOUT]; a session member
+//! that gets a `WHERE` answers `HERE` with its main player's block and
+//! block-local position (right away, or once settled back in the world).
+//! Someone outside the session gets no answer. The packet bytes are in
+//! `wire.rs`; the design and the hardening: `docs/position_exchange.md`.
 
 use std::time::{Duration, Instant};
 
@@ -25,6 +13,7 @@ use fromsoftware_shared::FromStatic;
 use crate::party::{self, Member};
 use crate::steam::{Received, SteamMessages};
 use crate::warp::Spot;
+use crate::wire::{Here, Packet, Where, NAME_UNITS, spot_is_sane};
 use common::logger;
 
 /// Our own P2P channel - SoulsChat uses 42; nothing else on the same Steam
@@ -47,12 +36,6 @@ const ACCEPT_EVERY: Duration = Duration::from_secs(2);
 /// still hold the old main player, so the old code answered with a position
 /// in a map the answerer was leaving. Warping to someone done loading works.
 const SETTLE_TIME: Duration = Duration::from_secs(2);
-
-const MAGIC_WHERE: [u8; 4] = *b"STW1";
-const MAGIC_HERE: [u8; 4] = *b"STH1";
-const NAME_UNITS: usize = 17; // same size as PlayerGameData.character_name
-const WHERE_LEN: usize = 4 + 8 + 4;
-const HERE_LEN: usize = 4 + 8 + 4 + 4 + 4 * 4 + NAME_UNITS * 2;
 
 pub enum Event {
     Arrived { character_name: String, spot: Spot },
@@ -95,47 +78,9 @@ fn random_request_id() -> u32 {
     (h.finish() as u32).max(1)
 }
 
-/// Block-local coordinates beyond this are garbage, not a real position
-/// (blocks are a few km across at most, even the overworld tiles).
-const MAX_ABS_COORD: f32 = 100_000.0;
-
-fn spot_is_sane(spot: &Spot) -> bool {
-    spot.block_id != -1
-        && [spot.x, spot.y, spot.z].iter().all(|v| v.is_finite() && v.abs() < MAX_ABS_COORD)
-        && spot.yaw.is_finite()
-}
-
-/// The sender Steam reports must be the one the payload claims (payload
-/// SteamID at offset 4 in both packet kinds).
-fn sender_matches(packet: &Received) -> bool {
-    match packet.sender {
-        Some(sender) => sender == u64_at(&packet.payload, 4),
-        None => false,
-    }
-}
-
-struct Writer {
-    buf: Vec<u8>,
-}
-
-impl Writer {
-    fn new(magic: [u8; 4]) -> Self {
-        Self { buf: magic.to_vec() }
-    }
-    fn put(&mut self, bytes: &[u8]) -> &mut Self {
-        self.buf.extend_from_slice(bytes);
-        self
-    }
-}
-
-fn u32_at(p: &[u8], i: usize) -> u32 {
-    u32::from_le_bytes(p[i..i + 4].try_into().unwrap())
-}
-fn u64_at(p: &[u8], i: usize) -> u64 {
-    u64::from_le_bytes(p[i..i + 8].try_into().unwrap())
-}
-fn f32_at(p: &[u8], i: usize) -> f32 {
-    f32::from_le_bytes(p[i..i + 4].try_into().unwrap())
+/// The sender Steam reports must be the one the payload claims.
+fn sender_matches(packet: &Received, claimed: u64) -> bool {
+    packet.sender == Some(claimed)
 }
 
 /// Loaded into the world right now: a main player exists, no move-map is
@@ -158,24 +103,15 @@ fn in_world_now() -> bool {
     }
 }
 
-/// Our main player's position + character name, `None` while loading / in
-/// the menus. Only called once [Net::settled].
+/// Our main player's position + character name as a `HERE`, `None` while
+/// loading / in the menus. Only called once [Net::settled].
 fn own_here(own_steam_id: u64, request_id: u32) -> Option<Vec<u8>> {
     let world_chr_man = unsafe { WorldChrMan::instance() }.ok()?;
     let player = world_chr_man.main_player.as_ref()?;
     let pos = &player.block_position;
-    let name = unsafe { player.player_game_data.as_ref() }.character_name;
-    let mut w = Writer::new(MAGIC_HERE);
-    w.put(&own_steam_id.to_le_bytes())
-        .put(&request_id.to_le_bytes())
-        .put(&player.current_block_id.0.to_le_bytes());
-    for v in [pos.x, pos.y, pos.z, pos.yaw] {
-        w.put(&v.to_le_bytes());
-    }
-    for unit in name {
-        w.put(&unit.to_le_bytes());
-    }
-    Some(w.buf)
+    let spot = Spot { block_id: player.current_block_id.0, x: pos.x, y: pos.y, z: pos.z, yaw: pos.yaw };
+    let name: [u16; NAME_UNITS] = unsafe { player.player_game_data.as_ref() }.character_name;
+    Some(Here { sender: own_steam_id, request_id, spot, name }.encode())
 }
 
 impl Net {
@@ -186,9 +122,7 @@ impl Net {
     /// Asks `target` for its position. Replaces any request still waiting.
     pub fn request(&mut self, own_steam_id: u64, target: &Member) {
         let request_id = random_request_id();
-        let mut w = Writer::new(MAGIC_WHERE);
-        w.put(&own_steam_id.to_le_bytes()).put(&request_id.to_le_bytes());
-        let result = self.steam.send_to(target.steam_id, &w.buf, CHANNEL);
+        let result = self.steam.send_to(target.steam_id, &Where { sender: own_steam_id, request_id }.encode(), CHANNEL);
         logger::log(&format!(
             "WHERE -> '{}' ({}) id={request_id} send={result}",
             target.display_name(),
@@ -231,32 +165,33 @@ impl Net {
 
         let mut event = None;
         for packet in packets {
-            let p = &packet.payload;
-            let kind_ok = (p.len() == WHERE_LEN && p[..4] == MAGIC_WHERE) || (p.len() == HERE_LEN && p[..4] == MAGIC_HERE);
-            if !kind_ok {
+            let Some(decoded) = Packet::decode(&packet.payload) else {
                 continue;
-            }
-            if !sender_matches(&packet) {
+            };
+            if !sender_matches(&packet, decoded.sender()) {
                 logger::log(&format!(
                     "Net: dropped packet, claimed sender {} != Steam {:?}",
-                    u64_at(p, 4),
+                    decoded.sender(),
                     packet.sender
                 ));
                 continue;
             }
-            if p[..4] == MAGIC_WHERE {
-                self.answer_where(&members, u64_at(p, 4), u32_at(p, 12));
-            } else if let Some(e) = self.take_here(p) {
-                event = Some(e);
+            match decoded {
+                Packet::Where(w) => self.answer_where(&members, w.sender, w.request_id),
+                Packet::Here(h) => {
+                    if let Some(e) = self.take_here(h) {
+                        event = Some(e);
+                    }
+                }
             }
         }
 
-        if event.is_none() {
-            if let Some(p) = self.pending.as_ref().filter(|p| p.sent.elapsed() >= REPLY_TIMEOUT) {
-                logger::log(&format!("WHERE: no HERE from '{}' within {:?}", p.target_name, REPLY_TIMEOUT));
-                event = Some(Event::TimedOut { target_name: p.target_name.clone() });
-                self.pending = None;
-            }
+        if event.is_none()
+            && let Some(p) = self.pending.as_ref().filter(|p| p.sent.elapsed() >= REPLY_TIMEOUT)
+        {
+            logger::log(&format!("WHERE: no HERE from '{}' within {:?}", p.target_name, REPLY_TIMEOUT));
+            event = Some(Event::TimedOut { target_name: p.target_name.clone() });
+            self.pending = None;
         }
         event
     }
@@ -338,33 +273,23 @@ impl Net {
         self.in_world_since.is_some_and(|t| t.elapsed() >= SETTLE_TIME)
     }
 
-    fn take_here(&mut self, p: &[u8]) -> Option<Event> {
-        let from = u64_at(p, 4);
-        let request_id = u32_at(p, 12);
+    fn take_here(&mut self, here: Here) -> Option<Event> {
         let pending = self.pending.as_ref()?;
-        if pending.target != from || pending.request_id != request_id {
+        if pending.target != here.sender || pending.request_id != here.request_id {
             return None; // late answer to an older / replaced request
         }
-        let spot = Spot {
-            block_id: u32_at(p, 16) as i32,
-            x: f32_at(p, 20),
-            y: f32_at(p, 24),
-            z: f32_at(p, 28),
-            yaw: f32_at(p, 32),
-        };
-        let units: Vec<u16> = (0..NAME_UNITS)
-            .map(|k| u16::from_le_bytes([p[36 + k * 2], p[37 + k * 2]]))
-            .collect();
-        let character_name = party::character_name(&units);
+        let spot = here.spot;
+        let character_name = party::character_name(&here.name);
         if !spot_is_sane(&spot) {
             logger::log(&format!(
                 "HERE <- '{character_name}': dropped (unusable position, block {:#010X}, ({}, {}, {}))",
                 spot.block_id, spot.x, spot.y, spot.z
             ));
-            return None; // keep waiting - times out normally if nothing valid comes
+            return None; // keep waiting: times out normally if nothing valid comes
         }
         logger::log(&format!(
-            "HERE <- '{character_name}' id={request_id} {:.0}ms block {:#010X} local ({:.2}, {:.2}, {:.2})",
+            "HERE <- '{character_name}' id={} {:.0}ms block {:#010X} local ({:.2}, {:.2}, {:.2})",
+            here.request_id,
             pending.sent.elapsed().as_secs_f32() * 1000.0,
             spot.block_id,
             spot.x,
@@ -380,28 +305,15 @@ impl Net {
 mod tests {
     use super::*;
 
-    fn packet(claimed: u64, sender: Option<u64>) -> Received {
-        let mut payload = MAGIC_WHERE.to_vec();
-        payload.extend_from_slice(&claimed.to_le_bytes());
-        payload.extend_from_slice(&7u32.to_le_bytes());
-        Received { payload, sender }
+    fn packet(sender: Option<u64>) -> Received {
+        Received { payload: Where { sender: 42, request_id: 7 }.encode(), sender }
     }
 
     #[test]
     fn sender_must_match_steam_identity() {
-        assert!(sender_matches(&packet(42, Some(42))));
-        assert!(!sender_matches(&packet(42, Some(43))));
-        assert!(!sender_matches(&packet(42, None)));
-    }
-
-    #[test]
-    fn rejects_unusable_positions() {
-        let ok = Spot { block_id: 0x3C2A2500, x: 15.0, y: 110.0, z: -16.0, yaw: 1.0 };
-        assert!(spot_is_sane(&ok));
-        assert!(!spot_is_sane(&Spot { block_id: -1, ..ok }));
-        assert!(!spot_is_sane(&Spot { x: f32::NAN, ..ok }));
-        assert!(!spot_is_sane(&Spot { y: f32::INFINITY, ..ok }));
-        assert!(!spot_is_sane(&Spot { z: 1.0e9, ..ok }));
+        assert!(sender_matches(&packet(Some(42)), 42));
+        assert!(!sender_matches(&packet(Some(43)), 42));
+        assert!(!sender_matches(&packet(None), 42));
     }
 
     #[test]

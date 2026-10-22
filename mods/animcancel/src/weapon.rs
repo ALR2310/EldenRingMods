@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use eldenring::cs::{ChrAsmArmStyle, ChrAsmSlot, EquipParamWeapon, SoloParamRepository, WorldChrMan};
+use eldenring::cs::{ChrAsm, ChrAsmArmStyle, ChrAsmSlot, EquipParamWeapon, SoloParamRepository, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
 /// `wepmotionCategory` values of shields.
@@ -50,32 +50,38 @@ fn weapon(id: i32) -> Option<Weapon> {
     Some(Weapon { dual_blade: row.is_dual_blade(), motion: row.wepmotion_category() })
 }
 
-/// How the weapons are held and which ones (param IDs): arm style, the
-/// active left and right weapon slots' IDs.
-fn held() -> Option<(ChrAsmArmStyle, i32, i32)> {
+/// The main player's equipment (`ChrAsm`), only once in game.
+fn chr_asm<'a>() -> Option<&'a ChrAsm> {
     let world_chr_man = unsafe { WorldChrMan::instance_mut() }.ok()?;
     let player = world_chr_man.main_player.as_mut()?;
     let data = unsafe { player.player_game_data.as_ref() };
-    let asm = &data.equipment.chr_asm;
-    let equipment = &asm.equipment;
+    Some(&data.equipment.chr_asm)
+}
+
+/// The param IDs of the active left and right weapons.
+fn active_weapon_ids(asm: &ChrAsm) -> (i32, i32) {
     let id = |slot: ChrAsmSlot| asm.equipment_param_ids[slot as usize];
-    Some((equipment.arm_style, id(equipment.active_left_weapon_slot()), id(equipment.active_right_weapon_slot())))
+    (id(asm.equipment.active_left_weapon_slot()), id(asm.equipment.active_right_weapon_slot()))
+}
+
+/// How the weapons are held and which ones (param IDs): arm style, the
+/// active left and right weapons.
+fn held() -> Option<(ChrAsmArmStyle, i32, i32)> {
+    let asm = chr_asm()?;
+    let (left, right) = active_weapon_ids(asm);
+    Some((asm.equipment.arm_style, left, right))
 }
 
 /// What the player holds as one line, for the probe's log: arm style, selected
 /// slots and the weapon param IDs with what `EquipParamWeapon` says of them.
 pub fn describe_held() -> Option<String> {
-    let world_chr_man = unsafe { WorldChrMan::instance_mut() }.ok()?;
-    let player = world_chr_man.main_player.as_mut()?;
-    let data = unsafe { player.player_game_data.as_ref() };
-    let asm = &data.equipment.chr_asm;
+    let asm = chr_asm()?;
     let equipment = &asm.equipment;
-    let id = |slot: ChrAsmSlot| asm.equipment_param_ids[slot as usize];
+    let (left, right) = active_weapon_ids(asm);
     let info = |id: i32| match weapon(id) {
         Some(w) => format!("dual={} motion={} shield={}", w.dual_blade as u8, w.motion, w.is_shield() as u8),
         None => "no row".to_string(),
     };
-    let (left, right) = (id(equipment.active_left_weapon_slot()), id(equipment.active_right_weapon_slot()));
     Some(format!(
         "arm={:?} slot=L{}/R{} weapon=L{}/R{} left[{}] right[{}]",
         equipment.arm_style,
@@ -103,9 +109,12 @@ pub fn guard_possible(arm: ChrAsmArmStyle, left: Option<&Weapon>, right: Option<
     }
 }
 
+/// What is held: arm style, left and right weapon param IDs.
+type HeldKey = (u32, i32, i32);
+
 /// (what is held, answer) of the last check, so the params are read again
 /// only when the weapons or the grip change.
-static LAST: Mutex<Option<((u32, i32, i32), bool)>> = Mutex::new(None);
+static LAST: Mutex<Option<(HeldKey, bool)>> = Mutex::new(None);
 
 /// Whether the guard button guards right now (see [guard_possible]). False
 /// when it can't be told (data not loaded): then guard cancels nothing.

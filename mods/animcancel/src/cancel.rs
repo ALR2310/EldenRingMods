@@ -148,9 +148,9 @@ pub fn guard_blocked() -> bool {
     GUARD_TRACKER.lock().unwrap_or_else(|e| e.into_inner()).blocked
 }
 
-/// Whether the last tick opened any cancel window (for the probe's log).
 static FORCED: AtomicBool = AtomicBool::new(false);
 
+/// Whether the last tick opened any cancel window (for the probe's log).
 pub fn last_forced() -> bool {
     FORCED.load(Ordering::Relaxed)
 }
@@ -212,7 +212,7 @@ fn apply() {
     };
     let request = &mut chr.modules.action_request;
     let id = queue_id(request);
-    let held = request.action_requests.bit(GUARD) || request.action_requests.bit(L1);
+    let held = GUARD_BITS.iter().any(|&bit| request.action_requests.bit(bit));
     let blocked = GUARD_TRACKER.lock().unwrap_or_else(|e| e.into_inner()).update(id, held);
     if id < 0 {
         FORCED.store(false, Ordering::Relaxed);

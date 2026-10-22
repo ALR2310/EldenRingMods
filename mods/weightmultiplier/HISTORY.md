@@ -21,3 +21,4 @@ sử git của `README.md`.
 | 2026-10-20 | Phím reload chuyển sang `common::reload` (task của game) thay cho thread thăm dò riêng; thêm tuỳ chọn `ReloadBanner` như các mod khác | [docs](../../shared/docs/reload.md) |
 | 2026-10-22 | Phát hiện hook của mod khác chuyển sang `common::conflict`: log nêu tên DLL kia, thêm hộp thoại cảnh báo (luôn bật) và kiểm tra thêm chính chỗ patch; thay `report_foreign_patch` chỉ ghi log; thử trong game với ZibaPeso: hộp thoại hiện, chưa ra được tên DLL vì đích nhảy là stub ngoài module | [docs](../../shared/docs/conflict.md) |
 | 2026-10-22 | Log gọn lại theo kiểu ngắn, kỹ thuật cho dev: bỏ dòng lặp ý, địa chỉ patch, câu dài; chỉ ghi 1 lần khi chờ thế giới | |
+| 2026-10-22 | Dọn mã: doc đầu `hook.rs` và các comment dài về điểm hook chuyển sang `docs/hook_point.md`, bỏ các guard `LogFile` thừa, `reload_from_config` gọn lại, thêm test cho opcode theo chế độ và hình dạng của stub, log gọn lại | |

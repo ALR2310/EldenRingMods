@@ -1,29 +1,7 @@
-//! Debug-only (`SlotProbe`, off by default) diagnostics that located the
-//! 10-spirit cap (see `band.rs`) - no gameplay
-//! change at all, only logging.
-//!
-//! `sometweaks`'s `spirit::summon_count` (and `x10_summon/er10x.dll`
-//! before it) can lengthen an Ash's SpEffect -> BuddyParam chain freely, but
-//! the engine only ever spawns 10: per `er10x.ini`, each player gets a fixed
-//! "band" of 10 slots inside `WorldChrMan.summon_buddy_chr_set`, whose start
-//! and length are engine constants. Before deciding between widening that
-//! band inside the ChrSet's existing capacity or reallocating the ChrSet's
-//! `entries` array outright, we need two facts this module logs:
-//!
-//! 1. The ChrSet's real capacity (both the `capacity` field and the vtable's
-//!    own `get_capacity()`, in case they disagree) - logged once, the first
-//!    time the player is in the world.
-//! 2. Which slot indices summoned spirits (and Torrent) actually land in -
-//!    logged every time the occupied-slot layout changes, so summoning a
-//!    multi-creature Ash shows where the local player's band starts.
-//!
-//! Also logs the SpEffect -> BuddyParam chain-length histogram once (how
-//! many vanilla Ashes summon 1, 2, 3... creatures), plus a few
-//! `SummonBuddyManager` fields that look slot-related (`last_buddy_slot`,
-//! `active_summon_speffect_id`) alongside each layout change.
-//!
-//!
-//! The player SpEffect log is in `effect_probe.rs` (`EffectProbe`).
+//! Debug-only `SlotProbe` (off by default) that located the 10-spirit cap:
+//! logs the summon ChrSet's capacity, which slots spirits land in and the
+//! chain-length histogram. No gameplay change. What it found:
+//! `docs/slots_and_band.md`. The player SpEffect log is `effect_probe.rs`.
 
 use std::collections::BTreeMap;
 use std::time::Duration;

@@ -1,43 +1,10 @@
-//! Spirit warp-to-player (experimental; analysis and results in
-//! `docs/warp_research.md`).
-//!
-//! The engine keeps `SummonBuddyManager.warp_manager`, a machine that
-//! teleports a spirit back to the player. It only fires when the spirit's
-//! line of sight to the player is blocked or the spirit is stuck - one that is
-//! merely far away runs after the player on foot. Three parts here:
-//!
-//! - `WarpDistance` / `WarpBlockedTime` / `WarpStuckTime` / `WarpStuckRange`
-//!   (0 = the game's own value, hot reload): written every second into the
-//!   manager's runtime copy of the `GameSystemCommonParam` `buddyWarp_*`
-//!   thresholds, so spirits warp back sooner. The game resets them on area
-//!   load, hence the periodic write; its value is remembered and put back
-//!   when a key goes to 0.
-//! - `WarpWhenFar` (hot reload): ten times a second, a spirit of the local player
-//!   that sits idle (stage 0) while one of the engine's own warp conditions
-//!   holds gets its stage set to 1 (RequestWarp), see [request_warps].
-//! - `WarpProbe` (diagnostics only): logs the manager's state when it changes.
-//!
-//! What IDA shows (2.7.1.0, `sub_1404C2890` = the warp manager's update;
-//! entries = an `std::map<FieldInsHandle, entry>` at `a1 + 8` (sentinel
-//! node); node: left +0, parent +8, right +16, isnil byte +25, key +32,
-//! stage byte +48, flags dword +96):
-//! - every frame `sub_1404C28D0` rebuilds the flag dword from zero: bit0 = a
-//!   flag from the chr, bit1 = the chr has no live group entry in
-//!   `SummonBuddyManager`, bit2 = the chr's `vtable[464]()->+192 ->+55752
-//!   ->+40 == 82`, bit3 = path-stuck time (node +132) > `a1+32`, bit4 = a ray
-//!   from the chr to the player is blocked (time accumulates in node +100),
-//!   bit5 = that time > `a1+24`, bit6 = squared distance to the player >=
-//!   `a1+28` squared, bit7 = some game state, bit8 = far for 1.5 s;
-//! - `sub_1404C2FD0` raises the stage from 0 to 1 (RequestWarp) when
-//!   (flags & 7) == 7 and one of: (bit3 and (bit4 or bit6)), bit5, or (bit7
-//!   and ...) - bit 2 is often 0, so spirits blocked for 5 s still stayed;
-//! - `sub_1404C3180` then moves stage 1 -> 2 (spawn point from
-//!   `sub_1404C0EC0`, chr teleported) -> 3 (fade in) -> 0.
-//!
-//! The node layout is hard-coded, so it is checked first: [layout_known]
-//! looks for the engine's own code that reads those offsets and, if it is not
-//! there (the game was updated), the entry features stay off. Every node is
-//! also checked to be readable before it is touched.
+//! Spirit warp-to-player (experimental). Three parts: the `Warp*` thresholds
+//! written every second into the warp manager's runtime copy of the
+//! `buddyWarp_*` values, `WarpWhenFar` (requests a warp for an idle spirit when
+//! one of the engine's own conditions holds, see [request_warps]) and the
+//! diagnostic `WarpProbe`. The warp manager's layout is hard-coded, so
+//! [layout_known] checks it first and the features stay off if the game was
+//! updated. What IDA shows about the manager: `docs/warp_research.md`.
 
 use std::time::Duration;
 
@@ -132,7 +99,7 @@ unsafe extern "system" {
 
 /// Whether `size` bytes at `addr` can be read.
 fn readable(addr: usize, size: usize) -> bool {
-    addr >= 0x10000 && addr % 8 == 0 && unsafe { IsBadReadPtr(addr as *const u8, size) } == 0
+    addr >= 0x10000 && addr.is_multiple_of(8) && unsafe { IsBadReadPtr(addr as *const u8, size) } == 0
 }
 
 /// Whether the engine's warp code still reads the node layout this module
@@ -346,12 +313,12 @@ unsafe fn request_far_ours(
     unsafe {
         for_each_node(a1, |node| {
             let key: u64 = rd(node, 32);
-            if let Some(&(_, dist)) = due.iter().find(|(handle, _)| *handle == key) {
-                if rd::<u8>(node, 48) == 0 {
-                    ((node + 48) as *mut u8).write(1);
-                    far_for.remove(&key);
-                    logger::log(&format!("Warp: spirit {key:#x} is {dist:.0} m away: warp requested."));
-                }
+            if let Some(&(_, dist)) = due.iter().find(|(handle, _)| *handle == key)
+                && rd::<u8>(node, 48) == 0
+            {
+                ((node + 48) as *mut u8).write(1);
+                far_for.remove(&key);
+                logger::log(&format!("Warp: spirit {key:#x} is {dist:.0} m away: warp requested"));
             }
         });
     }
@@ -551,13 +518,12 @@ pub fn run() {
                 for threshold in thresholds.iter_mut() {
                     threshold.sync(&mut world_chr_man.summon_buddy_manager.warp_manager);
                 }
-                if config::get_bool("WarpProbe", false) {
-                    if let Some(text) = describe(a1) {
-                        if text != last {
-                            logger::log(&text);
-                            last = text;
-                        }
-                    }
+                if config::get_bool("WarpProbe", false)
+                    && let Some(text) = describe(a1)
+                    && text != last
+                {
+                    logger::log(&text);
+                    last = text;
                 }
             }
 

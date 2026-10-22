@@ -1,16 +1,9 @@
-//! Applies RiseArcher's Arrow/Great Arrow/Radahn's Spear/Bolt projectile
-//! tuning directly to the live `Bullet` regulation rows, ported from
-//! `csv/RiseArcher.MASSEDIT`'s ~1000 hardcoded per-ID lines.
-//!
-//! `Bullet` has no field to filter by like `EquipParamWeapon.weaponCategory`
-//! (confirmed during the original CSV analysis - see the project's
-//! `README.md`), so which rows to touch has to be data, not a predicate.
-//! What *is* regular is the ID layout within each arrow/bolt "family": a
-//! base ID (the plain arrow/bolt itself) plus a fixed set of offsets for its
-//! Ash of War variants - e.g. `base+11` = Mighty Shot, `base+50` = Rain of
-//! Arrows' own speed, `base+51` = Rain of Arrows' range, etc. This module
-//! encodes that structure once (`FAMILIES` below) instead of repeating it
-//! per weapon like the original Mass Edit file did.
+//! RiseArcher's projectile tuning on the live `Bullet` rows (Arrow, Great
+//! Arrow, Radahn's Spear, Bolt), ported from the ~1000 per-ID lines of
+//! `csv/RiseArcher.MASSEDIT`. `Bullet` has no field to filter by, so the rows
+//! are data: each arrow / bolt family has a base ID plus fixed offsets for its
+//! Ash of War variants (`FAMILIES` below encodes that once). Layout and
+//! baseline: `docs/param_patching.md`.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -18,14 +11,11 @@ use std::sync::Mutex;
 use eldenring::cs::{Bullet, SoloParamRepository};
 use eldenring::param::BULLET_PARAM_ST;
 
-use common::config;
-use common::logger;
+use common::{config, logger};
 
-/// What an offset within a family means, i.e. which field(s) it tunes.
-/// Every family's `base + 0` offset (and, for [ArrowFamily::Arrow], every
-/// AOW variant offset except Rain of Arrows' split-out sub-bullets) is a
-/// [Speed] bullet - Rain of Arrows alone splits into 3 separate bullet rows
-/// (range/count/spread) because the skill needs to tune each independently.
+/// What an offset within a family means, i.e. which field(s) it tunes. Only
+/// Rain of Arrows splits into separate rows (range / count / spread); every
+/// other bullet is plain [Speed].
 #[derive(Clone, Copy)]
 enum Role {
     /// `initVellocity`/`maxVellocity` - plain projectile speed.
@@ -112,7 +102,6 @@ struct Config {
     range_multiplier: f64,
     spread_multiplier: f64,
     rain_of_arrows_count: u16,
-    debug_log: bool,
 }
 
 impl Config {
@@ -122,7 +111,6 @@ impl Config {
             range_multiplier: config::get_double("Bullet.RangeMultiplier", 2.0),
             spread_multiplier: config::get_double("Bullet.SpreadMultiplier", 2.0),
             rain_of_arrows_count: config::get_int("Bullet.RainOfArrowsCount", 6).clamp(0, u16::MAX as i32) as u16,
-            debug_log: config::get_bool("LogFile", false),
         }
     }
 }
@@ -131,12 +119,9 @@ fn scale_f32(value: f32, factor: f64) -> f32 {
     (value as f64 * factor) as f32
 }
 
-/// The game's own original values RiseArcher scales multiplicatively, keyed
-/// by row ID - captured once (lazily, on the first call to [apply]) before
-/// any edit, so every later `ReloadKey` press (see `crate::reload`) rescales
-/// from the true baseline instead of compounding - same reasoning as
-/// `weapon::Baseline`. `num_shoot` (used by [Role::RainOfArrowsCount]) is set
-/// to an absolute count rather than scaled, so it needs no baseline.
+/// The game's own original values that are scaled, by row ID, captured once
+/// before any edit so every reload rescales from the true baseline.
+/// `num_shoot` is set to an absolute count, so it needs none.
 #[derive(Clone, Copy)]
 struct Baseline {
     init_vellocity: f32,
@@ -146,11 +131,8 @@ struct Baseline {
     angle_x: f32,
 }
 
-// Recovered with `unwrap_or_else(|poisoned| poisoned.into_inner())` at the
-// lock site below rather than a plain `.unwrap()` - see `weapon::ORIGINALS`'s
-// doc comment for why: `lib.rs::apply_with_retry` retries across a
-// `catch_unwind` boundary, and a panic while this mutex was held would
-// otherwise poison it permanently.
+/// Recovered from poisoning at the lock: `apply` is retried across a
+/// `catch_unwind` (see `lib.rs`), and one panic must not poison it for good.
 static ORIGINALS: Mutex<Option<HashMap<u32, Baseline>>> = Mutex::new(None);
 
 fn snapshot(row: &BULLET_PARAM_ST) -> Baseline {
@@ -207,13 +189,10 @@ fn all_ids() -> Vec<(u32, Role)> {
     ids
 }
 
-/// Applies every RiseArcher bullet tuning to the live `Bullet` rows, always
-/// derived from each row's cached original values (see [Baseline]) so this
-/// is safe to call repeatedly (hot reload) without compounding. Returns how
-/// many rows were actually found and touched, for logging - a lower count
-/// than expected is the signal that the ID layout has drifted (game update
-/// added/removed a variant) and [ARROW_BASES]/[GREAT_ARROW_BASES]/
-/// [BOLT_BASES] need re-checking against a fresh CSV export.
+/// Applies every bullet tuning to the live `Bullet` rows from each row's
+/// cached original values (no compounding on reload). Returns how many rows
+/// were found and touched; fewer than expected means the ID layout drifted
+/// and the base lists need re-checking against a fresh export.
 pub fn apply(repo: &mut SoloParamRepository) -> usize {
     let cfg = Config::load();
     let ids = all_ids();
@@ -223,7 +202,7 @@ pub fn apply(repo: &mut SoloParamRepository) -> usize {
     let index_by_id = match common::params::row_ids_or_reason::<Bullet>(repo) {
         Ok(row_ids) => row_ids.into_iter().enumerate().map(|(index, id)| (id, index)).collect::<HashMap<u32, usize>>(),
         Err(reason) => {
-            logger::warn(&format!("Bullet: couldn't read the row ids ({reason}), arrow tuning skipped."));
+            logger::warn(&format!("Bullet: couldn't read the row ids ({reason}), arrow tuning skipped"));
             return 0;
         }
     };
@@ -253,13 +232,40 @@ pub fn apply(repo: &mut SoloParamRepository) -> usize {
     }
 
     if missing > 0 {
-        logger::log(&format!(
-            "WARNING: {missing} Bullet ID(s) from RiseArcher's known ID list weren't found in this game version - ID layout may have drifted, see bullet.rs."
+        logger::warn(&format!(
+            "Bullet: {missing} expected ID(s) not found, the ID layout may have drifted (see bullet.rs)"
         ));
-    }
-    if cfg.debug_log {
-        logger::log(&format!("Bullet: applied to {changed} row(s), {missing} expected ID(s) missing."));
     }
 
     changed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_id_list_has_the_expected_size_and_no_duplicates() {
+        let ids = all_ids();
+        // 32 arrows x 9 + 6 great arrows x 6 + Radahn's Spear 4 + 24 bolts x 1.
+        assert_eq!(ids.len(), 32 * 9 + 6 * 6 + 4 + 24);
+        let unique: std::collections::HashSet<u32> = ids.iter().map(|(id, _)| *id).collect();
+        assert_eq!(unique.len(), ids.len(), "two entries tune the same row");
+    }
+
+    /// The defaults in code and in the ini template are written twice; they
+    /// must agree.
+    #[test]
+    fn code_defaults_match_the_ini_template() {
+        let ini = include_str!("../RiseArcher.ini");
+        let value = |key: &str| -> f64 {
+            let line = ini.lines().find(|l| l.trim_start().starts_with(&format!("{key}="))).unwrap();
+            line.split_once('=').unwrap().1.trim().parse().unwrap()
+        };
+        let cfg = Config::load();
+        assert_eq!(value("Bullet.SpeedMultiplier"), cfg.speed_multiplier);
+        assert_eq!(value("Bullet.RangeMultiplier"), cfg.range_multiplier);
+        assert_eq!(value("Bullet.SpreadMultiplier"), cfg.spread_multiplier);
+        assert_eq!(value("Bullet.RainOfArrowsCount"), cfg.rain_of_arrows_count as f64);
+    }
 }
