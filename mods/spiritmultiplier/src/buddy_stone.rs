@@ -225,6 +225,10 @@ fn install(name: &str, pattern: &str, offset: usize, build: impl Fn(u64) -> Vec<
     let site = unsafe { anchor.add(offset) };
     // SAFETY: reads the 5 bytes of a call/jmp found in the game image.
     let Some(target) = (unsafe { codepatch::rel32_target(site) }) else {
+        // Not a call/jmp any more: another mod may have replaced it.
+        if !unsafe { crate::conflicts::check(site, &format!("SummonAnywhere ({name})")) } {
+            logger::error(&format!("SummonAnywhere: {name} site is not a call."));
+        }
         return false;
     };
     // SAFETY: `site` is the scanned call in the game image; the length/offset is the one its pattern matched.

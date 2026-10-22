@@ -4,6 +4,7 @@ mod activate_limit;
 mod band;
 mod buddy_stone;
 mod chain;
+mod conflicts;
 mod effect_probe;
 mod enemy_probe;
 mod ghost_color;
