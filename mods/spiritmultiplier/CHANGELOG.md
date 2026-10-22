@@ -6,6 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+- Added instant Mimic Tear option.
+- Fixed spirit warping errors on game version 2.7.2.0.
 - Fixed the reload key working outside the game window.
 
 ## [1.3.1] - 2026-10-18

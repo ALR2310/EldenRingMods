@@ -55,6 +55,10 @@
     "label": "Regen Amount",
     "help": "Healing per second: HP in Flat HP mode, a percent in the other modes (decimals allowed). 0 = no healing."
   },
+  "mimic": {
+    "label": "Instant Mimic Tear",
+    "help": "On = the Mimic Tear skips the blob stage. Off = vanilla."
+  },
   "ghost": {
     "label": "Ghost Color",
     "help": "On = spirits keep their ghostly blue look. Off = they look like normal characters."

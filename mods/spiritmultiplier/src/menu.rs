@@ -83,6 +83,7 @@ static REGEN_MODE: Setting = Setting {
 };
 static REGEN_VALUE: NumberSetting = NumberSetting::new("RegenValue", 0.0, 1000.0, None);
 static GHOST_COLOR: Setting = Setting::flag("GhostColor");
+static INSTANT_MIMIC: Setting = Setting::flag("InstantMimic");
 static SENSES: Setting = Setting::flag("ImproveSenses");
 static AGGRESSION: Setting = Setting::flag("ImproveAggression");
 static FOLLOW: Setting = Setting::flag("ImproveFollow");
@@ -166,6 +167,13 @@ fn build(b: &mut MenuBuilder) -> Result<(), String> {
         &t("ghost.help"),
         &GHOST_COLOR,
         || config::get_bool("GhostColor", true) as u8,
+    )?;
+    b.toggle(
+        health,
+        &t("mimic.label"),
+        &t("mimic.help"),
+        &INSTANT_MIMIC,
+        || config::get_bool("InstantMimic", true) as u8,
     )?;
 
     let behavior = b.submenu(page, &t("behavior.title"), &t("behavior.help"))?;

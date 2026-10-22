@@ -45,7 +45,7 @@ const TRANSIENT_NPCS: [i32; 1] = [133201000];
 /// when the row IDs could be read.
 static TRANSIENT_BUDDIES: Mutex<Option<HashSet<i32>>> = Mutex::new(None);
 
-fn transient_buddies() -> HashSet<i32> {
+pub(crate) fn transient_buddies() -> HashSet<i32> {
     let mut guard = TRANSIENT_BUDDIES.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(set) = guard.as_ref() {
         return set.clone();
@@ -88,8 +88,24 @@ fn read_mode() -> Option<Mode> {
     None
 }
 
-fn target_count(mode: &Mode, original_ids: &[i32], transient: &HashSet<i32>) -> usize {
-    raw_count(mode, original_ids, transient).clamp(1, crate::band::band_len() as usize)
+/// Chain length for one Ash. `mode == None` is vanilla length, except for a
+/// Mimic Tear chain once `InstantMimic` made its Blob a Mimic (`mimic.rs`):
+/// then one link is one Mimic and the chain shrinks to its real entries.
+fn target_count(mode: Option<&Mode>, original_ids: &[i32], transient: &HashSet<i32>, blob_replaced: bool) -> usize {
+    // The Blob's ID must stay first: the game tests it to copy the build.
+    let blob_first = blob_replaced && transient.contains(&original_ids[0]);
+    let raw = match (mode, blob_first) {
+        (None, false) => original_ids.len(),
+        (None, true) => real_count(original_ids, transient),
+        (Some(Mode::Fixed(amount)), true) => *amount,
+        (Some(Mode::Multiplier(factor)), true) => ((real_count(original_ids, transient) as f64) * factor).round() as usize,
+        (Some(mode), false) => raw_count(mode, original_ids, transient),
+    };
+    raw.clamp(1, crate::band::band_len() as usize)
+}
+
+fn real_count(original_ids: &[i32], transient: &HashSet<i32>) -> usize {
+    original_ids.iter().filter(|id| !transient.contains(id)).count().max(1)
 }
 
 /// How many chain entries `mode` asks for, before the `MaxSpirits` cap.
@@ -99,8 +115,7 @@ fn raw_count(mode: &Mode, original_ids: &[i32], transient: &HashSet<i32>) -> usi
         // `Amount` counts real spirits: with a transient entry in the chain
         // (Mimic Tear: Blob + Mimic) each one needs the whole group.
         Mode::Fixed(amount) => {
-            let real = original_ids.iter().filter(|id| !transient.contains(id)).count().max(1);
-            (amount * original_len).div_ceil(real)
+            (amount * original_len).div_ceil(real_count(original_ids, transient))
         }
         Mode::Multiplier(factor) => ((original_len as f64) * factor).round() as usize,
     }
@@ -151,7 +166,8 @@ fn apply(mode: Option<&Mode>) -> usize {
     let mut snapshot_guard = ORIGINAL_CHAIN_IDS.lock().unwrap();
     let snapshot = snapshot_guard.get_or_insert_with(HashMap::new);
 
-    let transient = if matches!(mode, Some(Mode::Fixed(_))) { transient_buddies() } else { HashSet::new() };
+    let blob_replaced = crate::mimic::blob_replaced();
+    let transient = if blob_replaced || matches!(mode, Some(Mode::Fixed(_))) { transient_buddies() } else { HashSet::new() };
 
     let mut changed = 0;
     for (speffect_id, head) in manager.trigger_speffect_to_buddy_map.iter_chains_mut() {
@@ -161,10 +177,7 @@ fn apply(mode: Option<&Mode>) -> usize {
         if original_ids.is_empty() {
             continue;
         }
-        let target = match mode {
-            Some(mode) => target_count(mode, original_ids, &transient),
-            None => original_ids.len(),
-        };
+        let target = target_count(mode, original_ids, &transient, blob_replaced);
         if head.chain_len() == target {
             continue;
         }
@@ -218,5 +231,17 @@ mod tests {
         assert_eq!(raw_count(&Mode::Fixed(10), &[1, 2, 3], &transient), 10);
         // Multiplier already scales the whole chain.
         assert_eq!(raw_count(&Mode::Multiplier(5.0), &[7, 8], &transient), 10);
+    }
+
+    #[test]
+    fn instant_mimic_counts_one_link_per_mimic() {
+        let transient = HashSet::from([7]);
+        let count = |mode: Option<&Mode>, ids: &[i32]| target_count(mode, ids, &transient, true);
+        assert_eq!(count(None, &[7, 8]), 1);
+        assert_eq!(count(Some(&Mode::Fixed(10)), &[7, 8]), 10);
+        assert_eq!(count(Some(&Mode::Multiplier(5.0)), &[7, 8]), 5);
+        // Blob not first: left as the game builds it.
+        assert_eq!(count(None, &[8, 7]), 2);
+        assert_eq!(count(None, &[1, 2, 3]), 3);
     }
 }
