@@ -55,5 +55,4 @@ Chi tiết từng mục: `docs/cleanup_verify.md`. Chỉ build và unit test, ch
 
 ## Chung
 
-- [ ] Sau khi dọn xong mọi mod: đưa phần menu lặp (`TEXT`/`t()`, `MENU`, `start`, `sync_from_config`, test khớp khoá ngôn ngữ) lên `common::erui`
 - [ ] Gắn `common::conflict` (cảnh báo hook trùng mod khác) vào các mod hook byte còn lại: autoregen, runemultiplier; xem `shared/docs/conflict.md`. AOB đầu hàm hỏng khi bị hook trước nên cần pattern đuôi
