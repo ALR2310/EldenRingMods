@@ -130,6 +130,11 @@ pub fn module_containing(addr: usize) -> Option<ModuleInfo> {
     module_info(handle)
 }
 
+/// Whether `m` lives under the Windows directory (kernel32, user32, ...).
+pub fn is_system_module(m: &ModuleInfo) -> bool {
+    m.path.to_lowercase().starts_with(&windows_dir())
+}
+
 /// Game-bundled and Steam-client DLLs left out of the logged list (compared
 /// case-insensitively).
 const HIDDEN_MODULES: &[&str] = &[

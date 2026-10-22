@@ -8,6 +8,7 @@ pub mod anim;
 pub mod announce;
 pub mod codepatch;
 pub mod config;
+pub mod conflict;
 pub mod crash;
 pub mod diag;
 pub mod erui;
