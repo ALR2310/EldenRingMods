@@ -18,6 +18,10 @@
     "label": "Tối đa linh hồn",
     "help": "Số linh hồn nhiều nhất một tro có thể triệu hồi. Trên 60 có thể giảm FPS hoặc gây crash. Có hiệu lực sau khi khởi động lại game."
   },
+  "hp_bars": {
+    "label": "Thanh máu trên HUD",
+    "help": "Số thanh máu linh hồn hiện trên màn hình (5-30). 5 = như gốc. Có hiệu lực sau khi khởi động lại game."
+  },
   "summoning": {
     "title": "Triệu hồi",
     "help": "Linh hồn được triệu hồi như thế nào và ở đâu."

@@ -17,61 +17,18 @@ use eldenring::cs::{BuddyParam, CSTaskGroupIndex, SoloParamRepository};
 use eldenring::param::BUDDY_PARAM_ST;
 use fromsoftware_shared::FromStatic;
 
-use common::{codepatch, config, logger, memscan};
+use common::{config, logger};
 
 const TICK_INTERVAL_MS: f64 = 1000.0;
 
 static BLOB_REPLACED: AtomicBool = AtomicBool::new(false);
 
-/// 1 while the HUD stub below answers "not a Blob". Read by the stub.
+/// 1 while the HUD's Blob check answers "not a Blob".
 static HUD_FLAG: AtomicU8 = AtomicU8::new(0);
 
-/// `test al,al; jz; ...; call sub_1404B7A10; test al,al; jnz; cmp edi,5` in
-/// the buddy HUD's list builder (`sub_140771ED0` on 2.7.2.0, RVA 0x7722BE;
-/// unique on 2.6.2 - 2.7.2). For each summoned chr it asks `sub_1404B7A10`
-/// "is this the Mimic Blob" (a chr whose group entry has BuddyParam id
-/// 20700000) and leaves a Blob out of the HP bars (at most 5 slots). The
-/// `call` is at +10.
-const HUD_AOB: &str = "84 C0 74 ?? 48 8B D6 49 8B CE E8 ?? ?? ?? ?? 84 C0 75 ?? 83 FF 05";
-const HUD_CALL_OFFSET: usize = 10;
-
-/// Destination of that `call` (rcx/rdx pass through untouched): while
-/// [HUD_FLAG] is 1 answer `al = 0` ("not a Blob", so the Mimic that now sits
-/// on the Blob row gets its HP bar), else jump to the real predicate.
-fn build_hud_stub(flag: u64, original: u64) -> Vec<u8> {
-    let mut c = Vec::with_capacity(40);
-    c.extend_from_slice(&[0x49, 0xBB]); // mov r11, &HUD_FLAG
-    c.extend_from_slice(&flag.to_le_bytes());
-    c.extend_from_slice(&[0x41, 0x80, 0x3B, 0x00]); // cmp byte [r11], 0
-    c.extend_from_slice(&[0x74, 0x03]); // je original
-    c.extend_from_slice(&[0x31, 0xC0]); // xor eax, eax
-    c.push(0xC3); // ret
-    c.extend_from_slice(&[0xFF, 0x25, 0x00, 0x00, 0x00, 0x00]); // jmp [rip+0]
-    c.extend_from_slice(&original.to_le_bytes());
-    c
-}
-
-fn install_hud_patch() -> bool {
-    let Some(anchor) = memscan::wait_for_pattern_in_module(HUD_AOB, Duration::from_millis(500), Duration::from_secs(60)) else {
-        logger::error("InstantMimic: HUD pattern not found, the Blob-row Mimic gets no HP bar");
-        return false;
-    };
-    let site = unsafe { anchor.add(HUD_CALL_OFFSET) };
-    // SAFETY: reads the 5 bytes of a call found in the game image.
-    let Some(original) = (unsafe { codepatch::rel32_target(site) }) else {
-        if !unsafe { crate::conflicts::check(site, "Mimic HP bar") } {
-            logger::error("InstantMimic: HUD site is not a call");
-        }
-        return false;
-    };
-    let stub = build_hud_stub(HUD_FLAG.as_ptr() as u64, original);
-    // SAFETY: `site` is the scanned call; the stub stands in for its destination.
-    if (unsafe { codepatch::redirect_rel32(site, &stub) }).is_none() {
-        logger::error("InstantMimic: HUD redirect failed, the Blob-row Mimic gets no HP bar");
-        return false;
-    }
-    logger::log("InstantMimic: HUD patched");
-    true
+/// True while the HUD's Blob check ([crate::buddy_hud]) answers "not a Blob".
+pub fn hud_flag() -> bool {
+    HUD_FLAG.load(Ordering::Relaxed) != 0
 }
 
 /// True while every Blob row carries its Mimic's fields (chain.rs then
@@ -217,7 +174,6 @@ fn capture(repo: &mut SoloParamRepository) -> Option<Plan> {
 }
 
 pub fn run() {
-    install_hud_patch();
     let cs_task = common::task::wait_for_cs_task();
 
     let mut elapsed_ms: f64 = 0.0;

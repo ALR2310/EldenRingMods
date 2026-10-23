@@ -12,6 +12,8 @@ pub mod conflict;
 pub mod crash;
 pub mod diag;
 pub mod erui;
+pub mod gfx;
+pub mod gfx_hook;
 pub mod i18n;
 pub mod input;
 pub mod logger;

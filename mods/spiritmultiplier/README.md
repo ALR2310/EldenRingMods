@@ -56,6 +56,7 @@ thường. Mod: [src/menu.rs](src/menu.rs), client: [shared/src/erui.rs](../../s
 | **GhostColor** | Tắt ghi đè PhantomParam trên các `SpEffectVfx` chỉ spirit dùng. ([docs/ghost_color.md](docs/ghost_color.md)) |
 | **Cải thiện AI** | Nạp sẵn các field `NpcThinkParam`, kèm hai file ini tuỳ chọn để tự chỉnh. ([docs/think_override.md](docs/think_override.md)) |
 | **InstantMimic** | Viết lại hàng Blob của Mimic Tear, bỏ qua giai đoạn Blob. ([docs/mimic_tear.md](docs/mimic_tear.md)) |
+| **HubHpBars** | HUD chỉ có 5 thanh HP spirit (dữ liệu, vòng lặp hiển thị và danh sách hàng của view đều cứng 5). Mod thêm hàng vào movie lúc game mở tệp, dựng thêm view trên cùng clip và đặt vị trí panel theo số thanh đang dùng. ([docs/buddy_hud.md](docs/buddy_hud.md)) |
 | **Dịch chuyển spirit** | Hạ ngưỡng dịch chuyển của game, tuỳ chọn yêu cầu dịch chuyển khi spirit ở xa. ([docs/warp_research.md](docs/warp_research.md)) |
 | **Hồi máu** | Mỗi giây cộng HP cho mọi nhân vật trong `summon_buddy_chr_set`. ([src/regen.rs](src/regen.rs)) |
 
@@ -82,6 +83,7 @@ Mọi patch code chỉ đổi đích `call` / `jmp` sẵn có, vì Seamless Co-o
 | [docs/multi_spirit.md](docs/multi_spirit.md) | Gọi nhiều Ash cùng lúc |
 | [docs/summon_anywhere.md](docs/summon_anywhere.md) | NoRestResummon, SummonAnywhere |
 | [docs/mimic_tear.md](docs/mimic_tear.md) | Mimic Tear, Blob, `InstantMimic` |
+| [docs/buddy_hud.md](docs/buddy_hud.md) | Thanh HP spirit trên HUD, `HubHpBars` |
 | [docs/ghost_color.md](docs/ghost_color.md) | Màu ma, cờ hành vi spirit |
 | [docs/think_override.md](docs/think_override.md) | AI spirit, file ini tuỳ chọn |
 | [docs/warp_research.md](docs/warp_research.md) | Cơ chế dịch chuyển spirit |

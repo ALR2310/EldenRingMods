@@ -10,17 +10,18 @@
 //!   Summoning                 -> Multi Spirit, Clone Spirit, Resummon Without Rest,
 //!                                Summon Anywhere (toggles)
 //!   Health and Look           -> Regen Mode (choice), Regen Amount (number 0..1000,
-//!                                0 = no healing), Ghost Color (toggle)
+//!                                0 = no healing), Ghost Color (toggle),
+//!                                HUD HP Bars (number 5..30, restart only)
 //!   Behavior                  -> Senses, Aggression, Follow (toggles)
 //!   Teleport                  -> Warp When Far (toggle), Distance, Blocked Time,
 //!                                Stuck Time, Stuck Range (numbers, 0 = game default)
 //!   Log file                  on/off
 //! ```
 //!
-//! Every setting except `MaxSpirits` is re-read by the mod once a second (or
-//! every tick), so a change is live as soon as the saver has written it to
-//! the config map. `MaxSpirits` sizes the summon slot array at startup, so
-//! its row says it needs a restart. Numbers are typed into text rows (the ini
+//! Every setting except `MaxSpirits` and `HubHpBars` is re-read by the mod once a
+//! second (or every tick), so a change is live as soon as the saver has written
+//! it to the config map. `MaxSpirits` sizes the summon slot array and `HubHpBars`
+//! patches the HUD movie, both at startup, so their rows say they need a restart. Numbers are typed into text rows (the ini
 //! holds decimals and values wider than a byte); the regen mode stays a choice
 //! row, and an ini value that is not one of its entries shows the closest one
 //! and is left alone until the player changes the row. `Multiplier` and
@@ -72,6 +73,7 @@ fn t(key: &str) -> String {
 static MULTIPLIER: NumberSetting = NumberSetting::new("Multiplier", 0.0, 1000.0, None).slider(0.0, 10.0, 0.25);
 static AMOUNT: NumberSetting = NumberSetting::whole("Amount", 0.0, 1000.0, None);
 static MAX_SPIRITS: NumberSetting = NumberSetting::whole("MaxSpirits", 60.0, 1000.0, None);
+static HP_BARS: NumberSetting = NumberSetting::whole("HubHpBars", 5.0, 30.0, None);
 static MULTI_SPIRIT: Setting = Setting::flag("MultiSpirit");
 static CLONE_SPIRIT: Setting = Setting::flag("CloneSpirit");
 static NO_REST: Setting = Setting::flag("NoRestResummon");
@@ -167,6 +169,13 @@ fn build(b: &mut MenuBuilder) -> Result<(), String> {
         &t("ghost.help"),
         &GHOST_COLOR,
         || config::get_bool("GhostColor", true) as u8,
+    )?;
+    b.number(
+        health,
+        &t("hp_bars.label"),
+        &t("hp_bars.help"),
+        &HP_BARS,
+        || config::get_double("HubHpBars", 5.0),
     )?;
     b.toggle(
         health,

@@ -39,3 +39,19 @@ lần lúc khởi động có thể đua với cơ chế chống can thiệp c�
 chậm hoặc đang tải, khi người gọi không có đường thử lại nào khác (hook chỉ cài
 một lần, không thử lại mỗi tick). Hạn chót tính bằng đồng hồ thật, nên thời gian
 mỗi lần quét cũng được tính vào `timeout`.
+
+## `find_data_pointers` và `find_jumps_to`
+
+Hai phép quét khác với AOB, cho hook mà mẫu byte không dùng được.
+
+- **`find_data_pointers(value)`** tìm mọi ô 8 byte trong các section **không thực
+  thi** của exe chứa `value`: chỗ một địa chỉ hàm nằm trong vtable hoặc bảng gọi.
+  Chỉ đọc vùng đọc được: section có trang guard / no-access (bảo vệ của game), chạm
+  vào là crash (log 2026-10-23, `access violation` ngay lúc quét), nên đi theo từng
+  vùng `VirtualQuery` thay vì theo kích thước khai báo của section. `gfx_hook` dùng
+  nó để đổi slot của hàm mở tệp.
+- **`find_jumps_to(target)`** tìm mọi `jmp rel32` trong các section thực thi rơi
+  đúng vào `target`: lệnh nhảy cuối của hàm bọc nhỏ gọi vào một hàm. Dùng khi hàm
+  cần hook chỉ được gọi qua một wrapper không có mẫu byte duy nhất; người gọi tự lọc
+  thêm bằng byte đứng trước lệnh nhảy.
+

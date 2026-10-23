@@ -38,6 +38,7 @@ pwsh scripts/ida/run.ps1 <script> [-Version <ver|all>] <tham số...>
 | `fieldaccess.py` | Mọi lệnh truy cập `[reg+offset]` (~1 phút) | `run.ps1 fieldaccess 17c8 --float` |
 | `switches.py` | Switch lớn trong cây gọi (bộ phân loại theo ID) | `run.ps1 switches <gốc> --depth=3 --min-cases=15` |
 | `decompile_range.py` | Decompile mọi hàm trong 1 dải RVA, lọc theo chuỗi (hàm không đi qua vtable) | `run.ps1 decompile_range 406000 40A000 --grep=a,b` |
+| `buddy_hud_check.py` | Kiểm các chỗ patch của `HubHpBars` (mẫu duy nhất, điểm đến đúng quan hệ); sửa mẫu ở đây khi sửa `buddy_hud.rs`. Cần một tham số giả (run.ps1 thêm khoảng trắng cuối đường dẫn khi không có tham số) | `run.ps1 buddy_hud_check -Version all --all` |
 | `export_all.py` | Xuất cả exe ra text để grep (rất nặng, vài giờ) | `run.ps1 export_all --asm` |
 
 Tham số có khoảng trắng (mẫu AOB, chuỗi tìm) đặt trong nháy kép. Tham số mỗi

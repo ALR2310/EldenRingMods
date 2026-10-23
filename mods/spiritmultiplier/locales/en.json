@@ -18,6 +18,10 @@
     "label": "Max Spirits",
     "help": "Most spirits one Ash can summon. Above 60 may lower FPS or crash. Applies after restarting the game."
   },
+  "hp_bars": {
+    "label": "HUD HP Bars",
+    "help": "Spirit HP bars shown on screen (5-30). 5 = vanilla. Applies after restarting the game."
+  },
   "summoning": {
     "title": "Summoning",
     "help": "How and where spirits can be summoned."
