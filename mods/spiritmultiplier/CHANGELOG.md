@@ -6,6 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-23
+
 - Added option for more spirit HP bars.
 
 ## [1.4.0] - 2026-10-23
