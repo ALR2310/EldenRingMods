@@ -125,7 +125,7 @@ fn is_game_exe(name: &str) -> bool {
 
 /// Bytes readable from `addr` to the end of its committed region, 0 if it
 /// isn't readable.
-fn readable_len(addr: usize) -> usize {
+pub(crate) fn readable_len(addr: usize) -> usize {
     let mut info = unsafe { std::mem::zeroed::<MemoryBasicInformation>() };
     let got = unsafe { VirtualQuery(addr as *const c_void, &mut info, size_of::<MemoryBasicInformation>()) };
     if got == 0 || info.state != MEM_COMMIT || info.protect & (PAGE_NOACCESS | PAGE_GUARD) != 0 {

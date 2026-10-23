@@ -2,6 +2,7 @@
 
 mod activate_limit;
 mod band;
+mod buddy_hud;
 mod buddy_stone;
 mod chain;
 mod conflicts;
@@ -35,7 +36,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
         let ini_path = format!("{dir}\\SpiritMultiplier.ini");
-        let added_keys = config::load_or_create_default_with_renames(&ini_path, DEFAULT_INI, &[("Regen", "RegenValue")]);
+        let added_keys = config::load_or_create_default_with_renames(&ini_path, DEFAULT_INI, &[("Regen", "RegenValue"), ("HpBars", "HubHpBars")]);
 
         // `LogFile` gates the log file entirely, see common::logger.
         logger::init(&dir, "SpiritMultiplier.log");
@@ -63,6 +64,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         std::thread::spawn(activate_limit::run);
         std::thread::spawn(ghost_color::run);
         std::thread::spawn(mimic::run);
+        std::thread::spawn(buddy_hud::run);
         std::thread::spawn(regen::run);
         std::thread::spawn(multi_spirit::run);
         std::thread::spawn(warp::run);
