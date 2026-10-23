@@ -6,7 +6,9 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
-- Added instant Mimic Tear option.
+## [1.4.0] - 2026-10-23
+
+- Added summon instant Mimic Tear option.
 - Fixed spirit warping errors on 1.17.2.
 - Fixed the reload key working outside the game window.
 
