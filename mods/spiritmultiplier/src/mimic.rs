@@ -21,13 +21,6 @@ use common::{codepatch, config, logger, memscan};
 
 const TICK_INTERVAL_MS: f64 = 1000.0;
 
-/// Experiment switches (`docs/mimic_tear.md`, tests 2026-10-22). Both on =
-/// er10x's result: instant, but the Blob-row Mimic has no HUD HP bar. Both off
-/// = the first version: the Mimic rises out of the ground, and the Blob-row
-/// copy stands still (no follow flags).
-const COPY_FLAGS: bool = true;
-const PLAIN_ANIM: bool = true;
-
 static BLOB_REPLACED: AtomicBool = AtomicBool::new(false);
 
 /// 1 while the HUD stub below answers "not a Blob". Read by the stub.
@@ -149,11 +142,9 @@ impl Spawn {
         row.set_doping_sp_effect_lv10(self.doping[10]);
         row.set_npc_player_init_param_id(self.init);
         row.set_generate_anim_id(self.anim);
-        if COPY_FLAGS {
-            row.set_appear_on_around_sekihi(self.flags[0]);
-            row.set_disable_pc_target_share(self.flags[1]);
-            row.set_pc_follow_type(self.flags[2]);
-        }
+        row.set_appear_on_around_sekihi(self.flags[0]);
+        row.set_disable_pc_target_share(self.flags[1]);
+        row.set_pc_follow_type(self.flags[2]);
     }
 }
 
@@ -208,7 +199,11 @@ fn capture(repo: &mut SoloParamRepository) -> Option<Plan> {
     let mut blobs = 0;
     for (blob_rows, mimic) in groups.into_values() {
         let Some(mimic_index) = mimic else { continue };
-        let with_plain = |spawn: Spawn| Spawn { anim: if PLAIN_ANIM { plain.unwrap_or(spawn.anim) } else { spawn.anim }, ..spawn };
+        // Only groups with a Blob: every other spirit row keeps its own animation.
+        if blob_rows.is_empty() {
+            continue;
+        }
+        let with_plain = |spawn: Spawn| Spawn { anim: plain.unwrap_or(spawn.anim), ..spawn };
         let mimic = spawns[mimic_index];
         for index in blob_rows {
             rows.push((index, spawns[index], with_plain(mimic)));
