@@ -14,7 +14,53 @@ hết vào nhánh `mod/` của mod.
   mod. Việc không thuộc mod nào (hạ tầng, quy tắc chung) thì hỏi người dùng
   nhánh nào trước khi làm.
 - Không tự merge, xoá hay đổi tên nhánh; không tự commit khi chưa được kiểm
-  (quy tắc commit giữ nguyên).
+  (xem mục "Quy tắc code và quy trình thử" bên dưới).
+
+## Quy tắc code và quy trình thử
+
+- **Thử trong game:** sau khi build mod để người dùng thử, chép DLL (và file ini
+  nếu đổi) vào thư mục `mod` của game Steam, ghi đè, không đợi nhắc:
+  `E:\SteamLibrary\steamapps\common\ELDEN RING\Game\mod`. Thư mục khác (vd.
+  `E:\Games\ELDEN.RING_LinkNeverDie.Com\Game\mod_test`) chỉ khi người dùng nói
+  ra. Mod phải có trong `external_dlls` của `config_eldenring.toml` ở đó; nếu
+  chép báo `Device or resource busy` thì game đang giữ DLL, bảo người dùng thoát
+  game.
+- **Không commit khi chưa được kiểm:** không commit tính năng hay bản sửa mà
+  người dùng chưa thử và xác nhận chạy trong game, trừ khi họ yêu cầu commit
+  (2026-10-09: commit CloneSpirit chưa thử bị phản đối). Code và dòng HISTORY /
+  docs của nó cùng để chưa commit và ghi "chưa test"; các bước tài liệu "xong
+  việc" vẫn làm, chỉ commit sau khi được xác nhận.
+- **Không dọn `builds/`** (trước đây tên `build/`): đó là DLL, config, zip mà
+  người dùng giữ dùng (thử, đăng Nexus), không phải rác (2026-10-05). Không
+  `rm`, `Remove-Item`, `git clean` lên nó, kể cả file cũ; chỉ ghi đè file của mod
+  đang build bằng `scripts/build-mod.ps1`.
+- **Tin kết quả thử có điều kiện:** trước khi coi một kết quả thử là bằng chứng
+  (nhất là khi bất ngờ, hoặc làm cơ sở một kết luận lớn), xác nhận
+  `external_dlls` không còn DLL tham khảo hay DLL cộng đồng nào khác bật cùng
+  DLL đang thử (er10x.dll, các DLL dịch ngược trong `.docs/`). 2026-09-04: nhiều
+  vòng "đã xác nhận chạy" của sometweaks hoá ra là `er10x.dll` tự chạy.
+- **Không dùng API `eldenring::rva::get()`:** bảng RVA của fromsoftware-rs chỉ có
+  2.7.1.0 và JP 2.7.1.1, nên trên 2.7.2.0 chúng panic (`Unsupported game version`,
+  rồi `LazyLock poisoned` ở mọi lần gọi sau): `WorldChrMan::chr_ins_by_handle` /
+  `as_subclass`, các static `GameMan` / `GameDataMan`, `ChrInsExt::apply_speffect`
+  / `remove_speffect`. Dùng AOB (`common::memscan`, kiểm duy nhất ở mọi bản exe
+  bằng `scripts/ida/run.ps1 aob -Version all`) hoặc gọi thẳng slot vtable (vd.
+  `get_chr_ins_by_handle` = slot 3 của ChrSet, xem `warp.rs::resolvable`).
+  2026-10-22: SpiritMultiplier Warp panic mỗi frame trên 2.7.2.0.
+- **Không đặt hardware breakpoint (debug register) trong DLL:** game crash, nghi do
+  chống can thiệp (`docs/crash_dump_analysis.md`). Muốn quan sát một hàm thì hook
+  inline kiểu `mods/autoregen/src/hit_hook.rs`, và trong hook không cấp phát bộ
+  nhớ hay lấy khoá.
+- **Mod không chạy với Seamless Co-op:** tra `dumps/seamless-diff/` (có README)
+  trước khi dịch ngược `ersc.dll`.
+- **Mod đã bỏ:** `sometweaks` (2026-09-29, không có kế hoạch). Khi chuyển tính năng
+  từ SomeTweaks sang mod khác thì sao chép và cải tiến ở mod đích; không đề xuất
+  sửa hay refactor SomeTweaks, và "SomeTweaks cũng dùng" không phải lý do đưa code
+  lên `common`. `windowresize` chỉ dùng nội bộ (2026-10-07): không đề xuất phát
+  hành, không có CHANGELOG.
+- **Tài liệu dùng chung:** viết trang Nexus, changelog, gọi API Nexus, prompt logo:
+  `docs/nexus.md`. Phân tích dump crash: `docs/crash_dump_analysis.md`. Cổng "đã
+  vào game", đọc/ghi param an toàn, hot reload, log riêng tư: `shared/docs/`.
 
 ## Tài liệu của mỗi mod: README, CHANGELOG, HISTORY, docs
 
