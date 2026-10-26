@@ -1,0 +1,41 @@
+{
+  "mod": {
+    "help": "Thiết lập cho mod Auto Pickup."
+  },
+  "materials": {
+    "title": "Nguyên liệu",
+    "help": "Cây cỏ, nấm và các nguyên liệu chế tạo khác."
+  },
+  "items": {
+    "title": "Vật phẩm",
+    "help": "Vật phẩm nằm trên mặt đất."
+  },
+  "corpse_loot": {
+    "title": "Đồ trên xác",
+    "help": "Đồ nhặt được trên xác và hài cốt."
+  },
+  "lost_runes": {
+    "title": "Rune đã mất",
+    "help": "Số rune bạn làm rơi khi chết."
+  },
+  "chests": {
+    "title": "Rương",
+    "help": "Rương kho báu. Mặc định tắt: rương mimic cũng mở bằng cách này."
+  },
+  "enabled": {
+    "label": "Bật",
+    "help": "Tự nhặt ngay khi bạn đứng trong tầm, không cần bấm nút."
+  },
+  "range": {
+    "label": "Tầm nhặt",
+    "help": "Bạn có thể đứng xa đến đâu. 1.0 là khoảng cách gốc của game; cũng đổi khoảng cách hiện gợi ý nhặt."
+  },
+  "combat": {
+    "label": "Tạm dừng khi chiến đấu",
+    "help": "Không tự nhặt khi bạn đang chiến đấu."
+  },
+  "log": {
+    "label": "File log",
+    "help": "Ghi file log cạnh DLL để dò lỗi."
+  }
+}
