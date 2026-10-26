@@ -1,0 +1,49 @@
+[General]
+# file format version, managed by the mod - don't change
+ConfigVersion = 1
+
+# Key that reloads this config file in-game, no restart needed.
+# https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
+ReloadKey = "F5"
+
+# Show banner at the top of the screen after a reload.
+# Errors always show.
+ReloadBanner = false
+
+# Stop picking up while you are in combat.
+PauseInCombat = true
+
+
+[Materials]
+# Plants, mushrooms and other crafting materials.
+Enabled = true
+Range = 2.0
+
+
+[Items]
+# Items lying on the ground.
+Enabled = true
+Range = 2.0
+
+
+[CorpseLoot]
+# Loot on corpses and remains.
+Enabled = true
+Range = 2.0
+
+
+[LostRunes]
+# Your dropped runes after dying.
+Enabled = true
+Range = 2.0
+
+
+[Chests]
+# Treasure chests. Off by default: a mimic opens the same way.
+Enabled = false
+Range = 2.0
+
+
+[Logging]
+# Write a log file next to the DLL, for troubleshooting.
+LogFile = true
