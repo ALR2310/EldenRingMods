@@ -27,6 +27,10 @@ ID khởi đầu lấy từ `AutoPickup.cpp`, rồi đối chiếu với bảng 
 
 Tầm: nhân `radius`, `height`, `baseHeightOffset` của các dòng nhóm bật theo `Range`. Giá trị gốc lưu ở lần quét đầu (`src/range.rs`), nên đổi `Range` hay tắt nhóm luôn tính từ số gốc của game, không cộng dồn. Cùng giá trị này quyết định cả khoảng cách hiện gợi ý nhặt.
 
+## Xung đột với mod khác
+
+Hook thay 16 byte đầu hàm bằng một lệnh nhảy. Nếu mod khác đã làm vậy trước (nạp trước), mẫu đầy đủ không còn khớp. `hook.rs::scan` khi đó tìm phần đuôi của mẫu (luôn cách đầu hàm đúng 0x10 byte, duy nhất ở cả 4 bản exe) và hỏi `common::conflict::foreign_hook_at` ở địa chỉ đầu hàm; có lệnh nhảy ra ngoài exe thì ghi log, hiện hộp thoại và tắt hook (cùng cách `weightmultiplier` làm, xem `shared/docs/conflict.md`). Chưa thử với mod xung đột thật: chỉ có test của `common` cho việc nhận dạng lệnh nhảy. Mod khác hook ở hàm bọc `A673D0`/`A674B0` (như bản Erd-Tools gốc) thì không xung đột, vì chúng gọi hàm lõi và hook ở đây vẫn chạy.
+
 ## Giấy phép và ghi công
 
 Erd-Tools-CPP (Nordgaren) dùng GPLv3; README của nó cho phép dùng trong mod khác với điều kiện dẫn link về repo, và nói tác giả không cho đăng lại **mod của họ** lên Nexus. Mod này là mã Rust viết mới: lấy từ nguồn đó ý tưởng (hook hàm tương tác), danh sách ID ActionButtonParam (dữ liệu của game, đã đối chiếu và chỉnh) và offset của `CSSound`. Trang Nexus ghi công Erd-Tools-CPP và Elden_Ring_game_tools (ankerlcg1996) kèm link. Nếu tác giả phản đối thì gỡ trang, không đổi ghi công.
