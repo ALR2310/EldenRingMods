@@ -115,8 +115,9 @@ mod tests {
         let config = template();
         assert_eq!(config.general.config_version, 1);
         assert!(config.general.pause_in_combat);
+        // Twice the game's own reach out of the box.
         for group in [config.materials, config.items, config.corpse_loot, config.lost_runes, config.chests] {
-            assert_eq!(group.range, 1.0);
+            assert_eq!(group.range, 2.0);
         }
         for group in [config.materials, config.items, config.corpse_loot, config.lost_runes] {
             assert!(group.enabled);

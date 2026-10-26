@@ -12,13 +12,26 @@ use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::Duration;
 
-use common::{codepatch, logger, memscan};
+use common::{codepatch, conflict, logger, memscan};
 
 use crate::groups::classify;
 
 /// The function's first 61 bytes. Unique in 2.6.2.0, 2.7.0.0, 2.7.1.0 and
 /// 2.7.2.0 (`scripts/ida/run.ps1 aob -Version all`).
 const EXEC_ACTION_BUTTON_PATTERN: &str = "48 8b c4 55 41 54 41 55 41 56 41 57 48 8d 68 c9 48 81 ec f0 00 00 00 48 c7 45 b7 fe ff ff ff 48 89 58 08 48 89 70 10 48 89 78 18 0f 29 70 c8 0f 29 78 b8 45 0f b6 f1 0f 28 fa 8b f2 4c 8b e9";
+
+/// The pattern minus the first [`RELOCATE_LEN`] bytes: what is left when
+/// another mod has replaced the function's start with a jump. Unique in the
+/// same four builds, always [`RELOCATE_LEN`] bytes after the function entry.
+const TAIL_PATTERN: &str = "48 81 ec f0 00 00 00 48 c7 45 b7 fe ff ff ff 48 89 58 08 48 89 70 10 48 89 78 18 0f 29 70 c8 0f 29 78 b8 45 0f b6 f1 0f 28 fa 8b f2 4c 8b e9";
+
+/// What the mod turns off when the entry is already hooked.
+const FEATURE: &str = "Auto pickup hook";
+
+/// Seconds between scans, and how long to keep scanning before giving up
+/// (the game code isn't readable until it has unpacked itself).
+const SCAN_INTERVAL: Duration = Duration::from_secs(2);
+const SCAN_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// The prologue's first 7 instructions (`MOV RAX,RSP`, 5 PUSHes, `LEA RBP`),
 /// ending on an instruction boundary before `SUB RSP,0xF0`; none touches an
@@ -138,17 +151,55 @@ extern "C" fn pickup_filter(_this: *mut c_void, id: u32) -> i32 {
     std::panic::catch_unwind(|| decide(ENABLED.load(Ordering::Relaxed), PAUSED.load(Ordering::Relaxed), id)).unwrap_or(0)
 }
 
+/// What a scan of the game code found.
+enum Found {
+    /// The function with its prologue intact: safe to patch.
+    Entry(*mut u8),
+    /// Another mod has hooked the entry (reported).
+    Hooked,
+    /// Nothing yet.
+    No,
+}
+
+/// One scan: the full pattern, else the tail (the entry is [`RELOCATE_LEN`]
+/// bytes before it) to tell "another mod hooked the entry" from "the game code
+/// isn't there (yet) or changed".
+fn scan() -> Found {
+    if let Some(entry) = memscan::find_pattern_in_module(EXEC_ACTION_BUTTON_PATTERN) {
+        return Found::Entry(entry);
+    }
+    let Some(tail) = memscan::find_pattern_in_module(TAIL_PATTERN) else {
+        return Found::No;
+    };
+    let entry = unsafe { tail.sub(RELOCATE_LEN) };
+    // SAFETY: `entry` is in the game image just before the matched tail, one readable code region.
+    match unsafe { conflict::foreign_hook_at(entry) } {
+        Some(hook) => {
+            conflict::report("AutoPickup", FEATURE, "AutoPickup.log", &hook);
+            Found::Hooked
+        }
+        None => Found::No,
+    }
+}
+
 /// Waits for the function's prologue to show up and patches it. Returns
-/// `false` (logged) if it isn't found: the mod keeps running without pickup.
+/// `false` (logged) if it isn't found or another mod already hooked it: the
+/// mod keeps running without pickup.
 pub fn install() -> bool {
     if INSTALLED.load(Ordering::Relaxed) {
         return true;
     }
-    let Some(entry) =
-        memscan::wait_for_pattern_in_module(EXEC_ACTION_BUTTON_PATTERN, Duration::from_secs(2), Duration::from_secs(120))
-    else {
-        logger::error("Hook: pattern not found - game may need a mod update, check Nexus.");
-        return false;
+    let start = std::time::Instant::now();
+    let entry = loop {
+        match scan() {
+            Found::Entry(entry) => break entry,
+            Found::Hooked => return false,
+            Found::No if start.elapsed() >= SCAN_TIMEOUT => {
+                logger::error("Hook: pattern not found - game may need a mod update, check Nexus.");
+                return false;
+            }
+            Found::No => std::thread::sleep(SCAN_INTERVAL),
+        }
     };
 
     unsafe {

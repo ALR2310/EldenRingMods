@@ -9,3 +9,4 @@ link sang `docs/`.
 | 2026-10-26 | Đối chiếu ID với bảng ActionButtonParam vanilla và Convergence: tách rương thành nhóm `Chests` (mặc định tắt), chuyển "Pillage" sang CorpseLoot, thêm nguyên liệu DLC `207850-207894` và vài "Pick up item" còn thiếu. | [docs](docs/exec_action_button.md) |
 | 2026-10-26 | Sửa crash `illegal instruction` ở lần gọi pass-through đầu tiên: nhảy về hàm gốc bằng `rax` làm hỏng `mov [rax+8], rbx` ở nửa sau hàm (ghi đè lên code của chính nó), đổi sang `r11`. | [docs](docs/exec_action_button.md) |
 | 2026-10-26 | Người dùng thử trong game và xác nhận chạy đúng; viết `nexus_page.bbcode`, chuẩn bị phát hành 1.0.0 | [docs](docs/exec_action_button.md) |
+| 2026-10-26 | Nếu mod khác đã hook đầu hàm `ExecActionButton` thì báo xung đột (log và hộp thoại, qua `common::conflict`) và tắt hook, thay vì chờ 120 giây rồi báo không tìm thấy mẫu. Mặc định `Range` là 2.0 cho mọi nhóm | [docs](docs/exec_action_button.md) |
