@@ -22,6 +22,7 @@ Chi tiết: `mods/spiritmultiplier/docs/open_issues.md`, `docs/warp_research.md`
 - [ ] Seamless Co-op: spirit mất màu ma (tạm dừng 2026-10-02)
 - [ ] [verify] `HubHpBars` chạy thật trên bản exe cũ 2.6.2 / 2.7.0 / 2.7.1: mẫu và quan hệ hàm đã khớp bằng IDA, chưa thử trong game (`docs/buddy_hud.md`)
 - [ ] [chờ phản hồi] Seamless Co-op 2 người crash khi gọi Mimic số lượng lớn (Spixtea, 2026-10-20, Multiplier=25); thử lại với `InstantMimic`, `docs/mimic_tear.md`
+- [ ] [research] Giữ spirit qua ngồi grace và dịch chuyển (người dùng, 2026-10-26); bước tiếp theo là probe `DisappearAll` / unload, `docs/persist_spirits.md`
 
 ## SpeedMultiplier
 
