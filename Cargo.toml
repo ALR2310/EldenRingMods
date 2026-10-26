@@ -21,8 +21,8 @@ members = [
 [workspace.dependencies]
 # https://github.com/vswarte/fromsoftware-rs - Rust bindings to the game's engine
 # structs. Same rev for both crates so every mod builds against one version.
-eldenring = { git = "https://github.com/vswarte/fromsoftware-rs", rev = "09a4208ac26af4ae07b08c5273ee0e89faf97cb8" }
-fromsoftware-shared = { git = "https://github.com/vswarte/fromsoftware-rs", rev = "09a4208ac26af4ae07b08c5273ee0e89faf97cb8" }
+eldenring = { git = "https://github.com/vswarte/fromsoftware-rs", rev = "57023153d786c4b13fe95d9170e6dcd9d35093ea" }
+fromsoftware-shared = { git = "https://github.com/vswarte/fromsoftware-rs", rev = "57023153d786c4b13fe95d9170e6dcd9d35093ea" }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # Fake C++ vtable for registering a Rust closure as a game task
 vtable-rs = "0.1.5"
