@@ -6,6 +6,6 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
-- Added auto pickup for materials, items, corpse loot and lost runes.
-- Added pickup range and pause in combat options.
-- Added chests option, off by default.
+## [1.0.0] - 2026-10-26
+
+- Initial release.
