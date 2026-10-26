@@ -223,9 +223,8 @@ sửa code để "cho qua".
    - Mod + game_scoped_id + Nexus internal id.
    - Mod file (update group) sẽ được thêm version vào (tên + id).
    - Version + toàn bộ changelog (đã chốt ở bước 2, nhắc lại cho chắc) -
-     dùng cho endpoint changelog riêng (bước 13). `description` của file
-     (bước 12): changelog >= 3 dòng → 2 dòng cố định; < 3 dòng → các dòng
-     changelog + dòng antivirus. Ghi rõ `description` sẽ gửi trong tóm tắt.
+     dùng cho endpoint changelog riêng (bước 13) và cũng là `description` của
+     file (bước 12).
    - Tên file zip vừa build, kích thước, md5.
 
    Sau đó **BẮT BUỘC gọi tool `AskUserQuestion`** (không phải chỉ hỏi bằng
@@ -283,21 +282,13 @@ sửa code để "cho qua".
 12. Gắn upload thành version mới của đúng mod file đã chọn ở bước 6 (dùng
     `createModFileVersion`, **không** dùng `POST /mod-files` - endpoint đó
     tạo file hoàn toàn mới, sai mục đích):
-    `description` của file phụ thuộc số dòng changelog của version này
-    (quy tắc 2026-10-06; ngưỡng đổi từ "> 3" thành ">= 3" ngày 2026-10-07
-    vì SpeedMultiplier 1.3.0 có changelog đúng 3 dòng, bị đẩy bản liệt kê 3
-    dòng trong khi người dùng muốn bản 2 dòng cố định; phân cách các dòng
-    bằng `\n`):
-    - Changelog **từ 3 dòng trở lên** → **không** lặp lại changelog, dùng
-      đúng 2 dòng cố định:
-      ```
-      See the changelog for details.
-      Mod files may be detected as false positives by antivirus software.
-      ```
-    - Changelog **ít hơn 3 dòng** (1 hoặc 2) → thay dòng `See the changelog for
-      details.` bằng chính các dòng changelog (nguyên văn từng bullet, mỗi
-      dòng 1 dòng, không thêm dấu `-`), giữ nguyên dòng cuối `Mod files may
-      be detected as false positives by antivirus software.`
+    `description` của file = **chính changelog của version này** (quy tắc
+    người dùng chốt 2026-10-23, thay cho quy tắc cũ chèn 2 dòng cố định `See
+    the changelog for details.` / `Mod files may be detected as false
+    positives by antivirus software.`: **không dùng 2 dòng đó nữa**, không
+    thêm dòng antivirus). Nguyên văn từng bullet của changelog đã chốt ở
+    bước 2, mỗi bullet 1 dòng, phân cách bằng `\n`, **không** thêm dấu `-`
+    (giống nội dung gửi ở bước 13). Không có changelog thì không gửi field.
     `name` là **tên hiển thị** trên trang Nexus, không
     phải tên file thật (upload ở bước 9-10 đã tự mang tên file zip rồi) -
     lỗi thật đã gặp (2026-09-12): dùng `"<Mod>.zip"` khiến Nexus hiển thị
@@ -310,7 +301,7 @@ sửa code để "cho qua".
     version, không cần vào tay trang Nexus chỉnh lại sau khi publish:
     ```bash
     curl -sS -X POST -H "apikey: $NEXUS_API_KEY" -H "Content-Type: application/json" \
-      -d "{\"upload_id\": \"<upload_id>\", \"name\": \"<Mod>\", \"version\": \"<version>\", \"file_category\": \"main\", \"update_mod_version\": true, \"primary_mod_manager_download\": true, \"description\": \"<theo quy tắc số dòng changelog ở trên; vd >= 3 dòng: See the changelog for details.\nMod files may be detected as false positives by antivirus software.>\"}" \
+      -d "{\"upload_id\": \"<upload_id>\", \"name\": \"<Mod>\", \"version\": \"<version>\", \"file_category\": \"main\", \"update_mod_version\": true, \"primary_mod_manager_download\": true, \"description\": \"<changelog của version này, mỗi bullet 1 dòng, phân cách bằng \\n, không dấu ->\"}" \
       "https://api.nexusmods.com/v3/mod-files/<mod_file_id>/versions"
     ```
 
