@@ -1,0 +1,41 @@
+{
+  "mod": {
+    "help": "Settings for the Auto Pickup mod."
+  },
+  "materials": {
+    "title": "Materials",
+    "help": "Plants, mushrooms and other crafting materials."
+  },
+  "items": {
+    "title": "Items",
+    "help": "Items lying on the ground."
+  },
+  "corpse_loot": {
+    "title": "Corpse loot",
+    "help": "Loot on corpses and remains."
+  },
+  "lost_runes": {
+    "title": "Lost runes",
+    "help": "The runes you dropped when you died."
+  },
+  "chests": {
+    "title": "Chests",
+    "help": "Treasure chests. Off by default: a mimic opens the same way."
+  },
+  "enabled": {
+    "label": "Enabled",
+    "help": "Pick these up as soon as you are in reach, no button."
+  },
+  "range": {
+    "label": "Range",
+    "help": "How far away you can be. 1.0 is the game's own distance; it also changes how far away the prompt shows."
+  },
+  "combat": {
+    "label": "Pause in combat",
+    "help": "Stop picking things up while you are in combat."
+  },
+  "log": {
+    "label": "Log file",
+    "help": "Write a log file next to the DLL, for troubleshooting."
+  }
+}

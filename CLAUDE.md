@@ -211,6 +211,7 @@ Mod ID theo từng mod trong workspace này (game domain luôn là `eldenring`):
 - `spiritmultiplier` → 11168 (Spirit Multiplier)
 - `speedmultiplier` → 11173 (Speed Multiplier)
 - `animcancel` → 11328 (Anim Cancel)
+- `autopickup` → 11470 (Auto Pickup)
 - `windowresize` → **không đăng lên Nexus, dùng nội bộ (quyết định 2026-10-07)**
 
 Quét một file bằng VirusTotal (dùng thủ công, không nằm trong quy trình
