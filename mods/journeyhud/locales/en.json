@@ -1,0 +1,29 @@
+{
+  "mod": {
+    "help": "Settings for the Journey HUD mod."
+  },
+  "enabled": {
+    "label": "Target bar",
+    "help": "Show the health and poise of the enemy you are locked on to."
+  },
+  "numbers": {
+    "label": "Health numbers",
+    "help": "Show the exact health above the target bar."
+  },
+  "width": {
+    "label": "Bar length",
+    "help": "Length of the target bar."
+  },
+  "scale": {
+    "label": "Size",
+    "help": "Size of the target bar. 1 = normal."
+  },
+  "offset_x": {
+    "label": "Right margin",
+    "help": "Distance from the right edge of the screen."
+  },
+  "offset_y": {
+    "label": "Top margin",
+    "help": "Distance from the top edge of the screen."
+  }
+}

@@ -58,3 +58,11 @@ Chi tiết từng mục: `docs/cleanup_verify.md`. Chỉ build và unit test, ch
 ## Chung
 
 - [ ] Gắn `common::conflict` (cảnh báo hook trùng mod khác) vào các mod hook byte còn lại: autoregen, runemultiplier; xem `shared/docs/conflict.md`. AOB đầu hàm hỏng khi bị hook trước nên cần pattern đuôi
+
+## JourneyHud
+
+Chi tiết: `mods/journeyhud/docs/design.md`
+
+- [ ] [verify] JourneyHud: poise giảm khi đánh trúng, khối vàng/vệt sáng khi mất máu, chạy trên 2.7.1.0 (đã thử 2.7.2.0)
+- [ ] [verify] JourneyHud: menu ERNativeUI (hàng Journey HUD, đổi cỡ/độ dài/lề áp dụng ngay, lưu ini, không có host thì chạy bằng ini)
+- [ ] [research] JourneyHud: radar và minimap theo `docs/design.md`

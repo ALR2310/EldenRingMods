@@ -1,0 +1,27 @@
+[package]
+name = "journeyhud"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "JourneyHud"
+crate-type = ["cdylib"]
+
+[dependencies]
+common = { path = "../../shared" }
+eldenring.workspace = true
+fromsoftware-shared.workspace = true
+# DX12 overlay + Dear ImGui (same stack as SoulsTeleport); only the DX12 backend.
+hudhook = { version = "0.9.3", default-features = false, features = ["dx12"] }
+png = "0.17"
+
+[build-dependencies]
+winresource = "0.1"
+
+# Windows version resource (DLL Properties), see build.rs
+[package.metadata.winresource]
+ProductName = "Journey HUD"
+FileDescription = "Journey HUD - Elden Ring mod"
+InternalName = "JourneyHud"
+OriginalFilename = "JourneyHud.dll"
