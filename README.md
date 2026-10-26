@@ -29,7 +29,7 @@ Seamless Co-op và các bản mod lớn như Convergence và Reforged.
 | Mod                                           | Chức năng                                                               | Nexus                                                   |
 | --------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------- |
 | [**AnimCancel**](mods/animcancel)             | Cắt animation đang chạy bằng guard, lăn, nhảy hoặc đổi vũ khí                 | [11328](https://www.nexusmods.com/eldenring/mods/11328) |
-| [**AutoPickup**](mods/autopickup)             | Tự nhặt nguyên liệu, vật phẩm, đồ trên xác và rune rơi khi đứng trong tầm   | chưa đăng                                               |
+| [**AutoPickup**](mods/autopickup)             | Tự nhặt nguyên liệu, vật phẩm, đồ trên xác và rune rơi khi đứng trong tầm   | [11470](https://www.nexusmods.com/eldenring/mods/11470) |
 | [**AutoRegen**](mods/autoregen)               | Hồi HP, FP, Stamina theo thời gian, khi đánh trúng và khi bị đánh trúng | [10548](https://www.nexusmods.com/eldenring/mods/10548) |
 | [**DropMultiplier**](mods/dropmultiplier)     | Chỉnh tỉ lệ rớt đồ của quái                                             | [11075](https://www.nexusmods.com/eldenring/mods/11075) |
 | [**FasterRevival**](mods/fasterrevival)       | Rút ngắn thời gian từ lúc chết đến lúc hồi sinh                         | [11160](https://www.nexusmods.com/eldenring/mods/11160) |
