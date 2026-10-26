@@ -1,0 +1,29 @@
+{
+  "mod": {
+    "help": "Thiết lập cho mod Journey HUD."
+  },
+  "enabled": {
+    "label": "Thanh mục tiêu",
+    "help": "Hiện máu và poise của kẻ địch đang khoá mục tiêu."
+  },
+  "numbers": {
+    "label": "Số máu",
+    "help": "Hiện số máu chính xác phía trên thanh mục tiêu."
+  },
+  "width": {
+    "label": "Độ dài thanh",
+    "help": "Độ dài của thanh mục tiêu."
+  },
+  "scale": {
+    "label": "Kích thước",
+    "help": "Kích thước thanh mục tiêu. 1 = bình thường."
+  },
+  "offset_x": {
+    "label": "Lề phải",
+    "help": "Khoảng cách tới mép phải màn hình."
+  },
+  "offset_y": {
+    "label": "Lề trên",
+    "help": "Khoảng cách tới mép trên màn hình."
+  }
+}

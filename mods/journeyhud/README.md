@@ -1,0 +1,56 @@
+<div align="center">
+
+# JourneyHud
+
+**HUD gọn ở góc phải màn hình: máu và poise của kẻ địch đang khoá mục tiêu.**
+
+![Rust](https://img.shields.io/badge/Rust-cdylib-orange?logo=rust)
+![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)
+![Game](https://img.shields.io/badge/game-Elden_Ring-8a6d3b)
+
+</div>
+
+---
+
+## Giới thiệu
+
+JourneyHud vẽ một overlay nhỏ ở góc trên bên phải: khi khoá mục tiêu một kẻ địch, panel hiện
+**máu** và **poise** (thanh stagger) của nó, tắt đi khi bỏ khoá. Mod được thiết kế để mở rộng
+thành HUD hành trình (radar, minimap) ở các giai đoạn sau, xem `docs/design.md`.
+
+## Tính năng
+
+| Tính năng | Mô tả |
+|---|---|
+| **Panel mục tiêu** | thanh máu và thanh poise của kẻ địch đang khoá, vẽ giống thanh của game (số máu bật được) |
+| **Tự ẩn** | không khoá thì không vẽ gì; kẻ địch không có thanh poise thì chỉ hiện máu |
+
+## Cấu hình
+
+Vị trí (lệch so với góc phải trên) và cỡ panel chỉnh trong `JourneyHud.ini` cạnh DLL; tên key và
+mặc định nằm ở chú thích file đó. Panel neo vào khung hình 16:9 của game (trong dải đen trên màn 16:10 hay
+siêu rộng) và co giãn theo độ cao khung đó.
+
+## Menu trong game
+
+Có `ERNativeUI.dll` thì hiện hàng **Journey HUD** ở System > Game Options (bật tắt, số máu, độ dài, cỡ, hai lề); đổi
+là áp dụng ngay và được ghi lại vào ini. Không có thì mod chạy bằng ini như bình thường.
+
+## Cách hoạt động
+
+Task chạy mỗi frame đọc handle mục tiêu khoá của người chơi chính, đổi sang nhân vật tương ứng
+rồi chép máu và poise ra một snapshot. Luồng render (ImGui qua hudhook, DX12) chỉ đọc snapshot,
+không chạm đối tượng game. Chi tiết: [docs/design.md](docs/design.md).
+
+## Giới hạn
+
+- Chưa có tên kẻ địch, trạng thái (độc, chảy máu...), radar hay minimap.
+- Cần Elden Ring chạy DX12; có thể xung đột với phần mềm overlay khác hook DXGI (vd. MSI Afterburner).
+
+## Tài liệu
+
+- [CHANGELOG.md](CHANGELOG.md)
+- [HISTORY.md](HISTORY.md)
+- [docs/design.md](docs/design.md): thiết kế, nguồn tham khảo, giai đoạn
+- [docs/offsets.md](docs/offsets.md): offset và kiểm chứng theo bản exe
+- [docs/names.md](docs/names.md): tra tên kẻ địch (đã bỏ, giữ kết quả dịch ngược)
