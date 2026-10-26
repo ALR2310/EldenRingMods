@@ -352,5 +352,18 @@
         "commit": "0486f55f808cc1b389b77328f760c228e85a5c35"
       }
     ]
+  },
+  {
+    "id": "11470",
+    "internalId": "18610093305038",
+    "name": "Auto Pickup",
+    "crate": "autopickup",
+    "modFileId": "8239932",
+    "deploys": [
+      {
+        "version": "1.0.0",
+        "commit": "a1be41a8c954a1f0ce3d897a0b5f7a4775a1442a"
+      }
+    ]
   }
 ]
