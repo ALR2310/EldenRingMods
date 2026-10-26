@@ -1,5 +1,21 @@
 # Project Rules
 
+## Nhánh git: mỗi mod một nhánh `mod/<tên thư mục mod>`
+
+Mọi việc thuộc 1 mod (tính năng, sửa lỗi, nghiên cứu, tài liệu, chỉnh config)
+làm trên **1 nhánh duy nhất của mod đó**: `mod/<tên thư mục trong mods/>`, vd.
+`mod/nofalldamage`. Không tách `feat/`, `fix/`, `docs/`... theo loại việc; gom
+hết vào nhánh `mod/` của mod.
+
+- Bắt đầu việc của 1 mod: nếu nhánh `mod/<mod>` chưa có thì tạo từ `main`, có
+  rồi thì chuyển sang nó (kiểm `git branch` trước, đừng tạo nhánh trùng ý).
+- Thay đổi ở `shared/` (crate `common`) hay file gốc repo (README gốc, `TODO.md`,
+  `.vscode/tasks.json`, `Cargo.toml`) mà việc của mod đó cần thì cùng nhánh với
+  mod. Việc không thuộc mod nào (hạ tầng, quy tắc chung) thì hỏi người dùng
+  nhánh nào trước khi làm.
+- Không tự merge, xoá hay đổi tên nhánh; không tự commit khi chưa được kiểm
+  (quy tắc commit giữ nguyên).
+
 ## Tài liệu của mỗi mod: README, CHANGELOG, HISTORY, docs
 
 Mỗi mod có 4 loại tài liệu, mỗi loại 1 vai trò, không trộn lẫn:
