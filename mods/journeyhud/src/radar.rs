@@ -5,11 +5,15 @@
 //! used as offsets from the player (all in the same Havok space), so no map
 //! coordinate conversion is needed. Details: `docs/radar.md`.
 
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use eldenring::cs::{CSCamera, CSFade, CSFeManHudState, CSFeManImp, WorldChrMan};
+use eldenring::cs::{
+    CSCamera, CSEventFlagMan, CSFade, CSFeManHudState, CSFeManImp, SoloParamRepository, WorldChrMan, WorldMapPieceParam,
+};
 use fromsoftware_shared::FromStatic;
+
+use common::{logger, params};
 
 use crate::map::tiles::MapId;
 use crate::map::{beacons, graces, points, world};
@@ -50,6 +54,8 @@ pub struct Snapshot {
     pub boss_fight: bool,
     /// The player is in a cave, catacomb or other dungeon block.
     pub in_cave: bool,
+    /// The map fragments the player has, one bit per fragment (all set when the whole map shows).
+    pub fragments: u32,
     pub partners: Vec<Dot>,
     pub spirits: Vec<Dot>,
     /// Offset of the locked-on enemy.
@@ -110,14 +116,21 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
         (near && world::locate(chr.block_id, [0.0, 0.0]).1 == space).then_some(Dot { offset, facing: [-model.2.0, -model.2.2] })
     };
 
-    let partners = world_chr_man
-        .player_chr_set
-        .characters()
-        .filter(|other| !std::ptr::eq(&**other, &**player))
-        .filter_map(|other| dot(&other.chr_ins))
-        .collect();
+    let partners = if settings::minimap_coop() {
+        world_chr_man
+            .player_chr_set
+            .characters()
+            .filter(|other| !std::ptr::eq(&**other, &**player))
+            .filter_map(|other| dot(&other.chr_ins))
+            .collect()
+    } else {
+        Vec::new()
+    };
     let mut spirits = Vec::new();
-    common::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| spirits.extend(dot(chr)));
+    if settings::minimap_spirits() {
+        common::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| spirits.extend(dot(chr)));
+    }
+    let fragments = if settings::minimap_full_map() { u32::MAX } else { map_fragments(map) };
 
     Some(Snapshot {
         position,
@@ -145,8 +158,43 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
         hud_visible,
         boss_fight,
         in_cave,
+        fragments,
         partners,
         spirits,
         target,
     })
+}
+
+/// The map fragments the player has, one bit per fragment of the map they are on, as the map
+/// tile masks number them: bit b is `WorldMapPieceParam` row `base + b`, base 0 for the
+/// overworld and 100 for the underground. Everything counts as found until the params and the
+/// flags are loaded, or when the player is not on a map.
+fn map_fragments(map: Option<MapId>) -> u32 {
+    let base = match map {
+        Some(MapId::Overworld) => 0,
+        Some(MapId::Underground) => 100,
+        None => return u32::MAX,
+    };
+    static READABLE: OnceLock<bool> = OnceLock::new();
+    let (Ok(repo), Ok(flags)) = (unsafe { SoloParamRepository::instance() }, unsafe { CSEventFlagMan::instance() })
+    else {
+        return u32::MAX;
+    };
+    let readable = *READABLE.get_or_init(|| match params::check::<WorldMapPieceParam>(repo) {
+        Ok(()) => true,
+        Err(reason) => {
+            logger::warn(&format!("Map: piece params unavailable ({reason})"));
+            false
+        }
+    });
+    if !readable {
+        return u32::MAX;
+    }
+    (0..32)
+        .filter(|&bit| {
+            repo.get::<WorldMapPieceParam>(base + bit)
+                .map(|row| row.open_event_flag_id())
+                .is_some_and(|flag| flag != 0 && flags.virtual_memory_flag.get_flag(flag))
+        })
+        .fold(0, |bits, bit| bits | 1 << bit)
 }

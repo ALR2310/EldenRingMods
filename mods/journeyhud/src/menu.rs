@@ -1,6 +1,6 @@
 //! Optional in-game menu via the ERNativeUI host (see `common::erui`).
 //! Without `ERNativeUI.dll` the mod works exactly as before, from the
-//! `JourneyHud.toml` file only. Layout (System > Game Options):
+//! `JourneyHUD.toml` file only. Layout (System > Game Options):
 //!
 //! ```text
 //! Journey HUD                -> opens a page with:
@@ -9,6 +9,10 @@
 //!                                 Graces          on/off
 //!                                 Points          on/off
 //!                                 Beacons         on/off
+//!                                 Co-op players   on/off
+//!                                 Spirits         on/off
+//!                                 Full map        on/off
+//!                                 Compass         on/off
 //!                                 Turn with camera on/off
 //!                                 Hide in caves   on/off
 //!                                 Hide in boss fights on/off
@@ -23,7 +27,7 @@
 //!                                 Top margin      slider
 //! ```
 //!
-//! Changes apply at once and are written back to `JourneyHud.toml` shortly after the
+//! Changes apply at once and are written back to `JourneyHUD.toml` shortly after the
 //! player stops, so they survive a restart.
 
 use std::sync::OnceLock;
@@ -55,6 +59,14 @@ static MINIMAP_POINTS: Setting =
     Setting { key: "Minimap.Layers.Points", format: erui::format_bool, apply: Some(settings::set_minimap_points) };
 static MINIMAP_BEACONS: Setting =
     Setting { key: "Minimap.Layers.Beacons", format: erui::format_bool, apply: Some(settings::set_minimap_beacons) };
+static MINIMAP_COMPASS: Setting =
+    Setting { key: "Minimap.Compass", format: erui::format_bool, apply: Some(settings::set_minimap_compass) };
+static MINIMAP_FULL_MAP: Setting =
+    Setting { key: "Minimap.FullMap", format: erui::format_bool, apply: Some(settings::set_minimap_full_map) };
+static MINIMAP_COOP: Setting =
+    Setting { key: "Minimap.Layers.CoopPlayers", format: erui::format_bool, apply: Some(settings::set_minimap_coop) };
+static MINIMAP_SPIRITS: Setting =
+    Setting { key: "Minimap.Layers.Spirits", format: erui::format_bool, apply: Some(settings::set_minimap_spirits) };
 static MINIMAP_ROTATE: Setting =
     Setting { key: "Minimap.Rotate", format: erui::format_bool, apply: Some(settings::set_minimap_rotate) };
 static MINIMAP_HIDE_IN_CAVES: Setting =
@@ -105,6 +117,18 @@ fn build(b: &mut erui::MenuBuilder) -> Result<(), String> {
     b.toggle(page, &t("minimap_beacons.label"), &t("minimap_beacons.help"), &MINIMAP_BEACONS, || {
         config::get().minimap.layers.beacons as u8
     })?;
+    b.toggle(page, &t("minimap_coop.label"), &t("minimap_coop.help"), &MINIMAP_COOP, || {
+        config::get().minimap.layers.coop_players as u8
+    })?;
+    b.toggle(page, &t("minimap_spirits.label"), &t("minimap_spirits.help"), &MINIMAP_SPIRITS, || {
+        config::get().minimap.layers.spirits as u8
+    })?;
+    b.toggle(page, &t("minimap_full_map.label"), &t("minimap_full_map.help"), &MINIMAP_FULL_MAP, || {
+        config::get().minimap.full_map as u8
+    })?;
+    b.toggle(page, &t("minimap_compass.label"), &t("minimap_compass.help"), &MINIMAP_COMPASS, || {
+        config::get().minimap.compass as u8
+    })?;
     b.toggle(page, &t("minimap_rotate.label"), &t("minimap_rotate.help"), &MINIMAP_ROTATE, || {
         config::get().minimap.rotate as u8
     })?;
@@ -140,14 +164,14 @@ mod tests {
     /// have the same keys (nothing missing, nothing left over).
     #[test]
     fn language_files_match_the_menu_keys() {
-        TEXT.assert_matches_source(include_str!("menu.rs"), 35);
+        TEXT.assert_matches_source(include_str!("menu.rs"), 43);
     }
 
     /// Every key a row saves to is in the template, so a save never invents a key.
     #[test]
     fn menu_keys_are_in_the_template() {
         let doc: toml::Value = toml::from_str(config::TEMPLATE).unwrap();
-        let settings = [&ENABLED, &SHOW_NUMBERS, &MINIMAP, &MINIMAP_MAP, &MINIMAP_GRACES, &MINIMAP_POINTS, &MINIMAP_BEACONS];
+        let settings = [&ENABLED, &SHOW_NUMBERS, &MINIMAP, &MINIMAP_MAP, &MINIMAP_GRACES, &MINIMAP_POINTS, &MINIMAP_BEACONS, &MINIMAP_COMPASS, &MINIMAP_FULL_MAP, &MINIMAP_COOP, &MINIMAP_SPIRITS];
         let numbers = [&WIDTH, &SCALE, &OFFSET_X, &OFFSET_Y, &MINIMAP_RANGE, &MINIMAP_SIZE, &MINIMAP_SCALE];
         let keys = settings.iter().map(|s| s.key).chain(numbers.iter().map(|n| n.key));
         for key in keys.chain([MINIMAP_ROTATE.key, MINIMAP_HIDE_IN_CAVES.key, MINIMAP_HIDE_IN_BOSS_FIGHTS.key]) {

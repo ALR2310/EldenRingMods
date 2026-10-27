@@ -59,6 +59,6 @@ Hai phép quét khác với AOB, cho hook mà mẫu byte không dùng được.
 
 `read_safe::<T>(address)` đọc một `T` bằng `ReadProcessMemory` trên chính process, trả
 `None` thay vì fault khi vùng nhớ không đọc được. Dùng để đi một chuỗi con trỏ chưa
-kiểm trên mọi bản exe (JourneyHud đọc beacon bằng nó). `crash.rs` giữ bản riêng của
+kiểm trên mọi bản exe (JourneyHUD đọc beacon bằng nó). `crash.rs` giữ bản riêng của
 nó vì chạy trong bộ xử lý ngoại lệ, không nên phụ thuộc module khác.
 

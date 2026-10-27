@@ -149,7 +149,9 @@ impl Radar {
         view.draw_graces(&draw, snapshot);
         view.draw_beacons(&draw, snapshot);
         view.draw_marks(&draw, snapshot);
-        view.draw_compass(ui, &draw);
+        if settings::minimap_compass() {
+            view.draw_compass(ui, &draw);
+        }
         view.draw_player(&draw);
     }
 }

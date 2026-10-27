@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 
 [lib]
-name = "JourneyHud"
+name = "JourneyHUD"
 crate-type = ["cdylib"]
 
 [dependencies]
@@ -29,6 +29,6 @@ winresource = "0.1"
 [package.metadata.winresource]
 ProductName = "Journey HUD"
 FileDescription = "Journey HUD - Elden Ring mod"
-InternalName = "JourneyHud"
-OriginalFilename = "JourneyHud.dll"
+InternalName = "JourneyHUD"
+OriginalFilename = "JourneyHUD.dll"
 LegalCopyright = "Copyright (c) 2026 ALR2310"

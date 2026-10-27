@@ -1,4 +1,4 @@
-# JourneyHud: tên kẻ địch
+# JourneyHUD: tên kẻ địch
 
 **Status 2026-10-26: ĐÃ BỎ, không có trong mod. Người dùng không cần tên (souls_vision gốc cũng không có). Phần dưới là kết quả dịch ngược, giữ lại nếu sau này cần.**
 
