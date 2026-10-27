@@ -34,7 +34,7 @@ Kết luận: gọi Mimic Tear số lượng lớn (khoảng 30 con) với Seaml
 
 ## `InstantMimic`: bỏ Blob và fade-in (2026-10-22, chưa test trong game)
 
-Port từ `er10x.dll` ("10x Spirit Summons", `tmp/erx10/`): các chuỗi `drop_mimic_blob`, `remove_mimic_fade`, `mimic_blob_row=20700000`, `mimic_npc_row=100000010`, `mimic_fade_value=16316`; log của nó: "row was the blob stage; rewritten with row ... so both links are the real mimic. The row id stays, which is what makes the game copy your build". Đã giải mã er10x (171 hàm, `dumps/er10x/export.c`, tạo bằng `scripts/ida/export_all.py` chạy trực tiếp bằng idat): xem mục "er10x làm gì" cuối file.
+Port từ `er10x.dll` ("10x Spirit Summons", `tmp/repos/erx10/`): các chuỗi `drop_mimic_blob`, `remove_mimic_fade`, `mimic_blob_row=20700000`, `mimic_npc_row=100000010`, `mimic_fade_value=16316`; log của nó: "row was the blob stage; rewritten with row ... so both links are the real mimic. The row id stays, which is what makes the game copy your build". Đã giải mã er10x (171 hàm, `dumps/er10x/export.c`, tạo bằng `scripts/ida/export_all.py` chạy trực tiếp bằng idat): xem mục "er10x làm gì" cuối file.
 
 Cách làm (`src/mimic.rs`, `src/chain.rs`):
 
