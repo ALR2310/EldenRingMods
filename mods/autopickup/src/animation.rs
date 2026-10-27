@@ -1,11 +1,11 @@
-//! `NoPickupAnimation`: stops the animation that plays when an item lying on
-//! the ground is picked up. Two animation IDs are replaced by one the game
-//! doesn't have (999999, the value ErdTools writes for materials):
-//! `GameSystemCommonParam.msbEventGeomTreasureInfo_itemGetAnimId_shine` (the
-//! glowing items on the ground) and `PlayerCommonParam.animeID_DropItemPick`
-//! (dropped items). The game's own values are kept from the first call, so
-//! switching the option off restores them. What was checked and what wasn't:
-//! `docs/pickup_animation.md`.
+//! `NoPickupAnimation`: stops the animation that plays when something is
+//! picked up. Each animation ID is replaced by one the game doesn't have
+//! (999999, the value ErdTools writes for materials):
+//! `GameSystemCommonParam.msbEventGeomTreasureInfo_itemGetAnimId_{shine,
+//! corpse, box}` (glowing items on the ground, remains, chests) and
+//! `PlayerCommonParam.animeID_DropItemPick` (dropped items). The game's own
+//! values are kept from the first call, so switching the option off restores
+//! them. What was checked and what wasn't: `docs/pickup_animation.md`.
 
 use std::sync::Mutex;
 
@@ -21,6 +21,8 @@ const NO_ANIMATION: i32 = 999_999;
 struct Vanilla {
     drop_item_pick: i32,
     shine: i32,
+    corpse: i32,
+    chest: i32,
 }
 
 static VANILLA: Mutex<Option<Vanilla>> = Mutex::new(None);
@@ -41,12 +43,17 @@ pub fn apply(repo: &mut SoloParamRepository, disable: bool) -> Result<(), String
         None => {
             let drop_item_pick =
                 repo.get_row_by_index_mut::<PlayerCommonParam>(0).ok_or("PlayerCommonParam row 0 not found")?.anime_id_drop_item_pick();
-            let shine = repo
-                .get_row_by_index_mut::<GameSystemCommonParam>(0)
-                .ok_or("GameSystemCommonParam row 0 not found")?
-                .msb_event_geom_treasure_info_item_get_anim_id_shine();
-            let vanilla = Vanilla { drop_item_pick, shine };
-            logger::log(&format!("Animation: drop item pick {drop_item_pick}, shine {shine}"));
+            let system = repo.get_row_by_index_mut::<GameSystemCommonParam>(0).ok_or("GameSystemCommonParam row 0 not found")?;
+            let vanilla = Vanilla {
+                drop_item_pick,
+                shine: system.msb_event_geom_treasure_info_item_get_anim_id_shine(),
+                corpse: system.msb_event_geom_treasure_info_item_get_anim_id_corpse(),
+                chest: system.msb_event_geom_treasure_info_item_get_anim_id_box(),
+            };
+            logger::log(&format!(
+                "Animation: drop item pick {}, shine {}, corpse {}, chest {}",
+                vanilla.drop_item_pick, vanilla.shine, vanilla.corpse, vanilla.chest
+            ));
             *stored = Some(vanilla);
             vanilla
         }
@@ -55,9 +62,10 @@ pub fn apply(repo: &mut SoloParamRepository, disable: bool) -> Result<(), String
     repo.get_row_by_index_mut::<PlayerCommonParam>(0)
         .ok_or("PlayerCommonParam row 0 not found")?
         .set_anime_id_drop_item_pick(target(vanilla.drop_item_pick, disable));
-    repo.get_row_by_index_mut::<GameSystemCommonParam>(0)
-        .ok_or("GameSystemCommonParam row 0 not found")?
-        .set_msb_event_geom_treasure_info_item_get_anim_id_shine(target(vanilla.shine, disable));
+    let system = repo.get_row_by_index_mut::<GameSystemCommonParam>(0).ok_or("GameSystemCommonParam row 0 not found")?;
+    system.set_msb_event_geom_treasure_info_item_get_anim_id_shine(target(vanilla.shine, disable));
+    system.set_msb_event_geom_treasure_info_item_get_anim_id_corpse(target(vanilla.corpse, disable));
+    system.set_msb_event_geom_treasure_info_item_get_anim_id_box(target(vanilla.chest, disable));
     Ok(())
 }
 

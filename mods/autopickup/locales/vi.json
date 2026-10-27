@@ -36,7 +36,7 @@
   },
   "animation": {
     "label": "Bỏ animation nhặt",
-    "help": "Bỏ animation khi nhặt vật phẩm nằm trên mặt đất."
+    "help": "Bỏ animation khi nhặt vật phẩm, hài cốt và rương."
   },
   "log": {
     "label": "File log",

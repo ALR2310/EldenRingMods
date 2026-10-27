@@ -1,6 +1,6 @@
 # Tắt animation nhặt vật phẩm (`NoPickupAnimation`)
 
-**Status 2026-10-27: hoạt động, đã thử trong game và người dùng xác nhận: `NoPickupAnimation` ghi 999999 vào `GameSystemCommonParam.msbEventGeomTreasureInfo_itemGetAnimId_shine` (nút 4250, animation gốc 60070) và `PlayerCommonParam.animeID_DropItemPick` thì animation nhặt vật phẩm trên đất biến mất. `animeID_DropItemPick` riêng nó không đủ (thử lần đầu không có tác dụng); hài cốt (4200) và rương (4300) chưa đụng tới.**
+**Status 2026-10-27: hoạt động, đã thử trong game và người dùng xác nhận: `NoPickupAnimation` ghi 999999 vào `GameSystemCommonParam.msbEventGeomTreasureInfo_itemGetAnimId_shine` (nút 4250, animation gốc 60070) và `PlayerCommonParam.animeID_DropItemPick` thì animation nhặt vật phẩm trên đất biến mất. `animeID_DropItemPick` riêng nó không đủ (thử lần đầu không có tác dụng); hài cốt (`corpse`) và rương (`box`) cũng đã thêm vào cùng công tắc và được người dùng xác nhận ổn.**
 
 ## Vì sao có
 
@@ -36,4 +36,4 @@ Giống `vanilla_pickup_animations` của ErdTools (`tmp/repos/Erd-Tools-CPP/Erd
 
 `ObjActParam`: nguyên liệu (nút 7800, dòng 90017) có `playerAnimId = 0`, khớp việc nguyên liệu không có animation; nhóm Items không có dòng `ObjActParam` nào, nên animation của chúng đi qua đường kho báu ở bảng trên chứ không qua `ObjActParam`.
 
-Code (`animation.rs`) đổi `itemGetAnimId_shine` và `animeID_DropItemPick` thành 999999 khi bật `NoPickupAnimation`, khôi phục giá trị gốc khi tắt. Chưa động tới `corpse` (60070) và `box` (60090). Log ghi giá trị gốc: `Animation: drop item pick <id>, shine <id>`.
+Code (`animation.rs`) đổi `itemGetAnimId_shine` và `animeID_DropItemPick` thành 999999 khi bật `NoPickupAnimation`, khôi phục giá trị gốc khi tắt. Từ cùng ngày, `corpse` (60070) và `box` (60090) cũng đổi thành 999999 bởi cùng công tắc (gộp chung vì chỉ có một yêu cầu "tắt animation nhặt"); đã thử và ổn. Log ghi giá trị gốc: `Animation: drop item pick <id>, shine <id>, corpse <id>, chest <id>`.

@@ -13,8 +13,8 @@ ReloadBanner = false
 # Stop picking up while you are in combat.
 PauseInCombat = true
 
-# Skip the animation of picking up an item from the ground.
-NoPickupAnimation = false
+# Skip the animation of picking up items, remains and chests.
+NoPickupAnimation = true
 
 
 [Materials]
