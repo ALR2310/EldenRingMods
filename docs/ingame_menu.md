@@ -9,8 +9,8 @@ SoulsTeleport/SoulsChat); tự dịch ngược và tự dựng menu native (ERNa
 
 https://github.com/Flammrock/ERNativeUI (MIT, Flammrock). Host `ERNativeUI.dll` dùng
 chung + SDK C ABI (`erui.h`). Release 1.0.0 (2026-08-30), 1.1.0 (09-06), 1.1.1
-(09-11). Mã nguồn đã clone ở `tmp/ERNativeUI` (git-ignored); bản phát hành giải nén ở
-`tmp/` hoặc scratchpad.
+(09-11). Mã nguồn đã clone ở `tmp/repos/ERNativeUI` (git-ignored); bản phát hành giải nén ở
+`tmp/repos/` hoặc `tmp/scratchpad/`.
 
 - Hook hàm dựng trang menu của game (không ImGui, không file GFX bắt buộc); các mod gọi API khai báo lúc khởi động.
 - Chỉ hỗ trợ exe **2.7.0.0, 2.7.1.0 và (từ host 1.3.0) 2.7.2.0** (nhận theo PE timestamp + SizeOfImage, fail-closed). Không có
@@ -78,5 +78,5 @@ Host 1.3.0 (2026-10-20) tự hoàn thiện GFX lúc chạy ("runtime GFX complet
 - `0x959DF0` dựng trang Game Options; `0x94A590` thêm hàng slider, `0x94A140` thêm hàng bool,
   `0x94A2C0` inline choice; chữ tra theo ID `GR_MenuText` (`0x7617C0`) / `GR_LineHelp` (`0x7615E0`) qua
   `0x764220` (ERNativeUI hook hàm này để chèn chữ riêng). Mảng hàng của trang giới hạn 16 (`0x928630`).
-- `mod-settings-menu.dll` của bên thứ ba (mã đóng, mẫu trong `tmp/menu_in_game`) chỉ chạy trên 2.7.1.0, API chỉ
+- `mod-settings-menu.dll` của bên thứ ba (mã đóng, mẫu trong `tmp/repos/menu_in_game`) chỉ chạy trên 2.7.1.0, API chỉ
   slider số; Solid_Uncapper dùng GFX loose khác hướng. Không dùng cả hai.

@@ -34,7 +34,7 @@ Phạm vi thanh trượt có dấu: -128 … 127.
 
 ## Số thập phân và số âm bằng ánh xạ hiển thị (đã có tiền lệ: `mod-settings-menu.dll`)
 
-Đọc code của `tmp/menu_in_game/mod-settings-menu.dll` (mã đóng, chỉ để hiểu kỹ thuật) cho thấy cách làm **không cần sửa dấu byte**:
+Đọc code của `tmp/repos/menu_in_game/mod-settings-menu.dll` (mã đóng, chỉ để hiểu kỹ thuật) cho thấy cách làm **không cần sửa dấu byte**:
 
 - Nó cài 5 detour (MinHook) trên exe 2.7.1.0: `0x959DF0` (trang Game Options), `0x95B770` (trang con kiểu Advanced Settings), `0x764220` (tra chữ),
   **`0x74FA20`** (cập nhật chữ của `SliderCtrl`) và **`0x74F5D0`** (xử lý chuột kéo của `SliderCtrl`).
@@ -58,7 +58,7 @@ không ánh xạ mà lưu thẳng số âm trong byte). Chuột có thể cần 
 
 ## Đường đi đề xuất khi thử
 
-1. Dựng fork `tmp/ERNativeUI` (MIT; máy có Visual Studio 2026 Community + CMake, xem `build.bat`).
+1. Dựng fork `tmp/repos/ERNativeUI` (MIT; máy có Visual Studio 2026 Community + CMake, xem `build.bat`).
 2. Thử nhỏ nhất: chỉ số âm (3 việc ở trên), 1 slider -10 … 10 trong RuneMultiplier; xem hiển thị ban đầu, kéo, lưu, đọc lại.
 3. Nếu tốt: làm số thập phân; sau đó đề nghị tác giả gộp thay đổi (hoặc phát hành bản fork, người dùng thay DLL host).
 
