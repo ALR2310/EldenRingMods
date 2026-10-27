@@ -8,6 +8,7 @@ mod cache;
 mod formats;
 pub mod graces;
 pub mod layer;
+pub mod mfg;
 pub mod points;
 mod reader;
 pub mod sprites;

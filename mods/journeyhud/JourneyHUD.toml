@@ -13,44 +13,47 @@ ReloadBanner = false
 [Layout]
 # Position of the minimap and target bar, from the top-right corner of the
 # screen, in pixels at 1080p.
-OffsetX = 48    # distance from the right edge
-OffsetY = 47    # distance from the top edge
+OffsetX = 48            # distance from the right edge
+OffsetY = 47            # distance from the top edge
 
 
 [Target]
 # The locked-on enemy's health and posture bars.
 Enabled = true
-Width = 220         # Bar length in pixels (100 - 1600).
-Scale = 1.0         # Panel size multiplier (0.5 - 3.0).
-ShowNumbers = true  # Show health and posture numbers.
+Width = 220             # Bar length in pixels (100 - 1600).
+Scale = 1.0             # Panel size multiplier (0.5 - 3.0).
+ShowNumbers = true      # Show health and posture numbers.
 
 
 [Minimap]
 # Round minimap: other players, your spirits, the locked-on enemy.
 Enabled = true
-Size = 110          # radius in pixels at 1080p (40 - 200)
-Scale = 1.0         # size multiplier (0.5 - 3.0)
-Range = 100         # meters from center to rim (20 - 200)
-Rotate = false      # turn with the camera; false keeps north at the top
-Compass = true      # N, E, S, W letters on the rim
-FullMap = true      # false shows only what your map fragments reveal
-ZoomInKey = "0xBB"  # zoom in (shorter range), "0xBB" is +
-ZoomOutKey = "0xBD" # zoom out (longer range), "0xBD" is -
+Size = 110              # radius in pixels at 1080p (40 - 200)
+Scale = 1.0             # size multiplier (0.5 - 3.0)
+Range = 100             # meters from center to rim (20 - 200)
+Rotate = false          # turn with the camera; false keeps north at the top
+Compass = true          # N, E, S, W letters on the rim
+Trail = false           # the path you have walked
+FullMap = true          # false shows only what your map fragments reveal
+ZoomInKey = "0xBB"      # zoom in (shorter range), "0xBB" is +
+ZoomOutKey = "0xBD"     # zoom out (longer range), "0xBD" is -
 
 
 [Minimap.Layers]
-Map = true          # the game's world map, read from its own files
-Graces = true       # sites of grace you have found
-Points = true       # ruins, churches, caves, bosses...
-Beacons = true      # beacons you placed on the world map
-CoopPlayers = true  # co-op partners (Seamless Co-op included)
-Spirits = true      # your summoned spirits
+Map = true              # the game's world map, read from its own files
+Graces = true           # sites of grace you have found
+Points = true           # ruins, churches, caves, bosses...
+Beacons = true          # beacons you placed on the world map
+MapForGoblins = true    # markers of the Map for Goblins DLL, when it is loaded
+CoopPlayers = true      # co-op partners (Seamless Co-op included)
+Spirits = true          # your summoned spirits
 
 
 [Minimap.Hide]
-InCaves = false       # caves, catacombs and dungeons
-InBossFights = false  # while a boss health bar is on screen
+InCaves = false         # caves, catacombs and dungeons
+InBossFights = false    # while a boss health bar is on screen
 
 
 [Logging]
-LogFile = true    # write a log file next to the DLL
+# Write a log file next to the DLL, for troubleshooting.
+LogFile = true

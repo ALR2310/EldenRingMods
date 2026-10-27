@@ -46,6 +46,10 @@
     "label": "Beacon",
     "help": "Đánh dấu các beacon bạn đã đặt trên bản đồ thế giới trên minimap."
   },
+  "minimap_goblins": {
+    "label": "Map for Goblins",
+    "help": "Đánh dấu vật phẩm và địa điểm của mod Map for Goblins DLL trên minimap, khi đã cài nó."
+  },
   "minimap_coop": {
     "label": "Người chơi co-op",
     "help": "Đánh dấu đồng đội co-op trên minimap."
@@ -57,6 +61,10 @@
   "minimap_full_map": {
     "label": "Bản đồ đầy đủ",
     "help": "Hiện toàn bộ bản đồ thế giới. Tắt thì chỉ hiện phần các mảnh bản đồ bạn có đã mở."
+  },
+  "minimap_trail": {
+    "label": "Đường đã đi",
+    "help": "Vẽ đường bạn vừa đi trên minimap."
   },
   "minimap_compass": {
     "label": "La bàn",

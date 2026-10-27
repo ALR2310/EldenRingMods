@@ -583,6 +583,7 @@ dependencies = [
  "aes",
  "common",
  "eldenring",
+ "flate2",
  "fromsoftware-shared",
  "hudhook",
  "libloading",
