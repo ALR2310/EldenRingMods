@@ -28,11 +28,15 @@
   },
   "range": {
     "label": "Tầm nhặt",
-    "help": "Bạn có thể đứng xa đến đâu. 1.0 là khoảng cách gốc của game; cũng đổi khoảng cách hiện gợi ý nhặt."
+    "help": "Bạn có thể đứng xa đến đâu, từ 0.1 đến 10. 1.0 là khoảng cách gốc của game."
   },
   "combat": {
     "label": "Tạm dừng khi chiến đấu",
     "help": "Không tự nhặt khi bạn đang chiến đấu."
+  },
+  "animation": {
+    "label": "Bỏ animation nhặt",
+    "help": "Bỏ animation khi nhặt vật phẩm, hài cốt và rương."
   },
   "log": {
     "label": "File log",

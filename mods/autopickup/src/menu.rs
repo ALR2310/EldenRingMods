@@ -46,6 +46,7 @@ static CORPSE_LOOT: GroupSettings = group_settings!("CorpseLoot");
 static LOST_RUNES: GroupSettings = group_settings!("LostRunes");
 static CHESTS: GroupSettings = group_settings!("Chests");
 static PAUSE_IN_COMBAT: Setting = Setting::flag("General.PauseInCombat");
+static NO_PICKUP_ANIMATION: Setting = Setting::flag("General.NoPickupAnimation");
 static LOG_FILE: Setting = Setting::flag("Logging.LogFile");
 
 static MENU: OnceLock<erui::Menu> = OnceLock::new();
@@ -87,6 +88,7 @@ fn build(b: &mut MenuBuilder) -> Result<(), String> {
     group_page!(b, page, &t("chests.title"), &t("chests.help"), CHESTS, chests);
 
     b.toggle(page, &t("combat.label"), &t("combat.help"), &PAUSE_IN_COMBAT, || config::get().general.pause_in_combat as u8)?;
+    b.toggle(page, &t("animation.label"), &t("animation.help"), &NO_PICKUP_ANIMATION, || config::get().general.no_pickup_animation as u8)?;
     b.toggle(page, &t("log.label"), &t("log.help"), &LOG_FILE, || config::get().logging.log_file as u8)
 }
 
@@ -123,6 +125,6 @@ mod tests {
     /// have the same keys (nothing missing, nothing left over).
     #[test]
     fn language_files_match_the_menu_keys() {
-        TEXT.assert_matches_source(include_str!("menu.rs"), 19);
+        TEXT.assert_matches_source(include_str!("menu.rs"), 21);
     }
 }
