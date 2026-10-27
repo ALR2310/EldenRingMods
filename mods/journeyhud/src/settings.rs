@@ -5,6 +5,13 @@
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
 
 use common::config;
+use common::input::parse_virtual_key;
+
+const VK_OEM_PLUS: i32 = 0xBB;
+const VK_OEM_MINUS: i32 = 0xBD;
+
+/// The minimap ranges (meters from the center to the rim) the zoom keys step through.
+const ZOOM_LEVELS: [i32; 3] = [50, 100, 200];
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
 static SHOW_NUMBERS: AtomicBool = AtomicBool::new(false);
@@ -18,7 +25,10 @@ static MINIMAP_MAP: AtomicBool = AtomicBool::new(true);
 static MINIMAP_GRACES: AtomicBool = AtomicBool::new(true);
 static MINIMAP_POINTS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_BEACONS: AtomicBool = AtomicBool::new(true);
-static MINIMAP_RANGE: AtomicI32 = AtomicI32::new(80);
+static MINIMAP_RANGE: AtomicI32 = AtomicI32::new(100);
+/// Virtual-key codes of the zoom keys.
+static ZOOM_IN_KEY: AtomicI32 = AtomicI32::new(VK_OEM_PLUS);
+static ZOOM_OUT_KEY: AtomicI32 = AtomicI32::new(VK_OEM_MINUS);
 static MINIMAP_SIZE: AtomicI32 = AtomicI32::new(110);
 
 /// Reads every setting from the loaded config.
@@ -34,7 +44,9 @@ pub fn load() {
     set_minimap_graces(config::get_bool("MinimapGraces", true) as u8);
     set_minimap_points(config::get_bool("MinimapPoints", true) as u8);
     set_minimap_beacons(config::get_bool("MinimapBeacons", true) as u8);
-    set_minimap_range(config::get_int("MinimapRange", 80) as f64);
+    set_minimap_range(config::get_int("MinimapRange", 100) as f64);
+    ZOOM_IN_KEY.store(parse_virtual_key(&config::get_string("ZoomInKey", "0xBB"), VK_OEM_PLUS), Ordering::Relaxed);
+    ZOOM_OUT_KEY.store(parse_virtual_key(&config::get_string("ZoomOutKey", "0xBD"), VK_OEM_MINUS), Ordering::Relaxed);
     set_minimap_size(config::get_int("MinimapSize", 110) as f64);
 }
 
@@ -88,6 +100,29 @@ pub fn minimap_beacons() -> bool {
 /// Meters from the center of the minimap to its rim.
 pub fn minimap_range() -> f32 {
     MINIMAP_RANGE.load(Ordering::Relaxed) as f32
+}
+
+pub fn zoom_in_key() -> i32 {
+    ZOOM_IN_KEY.load(Ordering::Relaxed)
+}
+
+pub fn zoom_out_key() -> i32 {
+    ZOOM_OUT_KEY.load(Ordering::Relaxed)
+}
+
+/// Steps the range to the next level: smaller when zooming in, larger when zooming out, and
+/// from the last level round to the first (a range set by hand moves to the level next to it).
+pub fn zoom(zoom_in: bool) {
+    MINIMAP_RANGE.store(next_range(MINIMAP_RANGE.load(Ordering::Relaxed), zoom_in), Ordering::Relaxed);
+}
+
+fn next_range(current: i32, zoom_in: bool) -> i32 {
+    let [first, .., last] = ZOOM_LEVELS;
+    if zoom_in {
+        ZOOM_LEVELS.into_iter().rev().find(|&level| level < current).unwrap_or(last)
+    } else {
+        ZOOM_LEVELS.into_iter().find(|&level| level > current).unwrap_or(first)
+    }
 }
 
 /// Radius of the minimap in pixels at 1080p.
@@ -146,4 +181,31 @@ pub fn set_minimap_range(value: f64) {
 
 pub fn set_minimap_size(value: f64) {
     MINIMAP_SIZE.store(value.round().clamp(40.0, 200.0) as i32, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::next_range;
+
+    #[test]
+    fn zooming_in_steps_to_smaller_ranges_and_wraps() {
+        assert_eq!(next_range(200, true), 100);
+        assert_eq!(next_range(100, true), 50);
+        assert_eq!(next_range(50, true), 200);
+    }
+
+    #[test]
+    fn zooming_out_steps_to_larger_ranges_and_wraps() {
+        assert_eq!(next_range(50, false), 100);
+        assert_eq!(next_range(100, false), 200);
+        assert_eq!(next_range(200, false), 50);
+    }
+
+    #[test]
+    fn a_range_set_by_hand_moves_to_the_next_level() {
+        assert_eq!(next_range(80, true), 50);
+        assert_eq!(next_range(80, false), 100);
+        assert_eq!(next_range(30, true), 200);
+        assert_eq!(next_range(150, false), 200);
+    }
 }

@@ -90,7 +90,7 @@ fn build(b: &mut erui::MenuBuilder) -> Result<(), String> {
     b.toggle(page, &t("minimap_beacons.label"), &t("minimap_beacons.help"), &MINIMAP_BEACONS, || {
         config::get_bool("MinimapBeacons", true) as u8
     })?;
-    b.number(page, &t("minimap_range.label"), &t("minimap_range.help"), &MINIMAP_RANGE, || config::get_int("MinimapRange", 80) as f64)?;
+    b.number(page, &t("minimap_range.label"), &t("minimap_range.help"), &MINIMAP_RANGE, || config::get_int("MinimapRange", 100) as f64)?;
     b.number(page, &t("minimap_size.label"), &t("minimap_size.help"), &MINIMAP_SIZE, || config::get_int("MinimapSize", 110) as f64)?;
     Ok(())
 }
