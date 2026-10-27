@@ -17,7 +17,7 @@ PauseInCombat = true
 [Materials]
 # Plants, mushrooms and other crafting materials.
 Enabled = true
-Range = 2.0
+Range = 2.0         # 0.1 to 10, 1.0 = the game's own distance
 
 
 [Items]

@@ -10,3 +10,4 @@ link sang `docs/`.
 | 2026-10-26 | Sửa crash `illegal instruction` ở lần gọi pass-through đầu tiên: nhảy về hàm gốc bằng `rax` làm hỏng `mov [rax+8], rbx` ở nửa sau hàm (ghi đè lên code của chính nó), đổi sang `r11`. | [docs](docs/exec_action_button.md) |
 | 2026-10-26 | Người dùng thử trong game và xác nhận chạy đúng; viết `nexus_page.bbcode`, chuẩn bị phát hành 1.0.0 | [docs](docs/exec_action_button.md) |
 | 2026-10-26 | Nếu mod khác đã hook đầu hàm `ExecActionButton` thì báo xung đột (log và hộp thoại, qua `common::conflict`) và tắt hook, thay vì chờ 120 giây rồi báo không tìm thấy mẫu. Mặc định `Range` là 2.0 cho mọi nhóm | [docs](docs/exec_action_button.md) |
+| 2026-10-27 | Ghi giới hạn `Range` (0.1 đến 10) vào chú thích file config và gợi ý trong menu; trước đó giới hạn chỉ có trong code | [docs](docs/exec_action_button.md) |
