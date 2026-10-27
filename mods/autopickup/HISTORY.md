@@ -10,3 +10,9 @@ link sang `docs/`.
 | 2026-10-26 | Sửa crash `illegal instruction` ở lần gọi pass-through đầu tiên: nhảy về hàm gốc bằng `rax` làm hỏng `mov [rax+8], rbx` ở nửa sau hàm (ghi đè lên code của chính nó), đổi sang `r11`. | [docs](docs/exec_action_button.md) |
 | 2026-10-26 | Người dùng thử trong game và xác nhận chạy đúng; viết `nexus_page.bbcode`, chuẩn bị phát hành 1.0.0 | [docs](docs/exec_action_button.md) |
 | 2026-10-26 | Nếu mod khác đã hook đầu hàm `ExecActionButton` thì báo xung đột (log và hộp thoại, qua `common::conflict`) và tắt hook, thay vì chờ 120 giây rồi báo không tìm thấy mẫu. Mặc định `Range` là 2.0 cho mọi nhóm | [docs](docs/exec_action_button.md) |
+| 2026-10-27 | Ghi giới hạn `Range` (0.1 đến 10) vào chú thích file config và gợi ý trong menu; trước đó giới hạn chỉ có trong code | [docs](docs/exec_action_button.md) |
+| 2026-10-27 | Thêm tùy chọn `NoPickupAnimation` (mặc định tắt): ghi ID animation không tồn tại vào `animeID_DropItemPick` của `PlayerCommonParam` như ErdTools làm với nguyên liệu, theo bình luận Nexus về animation nhặt khi cưỡi ngựa. | [docs](docs/pickup_animation.md) |
+| 2026-10-27 | `NoPickupAnimation` không có tác dụng ở lần thử đầu (`animeID_DropItemPick` không phải animation vật phẩm trên đất); tìm ra `GameSystemCommonParam...itemGetAnimId_shine`, đổi code sang ghi trường đó. | [docs](docs/pickup_animation.md) |
+| 2026-10-27 | Người dùng thử trong game và xác nhận `NoPickupAnimation` (ghi `itemGetAnimId_shine` và `animeID_DropItemPick`) tắt được animation nhặt vật phẩm trên đất | [docs](docs/pickup_animation.md) |
+| 2026-10-27 | `NoPickupAnimation` đổi thêm animation nhặt hài cốt (`itemGetAnimId_corpse`) và rương (`itemGetAnimId_box`); người dùng thử và xác nhận ổn | [docs](docs/pickup_animation.md) |
+| 2026-10-27 | Phát hành 1.1.0 (`NoPickupAnimation`). Phát hiện file mẫu đăng kèm có mặc định `true`, người dùng chốt giữ; sửa test cho khớp | [docs](docs/pickup_animation.md) |

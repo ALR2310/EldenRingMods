@@ -44,6 +44,7 @@ pub struct General {
     pub reload_key: String,
     pub reload_banner: bool,
     pub pause_in_combat: bool,
+    pub no_pickup_animation: bool,
 }
 
 /// `[Materials]`, `[Items]`, `[CorpseLoot]`, `[LostRunes]`, `[Chests]`.
@@ -115,6 +116,8 @@ mod tests {
         let config = template();
         assert_eq!(config.general.config_version, 1);
         assert!(config.general.pause_in_combat);
+        // On out of the box (released that way in 1.1.0, kept on purpose).
+        assert!(config.general.no_pickup_animation);
         // Twice the game's own reach out of the box.
         for group in [config.materials, config.items, config.corpse_loot, config.lost_runes, config.chests] {
             assert_eq!(group.range, 2.0);
