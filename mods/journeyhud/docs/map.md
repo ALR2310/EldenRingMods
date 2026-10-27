@@ -32,8 +32,88 @@ bản đồ Limgrave (có icon, nét vẽ tay). Hai test nhỏ khác kiểm côn
 
 - Không khoá cứng bản game: nếu archive hay bảng tham số không đọc được thì minimap vẫn chạy, chỉ không có nền (log `Map: loader stopped (...)`).
 - Luôn hiện toàn bộ bản đồ (chưa theo mảnh bản đồ người chơi đã nhặt).
-- Không có grace, beacon, marker bản đồ, vệt đường đi.
+- Có grace (chấm vàng, xem dưới); không có beacon, marker bản đồ, vệt đường đi.
 - Tầm tối đa 200 m: cửa sổ chỉ rộng 768 m nên phải chừa chỗ để dời cửa sổ trước khi người chơi tới mép.
+
+## Grace
+
+`map/graces.rs`: bảng grace là `BonfireWarpParam` (chỉ dòng có cờ sự kiện), mỗi grace đổi sang toạ độ bản đồ bằng `world::locate` (cần bảng đổi
+toạ độ dungeon đã nạp xong, nên đọc lại mỗi frame cho tới khi được), tìm thấy khi cờ sự kiện của nó bật (`CSEventFlagMan.virtual_memory_flag`).
+Mỗi frame trên task game chỉ lấy grace cùng không gian và trong 1,2 lần tầm minimap, ra danh sách khoảng cách tới người chơi. Vẽ là chấm
+vàng có quầng sáng nhỏ ở `radar_ui.rs`. Khoá `MinimapGraces` (menu có hàng bật tắt). **Chưa thử trong game.**
+
+## Icon thật của game
+
+Các dấu trên minimap dùng chính icon của bản đồ thế giới trong game, đọc lúc chạy như tile (không đóng gói ảnh nào). `map/sprites.rs`:
+
+- Sprite sheet là một texture trong `/menu/hi/01_common.tpf.dcx` (TPF, tên texture UTF-16, khoảng 200 MB sau khi giải nén), còn vị trí từng sprite nằm ở
+  layout `/menu/hi/01_common.sblytbnd.dcx` dạng XML `<TextureAtlas imagePath="SB_MapCursor_02.png"><SubTexture name=... x y width height/>`. Đọc một lần ở luồng nền
+  (khoảng 1,3 giây, vài trăm MB tạm thời), cắt từng sprite, rồi `MapLayer` nạp thành texture khi đang chơi bình thường.
+- Dùng: `SB_MapCursor_02/MENU_MAP_01_Bonfire` (grace, 156x156, đĩa vàng có quầng sáng), `SB_MapCursor/MENU_MAP_Player_01` (kim vàng của người chơi, chỉ có vòng tròn rỗng) cộng `MENU_MAP_Player_02`
+  (hình nhỏ đặt giữa vòng), `MENU_MAP_Coop_01` + `MENU_MAP_Coop_02` (kim hồng của người chơi khác, cũng gồm hai phần), `MENU_MAP_Friend_00` (spirit, kiếm chéo xanh), `MENU_MAP_Enemy_00` (kẻ địch khoá, kiếm chéo đỏ). Cũng có sẵn `MENU_MAP_Raid_01/02`
+  (kẻ xâm nhập), `Host`, `Guests`, `Marker` (beacon), `memo_*` và các icon điểm `MENU_MAP_NN` cho lần sau.
+- Con trỏ của game gồm hai sprite chồng nhau: kim có vòng tròn rỗng và hình nhỏ ở giữa vòng (thử game lần đầu chỉ vẽ kim nên giữa vòng bị trống). Cả hai quay
+  quanh tâm vòng tròn (khoảng 54% chiều cao kim), không quanh giữa ảnh.
+- Không đọc được thì log `Map: icons not read (...)` và dùng lại các hình vẽ tay (chấm vàng, mũi tên, chấm đỏ).
+- Kiểm ngoại tuyến: test bỏ qua `sprite_sheet_from_the_installed_game` (`ER_MAP_PNG`, `ER_SPRITES="Sheet:Name;..."`) ghi các sprite cạnh nhau ra PNG; đã ra đúng cả 13 sprite thử.
+
+## Địa điểm (di tích, nhà thờ, hang...)
+
+`map/points.rs`: các địa điểm của bản đồ thế giới nằm trong `WorldMapPointParam` (mỗi dòng có `iconId`, vị trí theo block, cờ mở, các dòng text và cờ bật tắt
+chúng). Quy tắc hiện theo game (qua `kubilaiswf-minimap`, vốn lấy từ ghi chú EROverlay của soarqin): cờ mở phải bật và, trừ dòng cho phép không text, phải có ít nhất một
+text đang hoạt động; text loại 1 đổi sang icon thay thế (`altIconId`); cờ hoàn thành bật thì mờ đi (boss đã hạ). Bỏ các dòng nhãn vùng, icon 0, grace (1, 2, vẽ từ bảng grace riêng)
+và các tia sáng dẫn đường (83 đến 85).
+
+Icon của mỗi điểm là sprite `MENU_MAP_<iconId>` (riêng icon 3, nhà thờ, tên là `MENU_MAP_Church`) trong ba sheet `SB_MapCursor`, `SB_MapCursor_02`, `SB_MapCursor_03_dlc` (cho Shadow of the Erdtree). `sprites::load_map_icons` đọc
+cả 98 sprite một lần ở luồng nền (khoảng 1,4 giây), `MapLayer` thu nhỏ (tối đa 96 px) và xếp thành **một atlas 1024x1024** chỉ nạp một lần (hudhook rò bộ đệm mỗi lần nạp).
+Vẽ ở kích thước 0,11 lần sprite, không cao quá 30 px. Dòng log `Map: N point(s)` và `Map: N point icon(s) uploaded`. Khoá `MinimapPoints`. **Chưa thử trong game.**
+
+Kiểm ngoại tuyến: test bỏ qua `map_icons_from_the_installed_game` ghi cả 97 icon ra PNG lưới. Còn thiếu: beacon (xem dưới).
+
+## Beacon
+
+`map/beacons.rs`. Beacon người chơi đặt không có kiểu trong `fromsoftware-rs`. Game giữ chúng trong `CSMenuMarkersSaveData`:
+
+```text
+CSMenuMan -> +0x80 -> +0x250 (view bản đồ thế giới) -> +0x338 (danh sách marker ở view +0x300, con trỏ dữ liệu ở +0x38 của nó)
+  -> +0x08 mảng slot (mỗi slot 16 byte), +0x10 số slot
+slot: id i32 (âm = trống), x f32, y f32 (toạ độ màn hình bản đồ của game, Y xuống, 41 ô 256 px), map u8 (0 overworld, 1 hầm ngầm), icon u8
+```
+
+**Kiểm trong IDA:** hàm thêm marker (chuỗi `CSMenuMarkersSaveData.cpp`) ghi đúng các trường này và nơi gọi nó giữ danh sách ở view +0x300 trên **cả bốn bản exe**
+(2.6.2.0 `0x818ED0`, 2.7.0.0 và 2.7.1.0 `0x819D50`, 2.7.2.0 `0x81A200`): mảng slot ở +0x08, số slot ở +0x10, phần tử 16 byte, bộ đếm id ở +0x48, con trỏ dữ liệu ở +0x38 của danh sách
+(`a1[7]`), danh sách ở `a1 + 768`. **Chưa kiểm riêng** phần đầu chuỗi (`CSMenuMan +0x80 +0x250`): nó lấy từ minimap gốc, tác giả đã thử trong game trên 2.7.2.0.
+
+**An toàn:** mọi con trỏ đọc bằng `ReadProcessMemory` (lỗi thì trả `None` thay vì crash), và kết quả bị bỏ hết nếu có slot nào không giống beacon (số slot 0 hoặc quá 10, id quá lớn, map
+khác 0 và 1, vị trí ngoài bản đồ hoặc không hữu hạn). Bản exe nào chuỗi sai thì chỉ không có beacon.
+
+Chuyển toạ độ: `from_game_map` đổi (x, y) của màn hình bản đồ sang mét trên lưới overworld, ô (i, j) của bản đồ ứng với `m60_{i+28}_{j+24}`. Số slot (1 đến 5...) là số game hiển thị cạnh beacon;
+chưa vẽ số. Icon là `MENU_MAP_Marker` (64x324, tia sáng xanh nhạt, đầu mũi tên ở dưới là vị trí): vẽ cao 36 px, mũi dưới đặt đúng chỗ; beacon ngoài tầm ghim vào viền như người chơi khác.
+Khoá `MinimapBeacons`. **Chưa thử trong game.**
+
+## Thứ tự lớp và cỡ icon
+
+Như game (người dùng, 2026-10-27), từ dưới lên: **địa điểm < NPC < grace < beacon < spirit, đồng đội, kẻ địch khoá < người chơi**. NPC là các icon 80, 86, 87, 88 (người, dấu
+triệu hồi, kẻ xâm nhập), còn lại là địa điểm. Cỡ theo sprite của game: địa điểm 0,2 lần (to nhất, nhà thờ cao hơn đĩa grace nên vẫn thấy khi grace nằm đè lên), NPC 0,17 lần, grace 0,15 lần,
+không icon điểm nào quá 62 px. Cỡ chốt sau thử game 2026-10-27: gấp đôi bản đầu rồi bớt 30% (0,28 / 0,24 / 0,21 lần sprite; nhà thờ khoảng 39x53 px ở 1080p), người dùng thấy vậy là vừa. Bản trước dời grace xuống góc phải khi che địa điểm; bỏ vì game không làm vậy và lớp mới đã giải quyết.
+
+## Điểm không hiện (đã tra, 2026-10-27)
+
+Đã từng có khoá ini `MinimapDebug` ghi log các dòng bản đồ gần người chơi; đã gỡ sau khi tra xong. Kết quả thử game ở nhà thờ Elleh (bảng điểm 472 dòng): nhà thờ là dòng icon 3 (cờ mở bật,
+text hoạt động) nên chỉ thiếu sprite `MENU_MAP_03`, sửa bằng tên `MENU_MAP_Church`. Quy đổi toạ độ đúng (người chơi `m60_42_36` cục bộ (-63, 90), nhà thờ cách 25 m, grace 20 m). NPC khung hình người
+đội mũ trùm không có dòng nào gần: 71 dòng icon 80 nhưng gần nhất cách 208 m, icon 87 cách 738 m, icon 86 không có dòng nào. Ở chỗ khác NPC hiện bình thường (người dùng), nên chỗ Elleh có thể là
+trường hợp riêng (NPC không đi qua `WorldMapPointParam` hoặc là dấu của người chơi); chưa kết luận.
+
+## Vẽ cho dễ nhìn
+
+Làm tối dần vòng ngoài của đĩa (4 vòng mờ) để viền ăn khớp với bản đồ, và có chấm nền tối sau mỗi chữ N/E/S/W cho dễ đọc trên nền bản đồ sáng.
+
+## Khi nào bắt đầu đọc
+
+Luồng đọc archive (bản đồ, icon, địa điểm) chỉ khởi động **khi người chơi đã vào thế giới** (frame đầu tiên có `in_control`), không phải lúc game mới chạy. Lý do: nó cần vài trăm MB và vài giây
+đĩa và CPU, không nên tranh với game đang khởi động. Thử game 2026-10-27 có một lần crash ở engine khoảng 3 giây sau khi móc DX12, trước khi overlay kịp khởi tạo (AV đọc `0x30` trong getter
+`sub_141E937F0` do `sub_141E8B8B0`, hàm liên quan `CGShaderResourceView`, trên luồng không có khung nào của mod; cùng họ với crash 2026-10-04 khi chưa có JourneyHud, xem `docs/crash_dump_analysis.md`).
+Chưa chứng minh mod liên quan; chuyển sang đọc muộn để loại một nguồn nhiễu.
 
 ## Lưu ý kỹ thuật (lấy từ minimap gốc)
 

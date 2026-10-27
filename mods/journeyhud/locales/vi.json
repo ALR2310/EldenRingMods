@@ -34,6 +34,18 @@
     "label": "Bản đồ",
     "help": "Vẽ bản đồ thế giới của game dưới minimap. Cần các file bản đồ của game, được đọc từ thư mục game."
   },
+  "minimap_graces": {
+    "label": "Grace",
+    "help": "Đánh dấu các điểm grace bạn đã tìm thấy trên minimap."
+  },
+  "minimap_points": {
+    "label": "Địa điểm",
+    "help": "Đánh dấu di tích, nhà thờ, hang động, boss và các địa điểm khác của bản đồ thế giới trên minimap."
+  },
+  "minimap_beacons": {
+    "label": "Beacon",
+    "help": "Đánh dấu các beacon bạn đã đặt trên bản đồ thế giới trên minimap."
+  },
   "minimap_range": {
     "label": "Tầm minimap",
     "help": "Minimap nhìn được xa bao nhiêu, từ tâm tới viền, tính bằng mét."

@@ -15,6 +15,9 @@ static OFFSET_Y: AtomicI32 = AtomicI32::new(47);
 static SCALE: AtomicU32 = AtomicU32::new(0x3F80_0000);
 static MINIMAP_ENABLED: AtomicBool = AtomicBool::new(true);
 static MINIMAP_MAP: AtomicBool = AtomicBool::new(true);
+static MINIMAP_GRACES: AtomicBool = AtomicBool::new(true);
+static MINIMAP_POINTS: AtomicBool = AtomicBool::new(true);
+static MINIMAP_BEACONS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_RANGE: AtomicI32 = AtomicI32::new(80);
 static MINIMAP_SIZE: AtomicI32 = AtomicI32::new(110);
 
@@ -28,6 +31,9 @@ pub fn load() {
     set_scale(config::get_double("Scale", 1.0));
     set_minimap_enabled(config::get_bool("MinimapEnabled", true) as u8);
     set_minimap_map(config::get_bool("MinimapMap", true) as u8);
+    set_minimap_graces(config::get_bool("MinimapGraces", true) as u8);
+    set_minimap_points(config::get_bool("MinimapPoints", true) as u8);
+    set_minimap_beacons(config::get_bool("MinimapBeacons", true) as u8);
     set_minimap_range(config::get_int("MinimapRange", 80) as f64);
     set_minimap_size(config::get_int("MinimapSize", 110) as f64);
 }
@@ -62,6 +68,21 @@ pub fn minimap_enabled() -> bool {
 /// Whether the world map is drawn under the minimap marks.
 pub fn minimap_map() -> bool {
     MINIMAP_MAP.load(Ordering::Relaxed)
+}
+
+/// Whether the found sites of grace are marked.
+pub fn minimap_graces() -> bool {
+    MINIMAP_GRACES.load(Ordering::Relaxed)
+}
+
+/// Whether the world map's points of interest (ruins, churches, caves, bosses) are marked.
+pub fn minimap_points() -> bool {
+    MINIMAP_POINTS.load(Ordering::Relaxed)
+}
+
+/// Whether the beacons the player has placed on the world map are marked.
+pub fn minimap_beacons() -> bool {
+    MINIMAP_BEACONS.load(Ordering::Relaxed)
 }
 
 /// Meters from the center of the minimap to its rim.
@@ -104,6 +125,18 @@ pub fn set_minimap_enabled(value: u8) {
 
 pub fn set_minimap_map(value: u8) {
     MINIMAP_MAP.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_minimap_graces(value: u8) {
+    MINIMAP_GRACES.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_minimap_points(value: u8) {
+    MINIMAP_POINTS.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_minimap_beacons(value: u8) {
+    MINIMAP_BEACONS.store(value != 0, Ordering::Relaxed);
 }
 
 /// At most 200: the map window holds 768 m, which has to cover the range with room to spare.

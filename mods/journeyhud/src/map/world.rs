@@ -93,6 +93,11 @@ fn distance_squared(a: [f32; 2], b: [f32; 2]) -> f32 {
     (a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)
 }
 
+/// Whether the dungeon conversions are loaded, so `locate` is complete.
+pub fn conversions_ready() -> bool {
+    conversions().is_some()
+}
+
 /// The conversion rows, read once the params are loaded (they load after the player
 /// can already exist, so this is retried each frame until it works).
 fn conversions() -> Option<&'static [Conversion]> {

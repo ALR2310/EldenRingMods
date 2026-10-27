@@ -67,4 +67,7 @@ Chi tiết: `mods/journeyhud/docs/design.md`
 - [ ] [verify] JourneyHud: menu ERNativeUI (hàng Journey HUD, đổi cỡ/độ dài/lề áp dụng ngay, lưu ini, không có host thì chạy bằng ini)
 - [ ] [verify] JourneyHud: minimap (mũi tên đúng hướng, xoay đúng chiều khi quay camera, đồng đội/spirit/kẻ địch khoá đúng chỗ, ẩn khi mở menu/tải) (`docs/radar.md`)
 - [ ] [verify] JourneyHud: nền bản đồ (khớp vị trí, xoay theo camera, dời cửa sổ không giật, hầm ngầm và dungeon, không treo ở màn hình tải) (`docs/map.md`)
-- [ ] [research] JourneyHud: bản đồ Shadow of the Erdtree (area 61), mảnh bản đồ theo cờ, grace và marker (`docs/map.md`)
+- [ ] [verify] JourneyHud: grace trên minimap (chấm vàng đúng chỗ so với bản đồ trong game, chỉ grace đã tìm thấy, cả dungeon) (`docs/map.md`)
+- [ ] [verify] JourneyHud: địa điểm trên minimap (icon đúng loại và đúng chỗ so với bản đồ trong game, ẩn khi chưa mở, boss đã hạ thì mờ) (`docs/map.md`)
+- [ ] [verify] JourneyHud: beacon trên minimap (đặt beacon trên bản đồ rồi xem tia xanh đúng chỗ, số slot, ngoài tầm thì ghim viền); grace không còn che địa điểm (`docs/map.md`)
+- [ ] [research] JourneyHud: kiểm đầu chuỗi beacon (CSMenuMan +0x80 +0x250) trên 2.6.2.0 đến 2.7.1.0, bản đồ Shadow of the Erdtree (area 61), mảnh bản đồ theo cờ; kẻ địch xung quanh và phím thu phóng (`docs/map.md`)

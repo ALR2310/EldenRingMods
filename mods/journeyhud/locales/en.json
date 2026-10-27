@@ -34,6 +34,18 @@
     "label": "Map",
     "help": "Draw the game's world map under the minimap. Needs the game's map files, which it reads from the game folder."
   },
+  "minimap_graces": {
+    "label": "Graces",
+    "help": "Mark the sites of grace you have found on the minimap."
+  },
+  "minimap_points": {
+    "label": "Points of interest",
+    "help": "Mark the ruins, churches, caves, bosses and other places of the world map on the minimap."
+  },
+  "minimap_beacons": {
+    "label": "Beacons",
+    "help": "Mark the beacons you have placed on the world map on the minimap."
+  },
   "minimap_range": {
     "label": "Minimap range",
     "help": "How far the minimap sees, from its center to its rim, in meters."

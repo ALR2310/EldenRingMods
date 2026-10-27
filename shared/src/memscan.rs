@@ -10,6 +10,20 @@ use std::time::{Duration, Instant};
 
 unsafe extern "system" {
     fn GetModuleHandleA(lp_module_name: *const u8) -> *mut c_void;
+    fn GetCurrentProcess() -> *mut c_void;
+    fn ReadProcessMemory(process: *mut c_void, base: *const c_void, buf: *mut c_void, size: usize, read: *mut usize) -> i32;
+}
+
+/// Reads a `T` at `address`, or `None` when that memory cannot be read. Fails instead of
+/// faulting, so it is the way to walk a pointer chain that is not checked on every game build.
+pub fn read_safe<T: Copy>(address: usize) -> Option<T> {
+    let mut value = std::mem::MaybeUninit::<T>::uninit();
+    let mut done = 0usize;
+    // SAFETY: the call writes at most `size_of::<T>()` bytes into `value` and reports a failure
+    // instead of faulting on memory it cannot read.
+    let ok = unsafe { ReadProcessMemory(GetCurrentProcess(), address as *const c_void, value.as_mut_ptr().cast(), size_of::<T>(), &mut done) };
+    // SAFETY: fully written, as `done` says.
+    (ok != 0 && done == size_of::<T>()).then(|| unsafe { value.assume_init() })
 }
 
 #[repr(C)]

@@ -6,7 +6,10 @@
 
 use hudhook::imgui::{DrawListMut, Ui};
 
-use crate::map::layer::MapLayer;
+use hudhook::imgui::TextureId;
+
+use crate::map::layer::{Icon, IconTexture, MapIcon, MapLayer};
+use crate::map::points;
 use crate::map::tiles::{TILE, WINDOW, map_pixel};
 use crate::radar::{Dot, Snapshot};
 use crate::settings;
@@ -23,6 +26,19 @@ const PLAYER: [f32; 4] = [0.93, 0.89, 0.76, 1.0];
 const PARTNER: [f32; 4] = [0.51, 0.78, 1.0, 1.0];
 const SPIRIT: [f32; 4] = [0.55, 0.85, 0.55, 1.0];
 const ENEMY: [f32; 4] = [0.78, 0.14, 0.12, 1.0];
+const GRACE: [f32; 4] = [1.0, 0.84, 0.47, 1.0];
+/// The ring of the game's cursor needles is a little below the middle of the image.
+const NEEDLE_PIVOT: [f32; 2] = [0.5, 0.54];
+/// Height of a beacon's beam at 1080p.
+const BEACON_HEIGHT: f32 = 36.0;
+/// Pixels drawn per pixel of the game's map icon sprites (a normal icon is about 156 px).
+const POINT_SCALE: f32 = 0.28;
+/// People are a little smaller than the places and bigger than the grace, as in the game.
+const NPC_SCALE: f32 = 0.24;
+const GRACE_SCALE: f32 = 0.21;
+/// No point icon is drawn bigger than this many pixels on a side, at 1080p.
+const POINT_LIMIT: f32 = 62.0;
+const BADGE: [f32; 4] = [0.09, 0.08, 0.06, 0.78];
 const NORTH: [f32; 4] = [1.0, 0.87, 0.59, 1.0];
 const COMPASS: [f32; 4] = [0.84, 0.77, 0.59, 0.9];
 const OUTLINE: [f32; 4] = [0.0, 0.0, 0.0, 0.85];
@@ -71,9 +87,10 @@ impl Radar {
         self.in_control
     }
 
-    /// Draws the minimap for `snapshot` (`None` = nothing to show, fades out), with
-    /// the world map under the marks when `map` has a window for where the player is.
-    pub fn draw(&mut self, ui: &Ui, snapshot: Option<&Snapshot>, placement: &Placement, map: Option<&MapLayer>) {
+    /// Draws the minimap for `snapshot` (`None` = nothing to show, fades out). `layer` holds
+    /// the world map and the game's icons; the map is drawn under the marks when `show_map`
+    /// is set and the layer has a window for where the player is.
+    pub fn draw(&mut self, ui: &Ui, snapshot: Option<&Snapshot>, placement: &Placement, layer: Option<&MapLayer>, show_map: bool) {
         let dt = ui.io().delta_time;
         let in_control = snapshot.is_some_and(|s| s.hud_visible && s.fade < 0.05);
         self.in_control = in_control;
@@ -109,16 +126,34 @@ impl Radar {
             // The marks do not shrink below 0.8 so they stay readable in a small window.
             m: s.max(0.8),
             pixels_per_meter: radius / settings::minimap_range(),
+            layer,
         };
         view.draw_plate(&draw);
-        if let Some(map) = map {
-            view.draw_map(&draw, snapshot, map);
+        if let Some(layer) = layer.filter(|_| show_map) {
+            view.draw_map(&draw, snapshot, layer);
         }
+        view.draw_vignette(&draw);
         view.draw_frame(&draw);
+        let marks = view.point_marks(snapshot);
+        view.draw_points(&draw, &marks);
+        view.draw_graces(&draw, snapshot);
+        view.draw_beacons(&draw, snapshot);
         view.draw_marks(&draw, snapshot);
         view.draw_compass(ui, &draw);
         view.draw_player(&draw);
     }
+}
+
+/// A point of interest of the world map placed on the minimap.
+struct PointMark {
+    at: [f32; 2],
+    /// Half the drawn size.
+    half: [f32; 2],
+    texture: TextureId,
+    icon: MapIcon,
+    cleared: bool,
+    /// A person (the layer above the places).
+    npc: bool,
 }
 
 /// One frame of the radar: the fixed geometry plus the camera basis.
@@ -130,9 +165,54 @@ struct View<'a> {
     /// Scale of the marks and arrows.
     m: f32,
     pixels_per_meter: f32,
+    /// The world map and the game's icons, when the map files are available.
+    layer: Option<&'a MapLayer>,
 }
 
 impl View<'_> {
+    /// A game icon, once it is read and uploaded.
+    fn icon(&self, icon: Icon) -> Option<IconTexture> {
+        self.layer.and_then(|layer| layer.icon(icon))
+    }
+
+    /// `icon` centered on `at`, `height` pixels tall (the width keeps its proportions).
+    fn draw_icon(&self, draw: &DrawListMut<'_>, icon: IconTexture, at: [f32; 2], height: f32, alpha: f32) {
+        let half = [height * icon.size[0] / icon.size[1] / 2.0, height / 2.0];
+        draw.add_image(icon.texture, [at[0] - half[0], at[1] - half[1]], [at[0] + half[0], at[1] + half[1]])
+            .col(self.color([1.0, 1.0, 1.0, alpha]))
+            .build();
+    }
+
+    /// A needle-shaped cursor icon turned to point along `forward` (a unit screen direction),
+    /// turning on its ring rather than on the middle of the image, with the `emblem` the game
+    /// puts in the middle of the ring.
+    fn draw_cursor(&self, draw: &DrawListMut<'_>, (needle, emblem): (IconTexture, Option<IconTexture>), at: [f32; 2], forward: [f32; 2], height: f32, alpha: f32) {
+        self.draw_needle(draw, needle, at, forward, height, alpha);
+        if let Some(emblem) = emblem {
+            // Same scale as the needle, centered on the ring.
+            let scale = height / needle.size[1];
+            self.draw_turned(draw, emblem, at, forward, [emblem.size[0] * scale, emblem.size[1] * scale], [0.5, 0.5], alpha);
+        }
+    }
+
+    fn draw_needle(&self, draw: &DrawListMut<'_>, icon: IconTexture, at: [f32; 2], forward: [f32; 2], height: f32, alpha: f32) {
+        let size = [height * icon.size[0] / icon.size[1], height];
+        self.draw_turned(draw, icon, at, forward, size, NEEDLE_PIVOT, alpha);
+    }
+
+    /// `icon` of `size` pixels turned to `forward`, on the point of the image at `pivot` (0 to 1).
+    #[allow(clippy::too_many_arguments)]
+    fn draw_turned(&self, draw: &DrawListMut<'_>, icon: IconTexture, at: [f32; 2], forward: [f32; 2], size: [f32; 2], pivot: [f32; 2], alpha: f32) {
+        let right = [-forward[1], forward[0]];
+        let corner = |u: f32, v: f32| {
+            let (x, y) = ((u - pivot[0]) * size[0], (v - pivot[1]) * size[1]);
+            [at[0] + right[0] * x - forward[0] * y, at[1] + right[1] * x - forward[1] * y]
+        };
+        draw.add_image_quad(icon.texture, corner(0.0, 0.0), corner(1.0, 0.0), corner(1.0, 1.0), corner(0.0, 1.0))
+            .col(self.color([1.0, 1.0, 1.0, alpha]))
+            .build();
+    }
+
     fn color(&self, [r, g, b, a]: [f32; 4]) -> [f32; 4] {
         [r, g, b, a * self.radar.alpha]
     }
@@ -186,6 +266,98 @@ impl View<'_> {
         }
     }
 
+    /// Darkens toward the rim so the rim sits on the map instead of cutting it.
+    fn draw_vignette(&self, draw: &DrawListMut<'_>) {
+        for i in 0..4 {
+            let radius = self.radius - (6.0 + i as f32 * 3.0) * self.s;
+            let alpha = 0.22 - i as f32 * 0.05;
+            draw.add_circle(self.center, radius, self.color([0.0, 0.0, 0.0, alpha]))
+                .num_segments(96)
+                .thickness(4.0 * self.s)
+                .build();
+        }
+    }
+
+    /// The points of interest of the world map as they are drawn, each with the game's own icon (a
+    /// point whose icon is not among the sprites is skipped).
+    fn point_marks(&self, snapshot: &Snapshot) -> Vec<PointMark> {
+        let Some(layer) = self.layer else { return Vec::new() };
+        let rim = self.radius - 10.0 * self.s;
+        snapshot
+            .points
+            .iter()
+            .filter_map(|point| {
+                let screen = self.to_screen(point.offset);
+                if screen[0].hypot(screen[1]) * self.pixels_per_meter > rim {
+                    return None;
+                }
+                let (texture, icon) = layer.map_icon(point.icon)?;
+                // The game's sprites are about 156 px for a normal icon; draw them at a fixed fraction
+                // of that, but never bigger than `POINT_LIMIT` pixels.
+                let npc = points::is_npc(point.icon);
+                let wanted = if npc { NPC_SCALE } else { POINT_SCALE };
+                let scale = (wanted * self.m).min(POINT_LIMIT * self.m / icon.size[1].max(icon.size[0]));
+                Some(PointMark {
+                    at: self.at(screen, self.pixels_per_meter),
+                    half: [icon.size[0] * scale / 2.0, icon.size[1] * scale / 2.0],
+                    texture,
+                    icon,
+                    cleared: point.cleared,
+                    npc,
+                })
+            })
+            .collect()
+    }
+
+    /// The places first, then the people over them, as in the game.
+    fn draw_points(&self, draw: &DrawListMut<'_>, marks: &[PointMark]) {
+        for mark in marks.iter().filter(|mark| !mark.npc).chain(marks.iter().filter(|mark| mark.npc)) {
+            let alpha = if mark.cleared { 0.45 } else { 1.0 };
+            draw.add_image(mark.texture, [mark.at[0] - mark.half[0], mark.at[1] - mark.half[1]], [mark.at[0] + mark.half[0], mark.at[1] + mark.half[1]])
+                .uv_min(mark.icon.uv_min)
+                .uv_max(mark.icon.uv_max)
+                .col(self.color([1.0, 1.0, 1.0, alpha]))
+                .build();
+        }
+    }
+
+    /// The found sites of grace, each with the game's icon (a plain gold point without it), over the
+    /// points of interest as in the game.
+    fn draw_graces(&self, draw: &DrawListMut<'_>, snapshot: &Snapshot) {
+        let rim = self.radius - 10.0 * self.s;
+        let icon = self.icon(Icon::Grace);
+        for offset in &snapshot.graces {
+            let screen = self.to_screen(*offset);
+            if screen[0].hypot(screen[1]) * self.pixels_per_meter > rim {
+                continue;
+            }
+            let at = self.at(screen, self.pixels_per_meter);
+            if let Some(icon) = icon {
+                self.draw_icon(draw, icon, at, icon.size[1] * GRACE_SCALE * self.m, 1.0);
+                continue;
+            }
+            let [r, g, b, _] = GRACE;
+            draw.add_circle(at, 7.0 * self.m, self.color([r, g, b, 0.16])).filled(true).build();
+            draw.add_circle(at, 4.0 * self.m, self.color([r, g, b, 0.95])).thickness(1.4 * self.m).build();
+            draw.add_circle(at, 1.8 * self.m, self.color([1.0, 0.97, 0.87, 1.0])).filled(true).build();
+        }
+    }
+
+    /// The beacons the player has placed, with the game's beam icon: its lower tip is the spot.
+    /// One too far for the minimap is pinned to the rim, like the other players.
+    fn draw_beacons(&self, draw: &DrawListMut<'_>, snapshot: &Snapshot) {
+        let Some(icon) = self.icon(Icon::Beacon) else { return };
+        for offset in &snapshot.beacons {
+            let Some((at, inside)) = self.place(*offset, true) else { continue };
+            let height = BEACON_HEIGHT * self.m;
+            let half = height * icon.size[0] / icon.size[1] / 2.0;
+            let alpha = if inside { 1.0 } else { 0.8 };
+            draw.add_image(icon.texture, [at[0] - half, at[1] - height], [at[0] + half, at[1]])
+                .col(self.color([1.0, 1.0, 1.0, alpha]))
+                .build();
+        }
+    }
+
     /// The guide rings and the rim.
     fn draw_frame(&self, draw: &DrawListMut<'_>) {
         for fraction in [1.0 / 3.0, 2.0 / 3.0] {
@@ -196,10 +368,14 @@ impl View<'_> {
 
     fn draw_marks(&self, draw: &DrawListMut<'_>, snapshot: &Snapshot) {
         // Spirits first so a partner or the enemy sits on top of them.
-        self.draw_dots(draw, &snapshot.spirits, SPIRIT, 4.5, false);
-        self.draw_dots(draw, &snapshot.partners, PARTNER, 6.5, true);
+        self.draw_dots(draw, &snapshot.spirits, Icon::Spirit, SPIRIT, 4.5, false);
+        self.draw_dots(draw, &snapshot.partners, Icon::Partner, PARTNER, 6.5, true);
         if let Some((at, inside)) = snapshot.target.and_then(|offset| self.place(offset, true)) {
             let alpha = if inside { 1.0 } else { 0.8 };
+            if let Some(icon) = self.icon(Icon::Enemy) {
+                self.draw_icon(draw, icon, at, 18.0 * self.m, alpha);
+                return;
+            }
             let [r, g, b, _] = ENEMY;
             let radius = 5.0 * self.m;
             draw.add_circle(at, radius, self.color([r, g, b, alpha])).filled(true).build();
@@ -209,11 +385,24 @@ impl View<'_> {
         }
     }
 
-    fn draw_dots(&self, draw: &DrawListMut<'_>, dots: &[Dot], color: [f32; 4], size: f32, pin: bool) {
+    fn draw_dots(&self, draw: &DrawListMut<'_>, dots: &[Dot], icon: Icon, color: [f32; 4], size: f32, pin: bool) {
         for dot in dots {
             let Some((at, inside)) = self.place(dot.offset, pin) else { continue };
-            let Some(forward) = normalize(self.to_screen(dot.facing)) else { continue };
             let alpha = if inside { 1.0 } else { 0.8 };
+            if let Some(texture) = self.icon(icon) {
+                match icon {
+                    // The cursors of players point the way they face.
+                    Icon::Partner => {
+                        if let Some(forward) = normalize(self.to_screen(dot.facing)) {
+                            let cursor = (texture, self.icon(Icon::PartnerEmblem));
+                            self.draw_cursor(draw, cursor, at, forward, 30.0 * self.m, alpha);
+                        }
+                    }
+                    _ => self.draw_icon(draw, texture, at, 15.0 * self.m, alpha),
+                }
+                continue;
+            }
+            let Some(forward) = normalize(self.to_screen(dot.facing)) else { continue };
             let size = if inside { size } else { size * 0.85 };
             self.arrow(draw, at, forward, size * self.m, [color[0], color[1], color[2], alpha]);
         }
@@ -249,7 +438,8 @@ impl View<'_> {
     fn draw_compass(&self, ui: &Ui, draw: &DrawListMut<'_>) {
         for (i, letter) in ["N", "E", "S", "W"].into_iter().enumerate() {
             let (sin, cos) = (i as f32 * std::f32::consts::FRAC_PI_2).sin_cos();
-            let at = self.at(self.to_screen([sin, cos]), self.radius - 11.0 * self.s);
+            let at = self.at(self.to_screen([sin, cos]), self.radius - 12.0 * self.s);
+            draw.add_circle(at, 8.0 * self.m, self.color(BADGE)).filled(true).build();
             let size = ui.calc_text_size(letter);
             let pos = [(at[0] - size[0] / 2.0).round(), (at[1] - size[1] / 2.0).round()];
             let shadow = self.s.max(1.0);
@@ -262,7 +452,13 @@ impl View<'_> {
     fn draw_player(&self, draw: &DrawListMut<'_>) {
         let (sin, cos) = self.radar.yaw.unwrap_or(0.0).sin_cos();
         if let Some(forward) = normalize(self.to_screen([sin, cos])) {
-            self.arrow(draw, self.center, forward, 8.0 * self.m, PLAYER);
+            match self.icon(Icon::Player) {
+                Some(icon) => {
+                    let cursor = (icon, self.icon(Icon::PlayerEmblem));
+                    self.draw_cursor(draw, cursor, self.center, forward, 34.0 * self.m, 1.0);
+                }
+                None => self.arrow(draw, self.center, forward, 8.0 * self.m, PLAYER),
+            }
         }
     }
 }
@@ -301,7 +497,7 @@ mod tests {
         let mut radar = Radar::default();
         // Camera looking along +X: its right is +Z... world directions map as the camera sees them.
         radar.camera = ([0.0, 1.0], [1.0, 0.0]);
-        let view = View { radar: &radar, center: [0.0, 0.0], radius: 96.0, s: 1.0, m: 1.0, pixels_per_meter: 1.0 };
+        let view = View { radar: &radar, center: [0.0, 0.0], radius: 96.0, s: 1.0, m: 1.0, pixels_per_meter: 1.0, layer: None };
         assert_eq!(view.to_screen([1.0, 0.0]), [0.0, -1.0]);
         assert_eq!(view.to_screen([0.0, 1.0]), [1.0, 0.0]);
     }

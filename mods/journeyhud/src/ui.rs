@@ -68,7 +68,8 @@ struct HudRenderLoop {
     s: f32,
     trail: Trail,
     radar: Radar,
-    /// The world map under the minimap; `None` when the game folder is unknown.
+    /// The world map under the minimap; `None` until the player is in the world (see
+    /// `before_render`) and when the game folder is unknown.
     map: Option<MapLayer>,
     /// `None` when the textures failed to load: the bars are drawn flat.
     textures: Option<Textures>,
@@ -121,7 +122,6 @@ impl ImguiRenderLoop for HudRenderLoop {
             Ok(loaded) => self.textures = Some(loaded),
             Err(e) => logger::error(&format!("Overlay: textures failed ({e}), flat bars")),
         }
-        self.map = std::env::current_exe().ok().and_then(|exe| exe.parent().map(MapLayer::new));
         logger::log("Overlay: ImGui initialized");
     }
 
@@ -133,8 +133,15 @@ impl ImguiRenderLoop for HudRenderLoop {
         ctx.io_mut().font_global_scale = (self.s * FONT_SCALE).max(0.85);
         // hudhook uploads on the game's queue and waits for the GPU; on loading screens that
         // queue can be waiting on the game, so only upload in normal play.
-        if let Some(map) = self.map.as_mut().filter(|_| self.radar.in_control()) {
-            map.upload(render_context);
+        if self.radar.in_control() {
+            // Started only now, not at launch: reading the archives takes a few hundred MB and some
+            // seconds of disk and CPU, which the game does not need to compete with while it starts.
+            if self.map.is_none() {
+                self.map = std::env::current_exe().ok().and_then(|exe| exe.parent().map(MapLayer::new));
+            }
+            if let Some(map) = self.map.as_mut() {
+                map.upload(render_context);
+            }
         }
     }
 
@@ -147,8 +154,7 @@ impl ImguiRenderLoop for HudRenderLoop {
                 map.follow(id, snapshot.position, settings::minimap_range() + 20.0);
             }
         }
-        let map = self.map.as_ref().filter(|_| show_map);
-        self.radar.draw(ui, snapshot.as_ref(), &Placement { area: self.area }, map);
+        self.radar.draw(ui, snapshot.as_ref(), &Placement { area: self.area }, self.map.as_ref(), show_map);
         let Some(target) = target::current() else {
             self.trail.id = 0;
             return;
