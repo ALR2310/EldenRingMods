@@ -6,7 +6,7 @@
 
 Menu của game là movie Scaleform (`menu/*.gfx`, dạng SWF không nén). Đính kèm
 tệp `.gfx` đã sửa thì đụng bản dịch và mod giao diện khác. ERNativeUI (nguồn
-`tmp/ERNativeUI`, `docs/guides/presentation-and-gfx.md`) sửa movie ngay khi game
+`tmp/repos/ERNativeUI`, `docs/guides/presentation-and-gfx.md`) sửa movie ngay khi game
 mở tệp, trước khi Scaleform đọc; `gfx_hook` làm cùng việc cho một tệp.
 
 ## `gfx`: bộ chỉnh

@@ -257,6 +257,23 @@
             "problemMatcher": "$rustc"
         },
         {
+            "label": "Cargo: Build InputBridge (Release)",
+            "detail": "Builds InputBridge (release), then copies InputBridge.dll + InputBridge.ini into builds/<crate>/",
+            "type": "process",
+            "command": "powershell.exe",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
+                "-Mod", "InputBridge"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": "$rustc"
+        },
+        {
             "label": "Cargo: Build All (Release)",
             "detail": "Runs every per-mod build task - builds/<crate>/ holds each mod's .dll + .ini",
             "dependsOrder": "sequence",
@@ -275,7 +292,8 @@
                 "Cargo: Build SpiritMultiplier (Release)",
                 "Cargo: Build WindowResize (Release)",
                 "Cargo: Build AnimCancel (Release)",
-                "Cargo: Build AutoPickup (Release)"
+                "Cargo: Build AutoPickup (Release)",
+                "Cargo: Build InputBridge (Release)"
             ],
             "group": "build",
             "problemMatcher": []
