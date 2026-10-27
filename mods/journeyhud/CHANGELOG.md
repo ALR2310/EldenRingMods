@@ -6,6 +6,4 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
-- Added target panel showing the locked-on enemy's health and poise.
-- Added a block showing recently lost health on the target bar.
-- Added optional in-game settings menu (requires the ERNativeUI mod).
+- Initial release

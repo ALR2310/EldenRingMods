@@ -15,19 +15,20 @@
 ## Giới thiệu
 
 JourneyHud vẽ một overlay nhỏ ở góc trên bên phải: khi khoá mục tiêu một kẻ địch, panel hiện
-**máu** và **poise** (thanh stagger) của nó, tắt đi khi bỏ khoá. Mod được thiết kế để mở rộng
-thành HUD hành trình (radar, minimap) ở các giai đoạn sau, xem `docs/design.md`.
+**máu** và **poise** (thanh stagger) của nó, tắt đi khi bỏ khoá; phía trên nó là một **minimap** tròn, cùng một cột ở góc phải. Mod được thiết kế để mở rộng
+thành HUD hành trình (minimap có nền bản đồ) ở các giai đoạn sau, xem `docs/design.md`.
 
 ## Tính năng
 
 | Tính năng | Mô tả |
 |---|---|
 | **Panel mục tiêu** | thanh máu và thanh poise của kẻ địch đang khoá, vẽ giống thanh của game (số máu bật được) |
+| **Minimap** | ô tròn xoay theo camera với đồng đội, spirit của mình và kẻ địch đang khoá, tắt được |
 | **Tự ẩn** | không khoá thì không vẽ gì; kẻ địch không có thanh poise thì chỉ hiện máu |
 
 ## Cấu hình
 
-Vị trí (lệch so với góc phải trên) và cỡ panel chỉnh trong `JourneyHud.ini` cạnh DLL; tên key và
+Vị trí của cột (lệch so với góc phải trên) và cỡ panel chỉnh trong `JourneyHud.ini` cạnh DLL; tên key và
 mặc định nằm ở chú thích file đó. Panel neo vào khung hình 16:9 của game (trong dải đen trên màn 16:10 hay
 siêu rộng) và co giãn theo độ cao khung đó.
 
@@ -44,7 +45,7 @@ không chạm đối tượng game. Chi tiết: [docs/design.md](docs/design.md)
 
 ## Giới hạn
 
-- Chưa có tên kẻ địch, trạng thái (độc, chảy máu...), radar hay minimap.
+- Minimap chưa có nền bản đồ, chưa hiện kẻ địch xung quanh (ngoài mục tiêu khoá); chưa có tên kẻ địch hay trạng thái (độc, chảy máu...).
 - Cần Elden Ring chạy DX12; có thể xung đột với phần mềm overlay khác hook DXGI (vd. MSI Afterburner).
 
 ## Tài liệu
@@ -53,4 +54,5 @@ không chạm đối tượng game. Chi tiết: [docs/design.md](docs/design.md)
 - [HISTORY.md](HISTORY.md)
 - [docs/design.md](docs/design.md): thiết kế, nguồn tham khảo, giai đoạn
 - [docs/offsets.md](docs/offsets.md): offset và kiểm chứng theo bản exe
+- [docs/radar.md](docs/radar.md): lớp chấm của minimap, học từ minimap của kubilaiswf
 - [docs/names.md](docs/names.md): tra tên kẻ địch (đã bỏ, giữ kết quả dịch ngược)

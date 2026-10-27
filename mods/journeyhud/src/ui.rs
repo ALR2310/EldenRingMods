@@ -9,6 +9,8 @@ use hudhook::{Hudhook, ImguiRenderLoop, RenderContext};
 
 use common::logger;
 
+use crate::radar::{self, Snapshot as RadarSnapshot};
+use crate::radar_ui::{self, Placement, Radar};
 use crate::settings;
 use crate::target::{self, Target};
 use crate::textures::{self, Textures};
@@ -64,6 +66,7 @@ struct HudRenderLoop {
     /// Height of the area over 1080 x the `Scale` setting, set each frame.
     s: f32,
     trail: Trail,
+    radar: Radar,
     /// `None` when the textures failed to load: the bars are drawn flat.
     textures: Option<Textures>,
 }
@@ -127,6 +130,8 @@ impl ImguiRenderLoop for HudRenderLoop {
     }
 
     fn render(&mut self, ui: &mut Ui) {
+        let snapshot: Option<RadarSnapshot> = radar::current();
+        self.radar.draw(ui, snapshot.as_ref(), &Placement { area: self.area });
         let Some(target) = target::current() else {
             self.trail.id = 0;
             return;
@@ -181,9 +186,12 @@ struct Bar<'a> {
 
 fn draw_target(ui: &Ui, target: &Target, trail: &Trail, layout: &Layout) {
     let s = layout.s;
-    let right = layout.area[0] + layout.area[2] - layout.offset[0] * s;
+    // The column's offsets follow the screen only; `s` also holds the player's
+    // size setting, which resizes the bar, not where it sits.
+    let res = layout.area[3] / BASE_HEIGHT;
+    let right = layout.area[0] + layout.area[2] - layout.offset[0] * res;
     let left = right - layout.width * s;
-    let mut y = layout.area[1] + layout.offset[1] * s;
+    let mut y = layout.area[1] + layout.offset[1] * res + radar_ui::column_height(res);
 
     let draw = ui.get_foreground_draw_list();
     if layout.show_numbers {
@@ -345,7 +353,7 @@ mod tests {
     }
 
     fn target(id: usize, hp: i32) -> Target {
-        Target { id, npc_param_id: 1, hp, max_hp: 100, poise: None }
+        Target { id, npc_param_id: 1, offset: [0.0, 0.0], hp, max_hp: 100, poise: None }
     }
 
     #[test]

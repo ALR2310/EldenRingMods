@@ -14,3 +14,7 @@ link sang `docs/`.
 | 2026-10-26 | Thử game: thanh đẹp nhưng nhỏ. Đo thanh HP người chơi (khoảng 712x12 ở 1080p, mép trên cách đỉnh khung 47) rồi đặt cỡ và vị trí mặc định theo đó; thêm khoá chỉnh độ dài. | [design.md](docs/design.md) |
 | 2026-10-26 | Độ dài thanh về 220 như trước (700 quá to); giữ độ dày 12 theo thanh người chơi. | [design.md](docs/design.md) |
 | 2026-10-26 | Bỏ tên kẻ địch (không cần, tra ra `None` cho Tree Sentinel, souls_vision gốc cũng không có). Thêm menu ERNativeUI (bật tắt, số máu, độ dài, cỡ, lề), áp dụng ngay và ghi ini. Thanh máu và poise đã thử đúng trong game. | [names.md](docs/names.md) |
+| 2026-10-27 | Radar tròn (giai đoạn 3) theo cách minimap của kubilaiswf (hướng camera từ CSCamera, vị trí tương đối qua ma trận vật lý, ẩn khi HUD đổi hoặc fade): đồng đội, spirit, kẻ địch khoá, N/E/S/W; thêm 5 khoá cấu hình và 5 hàng menu. Chưa test. | [radar.md](docs/radar.md) |
+| 2026-10-27 | Đổi tên hiển thị radar thành Minimap (khoá ini MinimapEnabled/Range/Size/X/Y, menu, README); trong code `radar*` giữ cho lớp chấm, nền bản đồ sẽ là lớp `map` riêng. | [radar.md](docs/radar.md) |
+| 2026-10-27 | Sửa bố cục hiểu ngược: minimap ở trên cùng góc phải, thanh mục tiêu nằm dưới nó (một cột, nhích theo cỡ minimap); bỏ MinimapX/MinimapY, OffsetX/OffsetY giờ là của cả cột. Chấm và mũi tên có cỡ tối thiểu cho cửa sổ nhỏ. | [radar.md](docs/radar.md) |
+| 2026-10-27 | Thử game: bố cục đúng, chấm mục tiêu đã đỏ. Bán kính minimap mặc định 96 thành 110 để đường kính bằng độ dài thanh máu (220). | [radar.md](docs/radar.md) |
