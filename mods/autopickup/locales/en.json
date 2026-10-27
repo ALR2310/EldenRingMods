@@ -36,7 +36,7 @@
   },
   "animation": {
     "label": "No pickup animation",
-    "help": "Skip the animation of picking up an item from the ground."
+    "help": "Skip the animation of picking up items, remains and chests."
   },
   "log": {
     "label": "Log file",

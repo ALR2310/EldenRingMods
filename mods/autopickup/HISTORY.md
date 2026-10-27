@@ -14,3 +14,4 @@ link sang `docs/`.
 | 2026-10-27 | Thêm tùy chọn `NoPickupAnimation` (mặc định tắt): ghi ID animation không tồn tại vào `animeID_DropItemPick` của `PlayerCommonParam` như ErdTools làm với nguyên liệu, theo bình luận Nexus về animation nhặt khi cưỡi ngựa. | [docs](docs/pickup_animation.md) |
 | 2026-10-27 | `NoPickupAnimation` không có tác dụng ở lần thử đầu (`animeID_DropItemPick` không phải animation vật phẩm trên đất); tìm ra `GameSystemCommonParam...itemGetAnimId_shine`, đổi code sang ghi trường đó. | [docs](docs/pickup_animation.md) |
 | 2026-10-27 | Người dùng thử trong game và xác nhận `NoPickupAnimation` (ghi `itemGetAnimId_shine` và `animeID_DropItemPick`) tắt được animation nhặt vật phẩm trên đất | [docs](docs/pickup_animation.md) |
+| 2026-10-27 | `NoPickupAnimation` đổi thêm animation nhặt hài cốt (`itemGetAnimId_corpse`) và rương (`itemGetAnimId_box`); người dùng thử và xác nhận ổn | [docs](docs/pickup_animation.md) |
