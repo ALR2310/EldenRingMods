@@ -46,3 +46,7 @@ for Goblins (`mfg.rs`), khung và mũi tên bằng ảnh (`assets/`).
 - Lọc "cùng khu vực": chỉ lấy nhân vật cùng `block_id.area()` và trong 3 lần tầm radar, vì ở khu khác toạ độ chỉ
   trông gần.
 - Chưa có: kẻ địch xung quanh (ngoài mục tiêu khoá), nền bản đồ, thu phóng bằng phím (tầm chỉnh trong menu/toml).
+
+## Vệt đường đã đi (2026-10-27)
+
+`Radar::follow_trail` ghi vị trí người chơi mỗi khi cách điểm cuối ít nhất 1,5 m, giữ tối đa 800 điểm (khoảng 1,2 km). Xoá khi đổi không gian (`Snapshot::space`: ô overworld, hầm ngầm, từng dungeon) hoặc khi nhảy hơn 150 m (dịch chuyển, fast travel). Vẽ bằng đoạn thẳng nối các điểm tới tâm, mờ dần về phía điểm cũ; đoạn nào có đầu ngoài minimap thì bỏ. Theo minimap của kubilaiswf (MIT). Chưa thử trong game.

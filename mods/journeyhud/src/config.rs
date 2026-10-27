@@ -61,6 +61,7 @@ pub struct Minimap {
     pub range: i32,
     pub rotate: bool,
     pub compass: bool,
+    pub trail: bool,
     pub full_map: bool,
     #[serde(deserialize_with = "common::toml_config::key_name")]
     pub zoom_in_key: String,
@@ -77,6 +78,7 @@ pub struct Layers {
     pub graces: bool,
     pub points: bool,
     pub beacons: bool,
+    pub map_for_goblins: bool,
     pub coop_players: bool,
     pub spirits: bool,
 }

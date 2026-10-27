@@ -16,7 +16,7 @@ use fromsoftware_shared::FromStatic;
 use common::{logger, params};
 
 use crate::map::tiles::MapId;
-use crate::map::{beacons, graces, points, world};
+use crate::map::{beacons, graces, mfg, points, world};
 use crate::settings;
 
 /// Another character as the radar draws it.
@@ -33,12 +33,16 @@ pub struct Snapshot {
     /// Where the player is on the world map, in meters on the overworld grid
     /// (see `map::world`).
     pub position: [f32; 2],
+    /// The space the position is in: positions only compare within the same one.
+    pub space: i32,
     /// The world map that shows the player's position, if any.
     pub map: Option<MapId>,
     /// Offsets of the sites of grace the player has found, within reach.
     pub graces: Vec<[f32; 2]>,
     /// The visible points of interest of the world map, within reach.
     pub points: Vec<points::Point>,
+    /// The markers of Map for Goblins within reach (empty without its DLL).
+    pub goblins: Vec<mfg::Marker>,
     /// Offsets of the beacons the player has placed on this map.
     pub beacons: Vec<[f32; 2]>,
     /// Horizontal direction the player faces.
@@ -134,12 +138,17 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
 
     Some(Snapshot {
         position,
+        space,
         map,
         beacons: match (settings::minimap_beacons(), map) {
             (true, Some(map)) => beacons::placed(map)
                 .into_iter()
                 .map(|beacon| [beacon.position[0] - position[0], beacon.position[1] - position[1]])
                 .collect(),
+            _ => Vec::new(),
+        },
+        goblins: match (settings::minimap_goblins(), map) {
+            (true, Some(map)) => mfg::nearby(map, position, space, settings::minimap_range() * 1.2),
             _ => Vec::new(),
         },
         points: match (settings::minimap_points(), map) {

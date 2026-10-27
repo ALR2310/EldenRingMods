@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 aes = "0.8"
 common = { path = "../../shared" }
 eldenring.workspace = true
+flate2 = "1"
 fromsoftware-shared.workspace = true
 # DX12 overlay + Dear ImGui (same stack as SoulsTeleport); only the DX12 backend.
 hudhook = { version = "0.9.3", default-features = false, features = ["dx12"] }

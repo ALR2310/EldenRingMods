@@ -17,6 +17,7 @@ use hudhook::imgui::TextureId;
 
 use common::logger;
 
+use super::mfg;
 use super::sprites::{self, Image, SpriteRef};
 use super::tiles::{Loader, MapId, TILE, WINDOW, map_pixel};
 
@@ -97,6 +98,7 @@ pub struct MapLayer {
     sprites_pending: Mutex<Option<Receiver<sprites::Sprites>>>,
     icons: Option<[IconTexture; ICON_COUNT]>,
     map_icons: Option<MapIcons>,
+    goblins: Goblins,
 }
 
 impl MapLayer {
@@ -120,6 +122,7 @@ impl MapLayer {
             sprites_pending: Mutex::new(Some(sprites_pending)),
             icons: None,
             map_icons: None,
+            goblins: Goblins::Waiting,
         }
     }
 
@@ -150,6 +153,7 @@ impl MapLayer {
     /// Uploads the newest finished window, if any. Only call it in normal play.
     pub fn upload(&mut self, ctx: &mut dyn RenderContext) {
         self.upload_sprites(ctx);
+        self.upload_goblins(ctx);
         let Some(window) = self.loader.poll() else { return };
         let size = WINDOW as u32;
         let uploaded = match self.texture {
@@ -253,6 +257,108 @@ impl MapLayer {
     }
 }
 
+/// Where the icons of Map for Goblins are: not asked for yet, being decoded, or uploaded (`None`
+/// when there are none to show).
+enum Goblins {
+    Waiting,
+    Decoding(Mutex<Receiver<Vec<mfg::Icon>>>),
+    Ready(Option<GoblinIcons>),
+}
+
+/// The icons of Map for Goblins in one texture, a grid of `GOBLIN_CELL` pixel cells.
+struct GoblinIcons {
+    texture: TextureId,
+    cells: HashMap<u32, MapIcon>,
+}
+
+/// Map for Goblins draws its icons from art up to 96 px.
+const GOBLIN_CELL: u32 = 96;
+const GOBLIN_COLUMNS: u32 = 16;
+
+impl MapLayer {
+    /// Decodes the icons of Map for Goblins once its DLL answers (it may load after this one),
+    /// on a thread of their own, and uploads them. Nothing happens without the DLL or with the
+    /// layer switched off.
+    fn upload_goblins(&mut self, ctx: &mut dyn RenderContext) {
+        match &self.goblins {
+            Goblins::Waiting => {
+                if crate::settings::minimap_goblins() && mfg::available() {
+                    let (sender, receiver) = channel();
+                    std::thread::spawn(move || {
+                        let _ = sender.send(mfg::icons());
+                    });
+                    self.goblins = Goblins::Decoding(Mutex::new(receiver));
+                }
+            }
+            Goblins::Decoding(receiver) => {
+                let icons = match receiver.lock().unwrap_or_else(|e| e.into_inner()).try_recv() {
+                    Ok(icons) => icons,
+                    Err(TryRecvError::Empty) => return,
+                    Err(TryRecvError::Disconnected) => Vec::new(),
+                };
+                let uploaded = pack_goblins(&icons).and_then(|grid| {
+                    let texture = ctx.load_texture(&grid.rgba, grid.width, grid.height).ok()?;
+                    logger::log(&format!("Map: {} Map for Goblins icon(s) uploaded", grid.cells.len()));
+                    Some(GoblinIcons { texture, cells: grid.cells })
+                });
+                if uploaded.is_none() {
+                    logger::warn("Map: Map for Goblins icons not available");
+                }
+                self.goblins = Goblins::Ready(uploaded);
+            }
+            Goblins::Ready(_) => {}
+        }
+    }
+
+    /// The atlas texture and the cell of the Map for Goblins icon `id`.
+    pub fn goblin_icon(&self, id: u32) -> Option<(TextureId, MapIcon)> {
+        match &self.goblins {
+            Goblins::Ready(Some(icons)) => Some((icons.texture, *icons.cells.get(&id)?)),
+            _ => None,
+        }
+    }
+}
+
+/// Lays the icons that fit a cell out in a grid.
+/// The RGBA texture of the grid, its size and each icon's cell.
+struct Grid {
+    rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+    cells: HashMap<u32, MapIcon>,
+}
+
+fn pack_goblins(icons: &[mfg::Icon]) -> Option<Grid> {
+    let fitting: Vec<&mfg::Icon> =
+        icons.iter().filter(|icon| icon.image.width <= GOBLIN_CELL && icon.image.height <= GOBLIN_CELL).collect();
+    if fitting.is_empty() {
+        return None;
+    }
+    let width = GOBLIN_CELL * GOBLIN_COLUMNS;
+    let height = GOBLIN_CELL * (fitting.len() as u32).div_ceil(GOBLIN_COLUMNS);
+    let mut rgba = vec![0u8; (width * height * 4) as usize];
+    let mut cells = HashMap::new();
+    for (i, icon) in fitting.iter().enumerate() {
+        let (x, y) = (i as u32 % GOBLIN_COLUMNS * GOBLIN_CELL, i as u32 / GOBLIN_COLUMNS * GOBLIN_CELL);
+        let image = &icon.image;
+        for row in 0..image.height {
+            let from = (row * image.width * 4) as usize;
+            let to = (((y + row) * width + x) * 4) as usize;
+            rgba[to..to + (image.width * 4) as usize].copy_from_slice(&image.rgba[from..from + (image.width * 4) as usize]);
+        }
+        let uv = |px: u32, py: u32| [px as f32 / width as f32, py as f32 / height as f32];
+        cells.insert(
+            icon.id,
+            MapIcon {
+                uv_min: uv(x, y),
+                uv_max: uv(x + image.width, y + image.height),
+                size: [image.width as f32, image.height as f32],
+            },
+        );
+    }
+    Some(Grid { rgba, width, height, cells })
+}
+
 /// Shrinks every icon to at most `side` pixels and packs them in rows into an `ATLAS` square
 /// (RGBA), padded so filtering does not bleed one into the next. `None` if they do not fit.
 fn pack(icons: &[(u16, Image)], side: u32) -> Option<(Vec<u8>, HashMap<u16, MapIcon>)> {
@@ -305,6 +411,18 @@ mod tests {
             let at = (((cell.uv_min[1] * ATLAS as f32) as u32 * ATLAS + (cell.uv_min[0] * ATLAS as f32) as u32) * 4) as usize;
             assert_eq!(rgba[at], shade, "icon {id}");
         }
+    }
+
+    #[test]
+    fn goblin_icons_sit_in_their_own_cells_and_oversized_ones_are_left_out() {
+        let icon = |id, side| mfg::Icon { id, image: square(side, id as u8) };
+        let Grid { rgba, width, cells, .. } = pack_goblins(&[icon(1, 40), icon(2, 96), icon(3, 200)]).unwrap();
+        assert_eq!(cells.len(), 2);
+        // The second icon starts in the second cell of the first row.
+        assert!((cells[&2].uv_min[0] * width as f32 - GOBLIN_CELL as f32).abs() < 0.5);
+        assert_eq!(rgba[0], 1);
+        assert_eq!(rgba[(GOBLIN_CELL * 4) as usize], 2);
+        assert!(pack_goblins(&[icon(3, 200)]).is_none());
     }
 
     #[test]

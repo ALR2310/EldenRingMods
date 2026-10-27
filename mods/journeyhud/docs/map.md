@@ -120,6 +120,16 @@ Chưa chứng minh mod liên quan; chuyển sang đọc muộn để loại mộ
 - hudhook rò bộ đệm trung gian ở mỗi lần nạp texture, nên chỉ xin cửa sổ mới khi người chơi tới gần mép cửa sổ cũ (`margin = tầm + 20 m`).
 - Nạp texture trên màn hình tải có thể treo (hàng đợi GPU chờ game), nên chỉ nạp khi `hud_visible` và không fade (`Radar::in_control`).
 
+## Map for Goblins
+
+Lớp `Minimap.Layers.MapForGoblins`, code ở `src/map/mfg.rs`. Mod Map for Goblins DLL (từ 2.1.6) xuất hàm `MfgGetMapAPI` (header `sdk/mfg_map_api.h` của nó, ABI 1) để mod khác đọc đúng những marker nó đang vẽ; cách đọc và giải mã icon theo kubilaiswf-minimap (MIT, `mfg.rs`).
+
+- **Tìm API:** `GetModuleHandleW("MapForGoblins.dll")` rồi `MfgGetMapAPI(1)`, kiểm cỡ struct. Chưa thấy thì hỏi lại mỗi 2 giây (thứ tự nạp DLL không cố định); không có DLL thì lớp không làm gì và không tốn gì.
+- **Marker:** `view_points(layer)` với layer 0 = overworld, 1 = hầm ngầm (layer DLC bỏ qua, chưa có bản đồ). Mỗi điểm có `raw_map_id` (area, grid X, grid Z) và `x, z` trong ô đó, đổi qua `world::locate` như hàng `WorldMapPointParam`. Danh sách dựng lại tối đa 3 lần mỗi giây; vòng highlight (bit 62 của id) bị bỏ, huy hiệu hoàn thành (bit 63) vẽ như icon thường. Danh sách đã gồm việc người chơi tắt loại trong menu của nó và vật phẩm đã nhặt, nên không phải kiểm cờ ở đây.
+- **Icon:** `get_icon` trả thân thẻ SWF DefineBitsLossless2 (định dạng 3 bảng màu hoặc 5 ARGB, nhân alpha sẵn); giải nén zlib rồi chia lại alpha. Giải mã trên luồng riêng khi API xuất hiện lần đầu, xếp lưới ô 96 px (16 cột) thành một texture; icon quá 96 px bị bỏ. Không đóng gói ảnh nào của mod đó.
+- **Vẽ:** icon 96 px vẽ khoảng 16 px ở 1080p, dưới grace và trên các địa điểm của game; ngoài tầm thì không vẽ (không ghim viền).
+- **Chưa thử trong game.** Bản Map for Goblins DLL cài trên máy là 2.1.6 (có API); mod này chưa nằm trong `external_dlls` của `config_eldenring.toml` ở thư mục game nên cần bật nó mới thấy marker.
+
 ## Việc chưa làm
 
 - Thử trong game: bản đồ có khớp vị trí người chơi (so với bản đồ thế giới trong game), xoay đúng khi quay camera, đổi cửa sổ không giật.

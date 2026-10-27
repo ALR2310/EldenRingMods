@@ -4,6 +4,8 @@
 //! marks around it. Everything is drawn from primitives, no textures.
 //! Details: `docs/radar.md`.
 
+use std::collections::VecDeque;
+
 use hudhook::imgui::{DrawListMut, Ui};
 
 use hudhook::imgui::TextureId;
@@ -60,6 +62,12 @@ pub fn column_height(res: f32) -> f32 {
 /// The basis that keeps north (+Z) up and east (+X) to the right.
 const NORTH_UP: ([f32; 2], [f32; 2]) = ([1.0, 0.0], [0.0, 1.0]);
 
+/// A spot of the trail is kept when the player is this many meters from the last one, up to
+/// `TRAIL_LENGTH` of them; a jump of `TELEPORT_DISTANCE` (a warp, a fast travel) starts it over.
+const TRAIL_SPACING: f32 = 1.5;
+const TRAIL_LENGTH: usize = 800;
+const TELEPORT_DISTANCE: f32 = 150.0;
+
 /// What the radar remembers between frames.
 pub struct Radar {
     /// 0 to 1, follows whether the radar should be on screen.
@@ -70,11 +78,14 @@ pub struct Radar {
     camera: ([f32; 2], [f32; 2]),
     /// Whether the last frame was normal play (no menu changing the HUD, no fade).
     in_control: bool,
+    /// Where the player has been, oldest first, in `trail_space`.
+    trail: VecDeque<[f32; 2]>,
+    trail_space: i32,
 }
 
 impl Default for Radar {
     fn default() -> Self {
-        Radar { alpha: 0.0, yaw: None, camera: ([1.0, 0.0], [0.0, 1.0]), in_control: false }
+        Radar { alpha: 0.0, yaw: None, camera: ([1.0, 0.0], [0.0, 1.0]), in_control: false, trail: VecDeque::new(), trail_space: 0 }
     }
 }
 
@@ -85,6 +96,31 @@ pub struct Placement {
 }
 
 impl Radar {
+    /// Adds the player's position to the trail when they moved far enough, and starts it over
+    /// in another space or after a jump.
+    fn follow_trail(&mut self, snapshot: &Snapshot) {
+        if !settings::minimap_trail() {
+            self.trail.clear();
+            return;
+        }
+        if snapshot.space != self.trail_space {
+            self.trail.clear();
+            self.trail_space = snapshot.space;
+        }
+        if let Some(&last) = self.trail.back() {
+            let distance = (snapshot.position[0] - last[0]).hypot(snapshot.position[1] - last[1]);
+            if distance > TELEPORT_DISTANCE {
+                self.trail.clear();
+            } else if distance < TRAIL_SPACING {
+                return;
+            }
+        }
+        self.trail.push_back(snapshot.position);
+        if self.trail.len() > TRAIL_LENGTH {
+            self.trail.pop_front();
+        }
+    }
+
     /// Whether the last frame was normal play: the time to upload textures.
     pub fn in_control(&self) -> bool {
         self.in_control
@@ -107,6 +143,7 @@ impl Radar {
             return;
         }
 
+        self.follow_trail(snapshot);
         if !settings::minimap_rotate() {
             self.camera = NORTH_UP;
         } else if let (Some(right), Some(forward)) = (normalize(snapshot.camera_right), normalize(snapshot.camera_forward)) {
@@ -144,8 +181,10 @@ impl Radar {
         }
         view.draw_vignette(&draw);
         view.draw_frame(&draw);
+        view.draw_trail(&draw, snapshot);
         let marks = view.point_marks(snapshot);
         view.draw_points(&draw, &marks);
+        view.draw_goblins(&draw, snapshot);
         view.draw_graces(&draw, snapshot);
         view.draw_beacons(&draw, snapshot);
         view.draw_marks(&draw, snapshot);
@@ -329,6 +368,47 @@ impl View<'_> {
                 .uv_min(mark.icon.uv_min)
                 .uv_max(mark.icon.uv_max)
                 .col(self.color([1.0, 1.0, 1.0, alpha]))
+                .build();
+        }
+    }
+
+    /// The path the player has walked, fading toward the oldest end, up to where they stand.
+    /// Segments with an end outside the minimap are left out.
+    fn draw_trail(&self, draw: &DrawListMut<'_>, snapshot: &Snapshot) {
+        let limit = self.radius - 6.0 * self.s;
+        let project = |spot: [f32; 2]| {
+            let screen = self.to_screen([spot[0] - snapshot.position[0], spot[1] - snapshot.position[1]]);
+            self.at(screen, self.pixels_per_meter)
+        };
+        let inside = |p: [f32; 2]| (p[0] - self.center[0]).hypot(p[1] - self.center[1]) < limit;
+        let spots: Vec<[f32; 2]> = self.radar.trail.iter().map(|&spot| project(spot)).chain([self.center]).collect();
+        for (i, segment) in spots.windows(2).enumerate() {
+            if !inside(segment[0]) || !inside(segment[1]) {
+                continue;
+            }
+            let age = (i + 1) as f32 / (spots.len() - 1) as f32;
+            draw.add_line(segment[0], segment[1], self.color([1.0, 0.93, 0.75, 0.10 + 0.55 * age]))
+                .thickness(2.0 * self.s.max(0.8))
+                .build();
+        }
+    }
+
+    /// The markers of Map for Goblins, with its icons (a 96 px art is drawn about 16 px at 1080p).
+    fn draw_goblins(&self, draw: &DrawListMut<'_>, snapshot: &Snapshot) {
+        let Some(layer) = self.layer else { return };
+        let rim = self.radius - 10.0 * self.s;
+        for marker in &snapshot.goblins {
+            let screen = self.to_screen(marker.offset);
+            if screen[0].hypot(screen[1]) * self.pixels_per_meter > rim {
+                continue;
+            }
+            let Some((texture, icon)) = layer.goblin_icon(marker.icon) else { continue };
+            let at = self.at(screen, self.pixels_per_meter);
+            let half = [icon.size[0] / 12.0 * self.m, icon.size[1] / 12.0 * self.m];
+            draw.add_image(texture, [at[0] - half[0], at[1] - half[1]], [at[0] + half[0], at[1] + half[1]])
+                .uv_min(icon.uv_min)
+                .uv_max(icon.uv_max)
+                .col(self.color([1.0, 1.0, 1.0, 1.0]))
                 .build();
         }
     }

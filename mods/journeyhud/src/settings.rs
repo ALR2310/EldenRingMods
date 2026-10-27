@@ -30,7 +30,9 @@ static MINIMAP_POINTS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_BEACONS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_ROTATE: AtomicBool = AtomicBool::new(true);
 static MINIMAP_COMPASS: AtomicBool = AtomicBool::new(true);
+static MINIMAP_TRAIL: AtomicBool = AtomicBool::new(false);
 static MINIMAP_FULL_MAP: AtomicBool = AtomicBool::new(true);
+static MINIMAP_GOBLINS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_COOP: AtomicBool = AtomicBool::new(true);
 static MINIMAP_SPIRITS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_HIDE_IN_CAVES: AtomicBool = AtomicBool::new(false);
@@ -57,7 +59,9 @@ pub fn load(config: &Config) {
     set_minimap_beacons(minimap.layers.beacons as u8);
     set_minimap_rotate(minimap.rotate as u8);
     set_minimap_compass(minimap.compass as u8);
+    set_minimap_trail(minimap.trail as u8);
     set_minimap_full_map(minimap.full_map as u8);
+    set_minimap_goblins(minimap.layers.map_for_goblins as u8);
     set_minimap_coop(minimap.layers.coop_players as u8);
     set_minimap_spirits(minimap.layers.spirits as u8);
     set_minimap_hide_in_caves(minimap.hide.in_caves as u8);
@@ -131,9 +135,19 @@ pub fn minimap_compass() -> bool {
     MINIMAP_COMPASS.load(Ordering::Relaxed)
 }
 
+/// Whether the path the player has walked is drawn.
+pub fn minimap_trail() -> bool {
+    MINIMAP_TRAIL.load(Ordering::Relaxed)
+}
+
 /// Whether the whole world map shows, or only what the player's map fragments reveal.
 pub fn minimap_full_map() -> bool {
     MINIMAP_FULL_MAP.load(Ordering::Relaxed)
+}
+
+/// Whether the markers of Map for Goblins are drawn.
+pub fn minimap_goblins() -> bool {
+    MINIMAP_GOBLINS.load(Ordering::Relaxed)
 }
 
 /// Whether the co-op partners are marked.
@@ -245,8 +259,16 @@ pub fn set_minimap_compass(value: u8) {
     MINIMAP_COMPASS.store(value != 0, Ordering::Relaxed);
 }
 
+pub fn set_minimap_trail(value: u8) {
+    MINIMAP_TRAIL.store(value != 0, Ordering::Relaxed);
+}
+
 pub fn set_minimap_full_map(value: u8) {
     MINIMAP_FULL_MAP.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_minimap_goblins(value: u8) {
+    MINIMAP_GOBLINS.store(value != 0, Ordering::Relaxed);
 }
 
 pub fn set_minimap_coop(value: u8) {
