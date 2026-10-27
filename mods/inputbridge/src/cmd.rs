@@ -7,6 +7,8 @@
 //!   mdown|mup <left|right|middle>       hold / release a button
 //!   mclick <left|right|middle> [secs]   press a button for a while
 //!   wheel <n>                           scroll notches (120 per notch)
+//!   moveto <x> <y>                      put the menu cursor at client pixel x, y (until `cursor off`)
+//!   cursor off                          hand the cursor back to the real mouse
 //!
 //! Write it to a temp name and rename, so the poller never sees half a file.
 
@@ -21,6 +23,7 @@ use crate::dinput::{
 };
 use crate::gate;
 use crate::keys::dik;
+use crate::winput::{CURSOR_ON, CURSOR_X, CURSOR_Y};
 
 /// Unix ms at which a timed key goes up again; 0 = not timed.
 static EXPIRY: [AtomicU64; 256] = [const { AtomicU64::new(0) }; 256];
@@ -114,6 +117,22 @@ fn apply(line: &str) {
                 true
             }
             None => false,
+        },
+        "moveto" => match (int(it.next()), int(it.next())) {
+            (Some(x), Some(y)) => {
+                CURSOR_X.store(x, Ordering::Relaxed);
+                CURSOR_Y.store(y, Ordering::Relaxed);
+                CURSOR_ON.store(true, Ordering::Relaxed);
+                true
+            }
+            _ => false,
+        },
+        "cursor" => match it.next() {
+            Some("off") => {
+                CURSOR_ON.store(false, Ordering::Relaxed);
+                true
+            }
+            _ => false,
         },
         "wheel" => match int(it.next()) {
             Some(n) => {

@@ -5,6 +5,7 @@ mod dinput;
 mod focus;
 mod gate;
 mod keys;
+mod winput;
 
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -79,6 +80,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         if focus::ENABLED.load(Ordering::Relaxed) {
             focus::install();
         }
+        winput::install();
         std::thread::spawn(report_stats);
         cmd::run(&dir, gate_ready);
     });

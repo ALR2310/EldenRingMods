@@ -10,12 +10,13 @@
 - 2026-10-27 [user] M: mở và đóng bản đồ.
 - 2026-10-27 [observed] E: tương tác và xác nhận (đóng hộp thoại, chọn Continue).
 - 2026-10-27 [observed] Chuột trái: tấn công.
+- 2026-10-27 [observed] Bảng phím của bridge ở `mods/inputbridge/src/keys.txt` (có `-`, `=`/`plus`, phím số, ngoặc, Home/End...). Từ 2026-10-27 bridge cũng hook `GetAsyncKeyState`, nên phím giả tới được cả mod đọc phím kiểu Win32 (phím zoom JourneyHud đã thử: `-` đổi tầm minimap). MCP phải khởi động lại (/mcp) mới nhận danh sách phím và tool mới.
 
 ## Quy trình
 
 - 2026-10-27 [observed] Từ màn hình tiêu đề vào world: `press e` (phím bất kỳ, ra hộp thoại cảnh báo), `press e` (đóng hộp thoại, ra menu chính với Continue), `press e` (Continue).
 - 2026-10-27 [user] Tải nhân vật vào world mất khoảng 5 đến 10 giây sau khi chọn Continue.
-- 2026-10-27 [observed] Game phải do người dùng bật offline (không Easy Anti-Cheat), và `InputBridge.dll` phải có trong `external_dlls` của `config_eldenring.toml`. Agent không tự bật được game.
+- 2026-10-27 [observed] Game phải do người dùng bật offline (không Easy Anti-Cheat), và `InputBridge.dll` phải có trong `external_dlls` của `config_eldenring.toml`. 2026-10-27 [user, observed] Agent tự bật được game: PowerShell `Start-Process "E:\SteamLibrary\steamapps\common\ELDEN RING\Game\modengine2_launcher.exe" -ArgumentList "-t","er","-c",".\config_eldenring.toml" -WorkingDirectory <thư mục Game>` (đợi khoảng 25 giây cho cửa sổ), rồi vào world như trên (khoảng 25 giây sau Continue). Bash `cmd start` không chạy được.
 
 ## Thời gian
 
@@ -24,6 +25,7 @@
 ## Camera và chuột
 
 - 2026-10-27 [observed] `camera(6, 0, 1)` xoay khoảng 25 đến 30 độ sang phải.
+- 2026-10-27 [observed] mouse_move chỉ nhận dịch chuyển tương đối (dx, dy). Để trỏ vào một điểm dùng `mouse_to(x, y)` / `click_at(x, y)` (toạ độ theo ảnh chụp gần nhất; cần MCP đã khởi động lại), trả con trỏ bằng `cursor_off()`. wheel(notches=-5) thu nhỏ bản đồ. Ở bản đồ, F mở danh sách grace, Z/X trong danh sách đổi vùng (chỉ thấy các vùng Lands Between, không có tab DLC ở save này).
 
 ## Màn hình
 

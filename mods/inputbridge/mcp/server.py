@@ -44,11 +44,11 @@ def _mod_dir() -> Path | None:
 MOD_DIR = _mod_dir()
 WINDOW_TITLE = "ELDEN RING"
 
-# Key names the mod understands (mods/inputbridge/src/keys.rs).
-KEYS = set("abcdefghijklmnopqrstuvwxyz0123456789") | {
-    "esc", "escape", "tab", "enter", "return", "ctrl", "lctrl", "shift", "lshift",
-    "alt", "lalt", "space", "up", "down", "left", "right",
-    *(f"f{n}" for n in range(1, 13)),
+# Key names the mod understands: the same file the mod is built from (src/keys.txt).
+KEYS = {
+    line.split(" ", 1)[0]
+    for line in (Path(__file__).resolve().parents[1] / "src" / "keys.txt").read_text(encoding="utf-8").splitlines()
+    if line and not line.startswith("#")
 }
 BUTTONS = {"left", "right", "middle"}
 
@@ -67,6 +67,9 @@ and mouse never reach the game, only the commands you send here do.
 - Loading a character takes 5-10 s after choosing Continue.
 - Keys use the user's bindings: W/A/S/D move, Space jumps, M opens the map, E interacts and
   confirms. Camera and attacks use the mouse: camera(dx, dy, seconds), click("left").
+- Menus and the map take a cursor: mouse_to(x, y) puts it at a point of the last screenshot (a
+  grace icon, a list row), then click() presses. click_at(x, y) does both. cursor_off() hands
+  the cursor back. Other keys work too: "-", "+", numpad keys, brackets, Home/End, ...
 - camera(6, 0, 1) turns about 25-30 degrees to the right. Positive dy looks down.
 - release_all() if you lose track of what is held.
 - Offline only: never use this with Easy Anti-Cheat running.
@@ -101,6 +104,19 @@ def _button(name: str) -> str:
     if button not in BUTTONS:
         raise ValueError(f"unknown button '{name}' (left, right, middle)")
     return button
+
+
+# Size of the client area and of the last screenshot frame, so mouse_to can take coordinates
+# of the picture the agent is looking at.
+_last_view: dict[str, int] = {}
+
+
+def _to_client(x: int, y: int) -> tuple[int, int]:
+    client_w, frame_w = _last_view.get("client_w", 0), _last_view.get("frame_w", 0)
+    if not client_w or not frame_w:
+        return x, y
+    scale = client_w / frame_w
+    return round(x * scale), round(y * scale)
 
 
 def _guard(fn):
@@ -149,6 +165,32 @@ def camera(dx: int, dy: int = 0, seconds: float = 0.5) -> str:
 @_guard
 def mouse_move(dx: int, dy: int) -> str:
     return _send(f"mouse {int(dx)} {int(dy)}")
+
+
+@server.tool(description=(
+    "Put the menu cursor at x, y of the last screenshot (pixels of that picture; of the game "
+    "window if there is none yet). Then click(). Stays there until cursor_off()."))
+@_guard
+def mouse_to(x: int, y: int) -> str:
+    cx, cy = _to_client(int(x), int(y))
+    return _send(f"moveto {cx} {cy}")
+
+
+@server.tool(description="Move the menu cursor to x, y of the last screenshot and click there.")
+@_guard
+def click_at(x: int, y: int, button: str = "left") -> str:
+    cx, cy = _to_client(int(x), int(y))
+    _send(f"moveto {cx} {cy}")
+    time.sleep(0.3)  # let the game see the cursor first
+    result = _send(f"mclick {_button(button)} 0.15")
+    time.sleep(0.15)
+    return result.replace("ok: ", f"ok: moveto {cx} {cy}; ", 1)
+
+
+@server.tool(description="Give the cursor back to the real mouse (after mouse_to / click_at).")
+@_guard
+def cursor_off() -> str:
+    return _send("cursor off")
 
 
 @server.tool(description="Press a mouse button for a while (seconds, default 0.1): left attacks, right guards.")
@@ -334,6 +376,7 @@ def screenshot(max_width: int = 640) -> list[Any]:
         return [TextContent(type="text", text=f"error: the frame is black ({width}x{height})")]
     if width > max_width > 0:
         image = image.resize((max_width, max(1, height * max_width // width)))
+    _last_view.update(client_w=width, frame_w=image.size[0])
     out = io.BytesIO()
     image.save(out, "JPEG", quality=70)
     info = (f"Window: {title} | client {width}x{height} | frame {image.size[0]}x{image.size[1]} | "
