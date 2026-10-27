@@ -14,7 +14,7 @@ use fromsoftware_shared::FromStatic;
 
 use common::logger;
 
-use crate::settings;
+use crate::{radar, settings};
 
 // The layout the fields are read at, checked against eldenring.exe 2.6.2.0 to
 // 2.7.2.0 (`docs/offsets.md`). A `fromsoftware-rs` update that moves one stops
@@ -36,6 +36,8 @@ pub struct Target {
     /// The chr's address: stable for one enemy, differs between enemies.
     pub id: usize,
     pub npc_param_id: i32,
+    /// Meters from the player along the world's X and Z axes.
+    pub offset: [f32; 2],
     pub hp: i32,
     pub max_hp: i32,
     /// `None` when the enemy has no poise bar (max is 0).
@@ -59,6 +61,7 @@ pub fn run() {
     let mut last = None;
     common::task::run_recurring_safe(cs_task, "Target", CSTaskGroupIndex::FrameBegin, move |_data: &FD4TaskData| {
         let read = if settings::enabled() { read() } else { None };
+        radar::update(read.as_ref().map(|t| t.offset));
         let npc = read.as_ref().map(|t| t.npc_param_id);
         if npc != last {
             last = npc;
@@ -89,11 +92,19 @@ fn read() -> Option<Target> {
     Some(Target {
         id: chr as *const ChrIns as usize,
         npc_param_id: chr.npc_param_id,
+        offset: offset_from(player, chr),
         hp: chr.modules.data.hp.max(0),
         max_hp,
         poise: (armor.sa_durability_max > 0.0 && armor.sa_durability_max.is_finite())
             .then_some((armor.sa_durability.max(0.0), armor.sa_durability_max)),
     })
+}
+
+/// Where `chr` is relative to the player, in the world's X and Z.
+fn offset_from(player: &PlayerIns, chr: &ChrIns) -> [f32; 2] {
+    let origin = player.chr_ins.chr_ctrl.physics_model_matrix.3;
+    let at = chr.chr_ctrl.physics_model_matrix.3;
+    [at.0 - origin.0, at.2 - origin.2]
 }
 
 /// The chr of `handle` via the ChrSet's `get_chr_ins_by_handle` (vtable slot

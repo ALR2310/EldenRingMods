@@ -4,6 +4,9 @@
 //!
 //! ```text
 //! Journey HUD                -> opens a page with:
+//!                                 Minimap         on/off
+//!                                 Minimap range   slider
+//!                                 Minimap size    slider
 //!                                 Target bar      on/off
 //!                                 Health numbers  on/off
 //!                                 Bar length      slider
@@ -34,6 +37,13 @@ static OFFSET_X: NumberSetting =
 static OFFSET_Y: NumberSetting =
     NumberSetting::whole("OffsetY", 0.0, 400.0, Some(settings::set_offset_y)).slider(0.0, 300.0, 5.0);
 
+static MINIMAP: Setting =
+    Setting { key: "MinimapEnabled", format: erui::format_bool, apply: Some(settings::set_minimap_enabled) };
+static MINIMAP_RANGE: NumberSetting =
+    NumberSetting::whole("MinimapRange", 20.0, 400.0, Some(settings::set_minimap_range)).slider(40.0, 320.0, 10.0);
+static MINIMAP_SIZE: NumberSetting =
+    NumberSetting::whole("MinimapSize", 40.0, 200.0, Some(settings::set_minimap_size)).slider(50.0, 160.0, 5.0);
+
 static MENU: OnceLock<erui::Menu> = OnceLock::new();
 
 /// The menu texts, one file per language (`locales/`); English is the fallback.
@@ -57,6 +67,9 @@ fn build(b: &mut erui::MenuBuilder) -> Result<(), String> {
     b.number(page, &t("scale.label"), &t("scale.help"), &SCALE, || config::get_double("Scale", 1.0))?;
     b.number(page, &t("offset_x.label"), &t("offset_x.help"), &OFFSET_X, || config::get_int("OffsetX", 48) as f64)?;
     b.number(page, &t("offset_y.label"), &t("offset_y.help"), &OFFSET_Y, || config::get_int("OffsetY", 47) as f64)?;
+    b.toggle(page, &t("minimap.label"), &t("minimap.help"), &MINIMAP, || config::get_bool("MinimapEnabled", true) as u8)?;
+    b.number(page, &t("minimap_range.label"), &t("minimap_range.help"), &MINIMAP_RANGE, || config::get_int("MinimapRange", 80) as f64)?;
+    b.number(page, &t("minimap_size.label"), &t("minimap_size.help"), &MINIMAP_SIZE, || config::get_int("MinimapSize", 110) as f64)?;
     Ok(())
 }
 
@@ -75,14 +88,14 @@ mod tests {
     /// have the same keys (nothing missing, nothing left over).
     #[test]
     fn language_files_match_the_menu_keys() {
-        TEXT.assert_matches_source(include_str!("menu.rs"), 13);
+        TEXT.assert_matches_source(include_str!("menu.rs"), 19);
     }
 
     /// Every row meant to be a native slider has a valid range and step (else
     /// it silently stays a typed row).
     #[test]
     fn slider_rows_have_a_valid_range() {
-        for setting in [&WIDTH, &SCALE, &OFFSET_X, &OFFSET_Y] {
+        for setting in [&WIDTH, &SCALE, &OFFSET_X, &OFFSET_Y, &MINIMAP_RANGE, &MINIMAP_SIZE] {
             assert!(setting.has_slider(), "{} would not be a slider", setting.key);
         }
     }

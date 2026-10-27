@@ -65,4 +65,5 @@ Chi tiết: `mods/journeyhud/docs/design.md`
 
 - [ ] [verify] JourneyHud: poise giảm khi đánh trúng, khối vàng/vệt sáng khi mất máu, chạy trên 2.7.1.0 (đã thử 2.7.2.0)
 - [ ] [verify] JourneyHud: menu ERNativeUI (hàng Journey HUD, đổi cỡ/độ dài/lề áp dụng ngay, lưu ini, không có host thì chạy bằng ini)
-- [ ] [research] JourneyHud: radar và minimap theo `docs/design.md`
+- [ ] [verify] JourneyHud: minimap (mũi tên đúng hướng, xoay đúng chiều khi quay camera, đồng đội/spirit/kẻ địch khoá đúng chỗ, ẩn khi mở menu/tải) (`docs/radar.md`)
+- [ ] [research] JourneyHud: nền bản đồ cho minimap theo `docs/design.md` (giai đoạn 4)

@@ -20,10 +20,22 @@
   },
   "offset_x": {
     "label": "Right margin",
-    "help": "Distance from the right edge of the screen."
+    "help": "Distance of the minimap and the target bar from the right edge of the screen."
   },
   "offset_y": {
     "label": "Top margin",
-    "help": "Distance from the top edge of the screen."
+    "help": "Distance of the minimap (or the target bar, without it) from the top edge of the screen."
+  },
+  "minimap": {
+    "label": "Minimap",
+    "help": "Show a round minimap with the other players, your spirits and the enemy you are locked on to."
+  },
+  "minimap_range": {
+    "label": "Minimap range",
+    "help": "How far the minimap sees, from its center to its rim, in meters."
+  },
+  "minimap_size": {
+    "label": "Minimap size",
+    "help": "Size of the minimap."
   }
 }

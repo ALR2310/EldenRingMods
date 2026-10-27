@@ -20,10 +20,22 @@
   },
   "offset_x": {
     "label": "Lề phải",
-    "help": "Khoảng cách tới mép phải màn hình."
+    "help": "Khoảng cách từ minimap và thanh mục tiêu tới mép phải màn hình."
   },
   "offset_y": {
     "label": "Lề trên",
-    "help": "Khoảng cách tới mép trên màn hình."
+    "help": "Khoảng cách từ minimap (hoặc thanh mục tiêu nếu tắt minimap) tới mép trên màn hình."
+  },
+  "minimap": {
+    "label": "Minimap",
+    "help": "Hiện minimap tròn với người chơi khác, spirit của bạn và kẻ địch đang khoá mục tiêu."
+  },
+  "minimap_range": {
+    "label": "Tầm minimap",
+    "help": "Minimap nhìn được xa bao nhiêu, từ tâm tới viền, tính bằng mét."
+  },
+  "minimap_size": {
+    "label": "Kích thước minimap",
+    "help": "Kích thước của minimap."
   }
 }

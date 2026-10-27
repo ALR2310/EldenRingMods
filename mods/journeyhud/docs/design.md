@@ -1,6 +1,6 @@
 # JourneyHud: thiết kế và nguồn tham khảo
 
-**Status 2026-10-26: giai đoạn 1 (panel máu và poise) đã có code, chưa thử trong game.** Nhánh `mod/journeyhud`. Kiểm chứng offset theo bản exe: [offsets.md](offsets.md).
+**Status 2026-10-27: giai đoạn 1 (thanh máu/poise) xong và đã thử; giai đoạn 3 (minimap, lớp chấm) có code, chưa thử ([radar.md](radar.md)); giai đoạn 4 (nền bản đồ) chưa làm.** Nhánh `mod/journeyhud`. Kiểm chứng offset theo bản exe: [offsets.md](offsets.md).
 
 ## Mục tiêu
 
