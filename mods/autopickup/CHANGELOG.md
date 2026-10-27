@@ -6,6 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-27
+
 - Added option to disable the pickup animation.
 
 ## [1.0.0] - 2026-10-26
