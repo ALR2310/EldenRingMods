@@ -9,6 +9,7 @@ use hudhook::{Hudhook, ImguiRenderLoop, RenderContext};
 
 use common::logger;
 
+use crate::map::layer::MapLayer;
 use crate::radar::{self, Snapshot as RadarSnapshot};
 use crate::radar_ui::{self, Placement, Radar};
 use crate::settings;
@@ -67,6 +68,8 @@ struct HudRenderLoop {
     s: f32,
     trail: Trail,
     radar: Radar,
+    /// The world map under the minimap; `None` when the game folder is unknown.
+    map: Option<MapLayer>,
     /// `None` when the textures failed to load: the bars are drawn flat.
     textures: Option<Textures>,
 }
@@ -118,20 +121,34 @@ impl ImguiRenderLoop for HudRenderLoop {
             Ok(loaded) => self.textures = Some(loaded),
             Err(e) => logger::error(&format!("Overlay: textures failed ({e}), flat bars")),
         }
+        self.map = std::env::current_exe().ok().and_then(|exe| exe.parent().map(MapLayer::new));
         logger::log("Overlay: ImGui initialized");
     }
 
-    fn before_render<'a>(&'a mut self, ctx: &mut Context, _render_context: &'a mut dyn RenderContext) {
+    fn before_render<'a>(&'a mut self, ctx: &mut Context, render_context: &'a mut dyn RenderContext) {
         let [w, h] = ctx.io().display_size;
         self.area = game_area(w, h);
         self.s = self.area[3] / BASE_HEIGHT * settings::scale();
         // Not below 0.85 so the text stays readable in a small window.
         ctx.io_mut().font_global_scale = (self.s * FONT_SCALE).max(0.85);
+        // hudhook uploads on the game's queue and waits for the GPU; on loading screens that
+        // queue can be waiting on the game, so only upload in normal play.
+        if let Some(map) = self.map.as_mut().filter(|_| self.radar.in_control()) {
+            map.upload(render_context);
+        }
     }
 
     fn render(&mut self, ui: &mut Ui) {
         let snapshot: Option<RadarSnapshot> = radar::current();
-        self.radar.draw(ui, snapshot.as_ref(), &Placement { area: self.area });
+        let show_map = settings::minimap_map();
+        if let (Some(map), Some(snapshot), true) = (self.map.as_mut(), snapshot.as_ref(), show_map) {
+            if let Some(id) = snapshot.map {
+                // The window must stay ahead of the widest view, within what it can hold.
+                map.follow(id, snapshot.position, settings::minimap_range() + 20.0);
+            }
+        }
+        let map = self.map.as_ref().filter(|_| show_map);
+        self.radar.draw(ui, snapshot.as_ref(), &Placement { area: self.area }, map);
         let Some(target) = target::current() else {
             self.trail.id = 0;
             return;

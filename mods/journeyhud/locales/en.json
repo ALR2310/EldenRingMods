@@ -30,6 +30,10 @@
     "label": "Minimap",
     "help": "Show a round minimap with the other players, your spirits and the enemy you are locked on to."
   },
+  "minimap_map": {
+    "label": "Map",
+    "help": "Draw the game's world map under the minimap. Needs the game's map files, which it reads from the game folder."
+  },
   "minimap_range": {
     "label": "Minimap range",
     "help": "How far the minimap sees, from its center to its rim, in meters."

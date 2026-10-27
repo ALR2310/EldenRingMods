@@ -30,6 +30,10 @@
     "label": "Minimap",
     "help": "Hiện minimap tròn với người chơi khác, spirit của bạn và kẻ địch đang khoá mục tiêu."
   },
+  "minimap_map": {
+    "label": "Bản đồ",
+    "help": "Vẽ bản đồ thế giới của game dưới minimap. Cần các file bản đồ của game, được đọc từ thư mục game."
+  },
   "minimap_range": {
     "label": "Tầm minimap",
     "help": "Minimap nhìn được xa bao nhiêu, từ tâm tới viền, tính bằng mét."
