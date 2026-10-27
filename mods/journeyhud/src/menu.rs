@@ -13,6 +13,7 @@
 //!                                 Co-op players   on/off
 //!                                 Spirits         on/off
 //!                                 Full map        on/off
+//!                                 Clock           on/off
 //!                                 Trail           on/off
 //!                                 Compass         on/off
 //!                                 Turn with camera on/off
@@ -63,6 +64,8 @@ static MINIMAP_BEACONS: Setting =
     Setting { key: "Minimap.Layers.Beacons", format: erui::format_bool, apply: Some(settings::set_minimap_beacons) };
 static MINIMAP_COMPASS: Setting =
     Setting { key: "Minimap.Compass", format: erui::format_bool, apply: Some(settings::set_minimap_compass) };
+static MINIMAP_CLOCK: Setting =
+    Setting { key: "Minimap.Clock", format: erui::format_bool, apply: Some(settings::set_minimap_clock) };
 static MINIMAP_TRAIL: Setting =
     Setting { key: "Minimap.Trail", format: erui::format_bool, apply: Some(settings::set_minimap_trail) };
 static MINIMAP_FULL_MAP: Setting =
@@ -135,6 +138,9 @@ fn build(b: &mut erui::MenuBuilder) -> Result<(), String> {
     b.toggle(page, &t("minimap_full_map.label"), &t("minimap_full_map.help"), &MINIMAP_FULL_MAP, || {
         config::get().minimap.full_map as u8
     })?;
+    b.toggle(page, &t("minimap_clock.label"), &t("minimap_clock.help"), &MINIMAP_CLOCK, || {
+        config::get().minimap.clock as u8
+    })?;
     b.toggle(page, &t("minimap_trail.label"), &t("minimap_trail.help"), &MINIMAP_TRAIL, || {
         config::get().minimap.trail as u8
     })?;
@@ -176,14 +182,14 @@ mod tests {
     /// have the same keys (nothing missing, nothing left over).
     #[test]
     fn language_files_match_the_menu_keys() {
-        TEXT.assert_matches_source(include_str!("menu.rs"), 47);
+        TEXT.assert_matches_source(include_str!("menu.rs"), 49);
     }
 
     /// Every key a row saves to is in the template, so a save never invents a key.
     #[test]
     fn menu_keys_are_in_the_template() {
         let doc: toml::Value = toml::from_str(config::TEMPLATE).unwrap();
-        let settings = [&ENABLED, &SHOW_NUMBERS, &MINIMAP, &MINIMAP_MAP, &MINIMAP_GRACES, &MINIMAP_POINTS, &MINIMAP_BEACONS, &MINIMAP_COMPASS, &MINIMAP_TRAIL, &MINIMAP_GOBLINS, &MINIMAP_FULL_MAP, &MINIMAP_COOP, &MINIMAP_SPIRITS];
+        let settings = [&ENABLED, &SHOW_NUMBERS, &MINIMAP, &MINIMAP_MAP, &MINIMAP_GRACES, &MINIMAP_POINTS, &MINIMAP_BEACONS, &MINIMAP_COMPASS, &MINIMAP_CLOCK, &MINIMAP_TRAIL, &MINIMAP_GOBLINS, &MINIMAP_FULL_MAP, &MINIMAP_COOP, &MINIMAP_SPIRITS];
         let numbers = [&WIDTH, &SCALE, &OFFSET_X, &OFFSET_Y, &MINIMAP_RANGE, &MINIMAP_SIZE, &MINIMAP_SCALE];
         let keys = settings.iter().map(|s| s.key).chain(numbers.iter().map(|n| n.key));
         for key in keys.chain([MINIMAP_ROTATE.key, MINIMAP_HIDE_IN_CAVES.key, MINIMAP_HIDE_IN_BOSS_FIGHTS.key]) {

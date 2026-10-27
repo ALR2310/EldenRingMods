@@ -14,6 +14,23 @@ Panel đọc qua struct của `fromsoftware-rs` (rev của workspace). Không d�
 | Poise hiện tại (`CSChrSuperArmorModule`) | +0x10 | **Có** (hàm cập nhật dùng `a1+16` làm giá trị hiện tại). |
 | Poise tối đa | +0x14 | **Chưa.** Xem bên dưới. |
 | Hàm tra nhân vật theo handle | slot 3 của vtable ChrSet | **Có, cả 4 bản.** |
+| Thanh máu boss (`CSFeManImp::boss_health_displays`) | +0x5BF0, 3 ô x 0x20, handle ở +8 (+0x5BF8), ô trống = -1 | **Có, cả 4 bản** (xem bên dưới). |
+| Giờ trong game (`WorldAreaTime::clock`) | +0x00 (`time64`), +0x08 giờ ở bit 34-38 của số đóng gói | **Có, cả 4 bản** (xem bên dưới). |
+
+## Thanh máu boss (`Minimap.Hide.InBossFights`)
+
+Hàm nhỏ tìm một handle trong 3 ô (RVA 76DA70 / 76E8F0 / 76E8F0 / 76EDA0 trên 2.6.2.0 / 2.7.0.0 / 2.7.1.0 / 2.7.2.0, cùng
+dạng cả 4 bản): `for (i = a1 + 23544; ...; i += 8 dword) { ... if (++n >= 3) return -1 }`. `23544` là 0x5BF8, tức handle của ô
+đầu (ô bắt đầu ở 0x5BF0, `fmg_id` +0, handle +8), bước 32 byte, đúng 3 ô; với handle cần tìm là `0xFFFFFFFF` nó so dword thấp
+với `0xFFFFFFFF`, nghĩa là **ô trống = handle -1**, khớp `FieldInsHandle::is_empty`. Chưa thử khi hạ boss để xem ô có
+được xoá ngay không (TODO `[verify]`).
+
+## Giờ trong game (`Minimap.Clock`)
+
+Singleton `WorldAreaTime` đăng ký theo tên ở `sub_14009CF30` (cùng RVA cả 4 bản) nên `WorldAreaTime::instance()` tìm theo tên,
+không dùng bảng RVA. Hàm `CS::WorldAreaTimeImp::Update` (643BC0 / 644A10 / 644A10 / 644EC0) chép `*a1` và `*(a1+8)` sang
+`+16` và `+24` (đồng hồ hiện tại sang đồng hồ tick trước), kiểm giờ-phút-giây mục tiêu ở `+40/+44/+48` (<= 23, 59, 59) và lấy
+giờ bằng `(*(a1+8) >> 34) & 0x1F`, đúng với `PackedDate::hours` (bit 34-38) của `fromsoftware-rs`. Phút nằm ngay sau (bit 39-44).
 
 ## Handle mục tiêu (+0x6B0)
 

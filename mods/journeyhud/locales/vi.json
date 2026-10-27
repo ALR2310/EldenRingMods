@@ -62,6 +62,10 @@
     "label": "Bản đồ đầy đủ",
     "help": "Hiện toàn bộ bản đồ thế giới. Tắt thì chỉ hiện phần các mảnh bản đồ bạn có đã mở."
   },
+  "minimap_clock": {
+    "label": "Đồng hồ",
+    "help": "Hiện giờ trong game dưới minimap."
+  },
   "minimap_trail": {
     "label": "Đường đã đi",
     "help": "Vẽ đường bạn vừa đi trên minimap."

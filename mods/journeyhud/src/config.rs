@@ -62,6 +62,7 @@ pub struct Minimap {
     pub rotate: bool,
     pub compass: bool,
     pub trail: bool,
+    pub clock: bool,
     pub full_map: bool,
     #[serde(deserialize_with = "common::toml_config::key_name")]
     pub zoom_in_key: String,

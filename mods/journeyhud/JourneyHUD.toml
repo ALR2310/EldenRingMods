@@ -34,6 +34,7 @@ Range = 100             # meters from center to rim (20 - 200)
 Rotate = false          # turn with the camera; false keeps north at the top
 Compass = true          # N, E, S, W letters on the rim
 Trail = false           # the path you have walked
+Clock = true            # the in-game time under the minimap
 FullMap = true          # false shows only what your map fragments reveal
 ZoomInKey = "0xBB"      # zoom in (shorter range), "0xBB" is +
 ZoomOutKey = "0xBD"     # zoom out (longer range), "0xBD" is -
