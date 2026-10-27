@@ -1,68 +1,49 @@
-//! Key names to DirectInput scan codes (DIK_*).
+//! Key names to DirectInput scan codes (DIK_*), from `keys.txt` (also read by
+//! the MCP, so the two never drift apart).
+
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
+const TABLE: &str = include_str!("keys.txt");
+
+fn table() -> &'static HashMap<&'static str, usize> {
+    static MAP: OnceLock<HashMap<&'static str, usize>> = OnceLock::new();
+    MAP.get_or_init(|| {
+        TABLE
+            .lines()
+            .filter(|line| !line.starts_with('#'))
+            .filter_map(|line| {
+                let (name, code) = line.split_once(' ')?;
+                Some((name, usize::from_str_radix(code.trim().strip_prefix("0x")?, 16).ok()?))
+            })
+            .collect()
+    })
+}
 
 pub fn dik(name: &str) -> Option<usize> {
-    let n = name.to_ascii_lowercase();
-    let code = match n.as_str() {
-        "esc" | "escape" => 0x01,
-        "1" => 0x02,
-        "2" => 0x03,
-        "3" => 0x04,
-        "4" => 0x05,
-        "5" => 0x06,
-        "6" => 0x07,
-        "7" => 0x08,
-        "8" => 0x09,
-        "9" => 0x0A,
-        "0" => 0x0B,
-        "tab" => 0x0F,
-        "q" => 0x10,
-        "w" => 0x11,
-        "e" => 0x12,
-        "r" => 0x13,
-        "t" => 0x14,
-        "y" => 0x15,
-        "u" => 0x16,
-        "i" => 0x17,
-        "o" => 0x18,
-        "p" => 0x19,
-        "enter" | "return" => 0x1C,
-        "ctrl" | "lctrl" => 0x1D,
-        "a" => 0x1E,
-        "s" => 0x1F,
-        "d" => 0x20,
-        "f" => 0x21,
-        "g" => 0x22,
-        "h" => 0x23,
-        "j" => 0x24,
-        "k" => 0x25,
-        "l" => 0x26,
-        "shift" | "lshift" => 0x2A,
-        "z" => 0x2C,
-        "x" => 0x2D,
-        "c" => 0x2E,
-        "v" => 0x2F,
-        "b" => 0x30,
-        "n" => 0x31,
-        "m" => 0x32,
-        "alt" | "lalt" => 0x38,
-        "space" => 0x39,
-        "f1" => 0x3B,
-        "f2" => 0x3C,
-        "f3" => 0x3D,
-        "f4" => 0x3E,
-        "f5" => 0x3F,
-        "f6" => 0x40,
-        "f7" => 0x41,
-        "f8" => 0x42,
-        "f9" => 0x43,
-        "f10" => 0x44,
-        "f11" => 0x57,
-        "f12" => 0x58,
-        "up" => 0xC8,
-        "left" => 0xCB,
-        "right" => 0xCD,
-        "down" => 0xD0,
-        _ => return None,
-    };
-    Some(code)
+    let key = name.to_ascii_lowercase();
+    table().get(key.as_str()).copied()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_keys_the_game_and_the_mods_need_are_there() {
+        assert_eq!(dik("minus"), Some(0x0C));
+        assert_eq!(dik("-"), Some(0x0C));
+        assert_eq!(dik("PLUS"), Some(0x0D));
+        assert_eq!(dik("numpadplus"), Some(0x4E));
+        assert_eq!(dik("e"), Some(0x12));
+        assert_eq!(dik("down"), Some(0xD0));
+        assert_eq!(dik("nope"), None);
+    }
+
+    #[test]
+    fn every_line_parses_and_names_are_unique() {
+        let lines: Vec<&str> = TABLE.lines().filter(|l| !l.is_empty() && !l.starts_with('#')).collect();
+        assert_eq!(lines.len(), table().len(), "a line did not parse or a name is repeated");
+        assert!(table().values().all(|&code| (1..=0xFF).contains(&code)));
+    }
 }

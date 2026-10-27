@@ -12,7 +12,7 @@ Gửi phím vào game khi cửa sổ không được focus, để agent kiểm t
 
 ## Tính năng
 
-- Chèn bàn phím và chuột vào game đang ở nền.
+- Chèn bàn phím và chuột vào game đang ở nền, cả cho mod đọc phím kiểu Win32, và đặt con trỏ menu theo toạ độ cửa sổ.
 - Bỏ qua bàn phím, chuột, tay cầm thật khi game không ở trước.
 - Nhận lệnh qua file `InputBridge.cmd` cạnh DLL.
 - Ghi log thống kê các đường đọc input của game.

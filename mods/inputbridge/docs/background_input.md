@@ -1,6 +1,6 @@
 # Input nền cho Elden Ring: các lớp chặn và cách gỡ
 
-**Status 2026-10-27: bàn phím và chuột chèn được vào game đang ở nền (thử trên 2.7.2.0: từ màn hình tiêu đề vào world, đi bằng W, mở/đóng bản đồ bằng M, xoay camera, chuột trái vung kiếm; bàn phím/chuột thật của người dùng bị lọc khi game không ở trước). Chưa làm: tay cầm (chỉ lọc), kênh pipe/MCP, đọc trạng thái trực tiếp.**
+**Status 2026-10-27: bàn phím và chuột chèn được vào game đang ở nền, kể cả cho mod đọc phím bằng `GetAsyncKeyState` và con trỏ menu đặt theo toạ độ (xem mục "Đường Win32") (thử trên 2.7.2.0: từ màn hình tiêu đề vào world, đi bằng W, mở/đóng bản đồ bằng M, xoay camera, chuột trái vung kiếm; bàn phím/chuột thật của người dùng bị lọc khi game không ở trước). Chưa làm: tay cầm (chỉ lọc), kênh pipe/MCP, đọc trạng thái trực tiếp.**
 
 ## Kết luận
 
@@ -27,6 +27,14 @@ Tìm cửa sổ game bằng `EnumWindows` + `GetWindowTextW` làm game crash lú
 ## Giao thức thử
 
 Ghi `InputBridge.cmd` (ghi tên tạm rồi đổi tên) cạnh DLL, mod đọc rồi xoá: `down <phím>`, `up <phím>`, `press <phím> [giây]`, `release_all`; chuột: `mouse <dx> <dy>`, `look <dx> <dy> <giây>` (dịch mỗi khung, `look 6 0 1` xoay camera khoảng 25-30 độ), `mdown`/`mup`/`mclick <left|right|middle> [giây]`, `wheel <n>`. Mã phím là DIK (`src/keys.rs`). Chuột chèn vào `DIMOUSESTATE`/`DIMOUSESTATE2` (lX, lY, lZ rồi từng byte nút) trong cùng hook `GetDeviceState`. Một số thao tác có hiệu ứng chậm vài giây (bản đồ), `look` ảnh sau 3-5 giây. Log `InputBridge.log` có dòng thống kê mỗi 5 giây: `fg` (foreground thật), `gate=active/pad/kb/mouse`, số lần đọc và lỗi của từng thiết bị.
+
+## Đường Win32 (`src/winput.rs`)
+
+Mod khác trong tiến trình đọc phím bằng `GetAsyncKeyState` (`common::input::is_key_pressed`: phím reload F5, phím zoom của JourneyHud...) không thấy phím DirectInput giả. `winput.rs` hook `GetAsyncKeyState`: trả bit "đang nhấn" (và bit "đã nhấn từ lần gọi trước", một lần mỗi lần nhấn) cho phím hay nút chuột giả, đổi virtual-key sang scan code bằng `MapVirtualKeyW(vk, MAPVK_VK_TO_VSC_EX)` (mã `0xE0xx` thành `0x80|xx`, như DIK). Khi game không ở trước và `IsolateInput` bật, phím thật bị che khỏi hook này (cùng ý với lọc DirectInput). Thử: `press minus` làm vòng minimap JourneyHud đổi tầm.
+
+`eldenring.exe` import `GetCursorPos`/`ScreenToClient`/`SetCursorPos`/`GetKeyState`/`GetKeyboardState`. Hook `GetCursorPos`: khi `moveto x y` đang bật và game không ở trước, trả vị trí màn hình của điểm (x, y) trong vùng client của cửa sổ game (đổi bằng `ClientToScreen` mỗi lần gọi, nên cửa sổ bị kéo đi vẫn đúng). Thử trên bản đồ: `moveto` lên một icon grace thì nhãn grace hiện đúng chỗ. Chưa thử `mclick` tại đó và chưa xác nhận menu khác (danh sách, hộp thoại) theo con trỏ này; `GetKeyState`/`GetKeyboardState` chưa hook.
+
+Bảng phím: `src/keys.txt` (`<tên> <mã DIK>`), mod đọc bằng `include_str!`, MCP đọc cùng file; có test không trùng tên.
 
 ## Chưa biết / việc tiếp
 

@@ -39,6 +39,11 @@ pub static ENABLED: AtomicBool = AtomicBool::new(true);
 /// input hooks, which must not call into user32 themselves).
 pub static IN_FRONT: AtomicBool = AtomicBool::new(true);
 
+/// The game's main window, null until found.
+pub fn game_hwnd() -> *mut c_void {
+    GAME_HWND.load(Ordering::Relaxed) as *mut c_void
+}
+
 pub fn refresh() {
     IN_FRONT.store(game_is_really_foreground(), Ordering::Relaxed);
 }
