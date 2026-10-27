@@ -1,6 +1,6 @@
 # Ghi chú cho agent khi điều khiển Elden Ring
 
-**Status 2026-10-27: sổ ghi chú sống. Agent đọc bằng tool `notes()` của MCP `eldenring-input` trước khi chơi, và ghi thêm bằng `add_note(topic, note, source)` khi người dùng sửa một điều sai hoặc khi thử nghiệm chứng minh được điều mới. Mỗi dòng có ngày và nguồn: `user` (người dùng nói) hoặc `observed` (agent tự thấy). Điều đã bị bác thì sửa hoặc xoá thẳng trong file, không để lại dòng sai.**
+**Status 2026-10-27: sổ ghi chú sống. Agent đọc bằng tool `notes()` của MCP `er-input` trước khi chơi, và ghi thêm bằng `add_note(topic, note, source)` khi người dùng sửa một điều sai hoặc khi thử nghiệm chứng minh được điều mới. Mỗi dòng có ngày và nguồn: `user` (người dùng nói) hoặc `observed` (agent tự thấy). Điều đã bị bác thì sửa hoặc xoá thẳng trong file, không để lại dòng sai.**
 
 ## Phím
 
