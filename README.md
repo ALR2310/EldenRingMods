@@ -7,7 +7,7 @@
 ![Rust](https://img.shields.io/badge/Rust-2024_edition-orange?logo=rust)
 ![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)
 ![Game](https://img.shields.io/badge/game-Elden_Ring-8a6d3b)
-![Mods](https://img.shields.io/badge/mods-16-green)
+![Mods](https://img.shields.io/badge/mods-17-green)
 
 </div>
 
@@ -34,7 +34,7 @@ Seamless Co-op và các bản mod lớn như Convergence và Reforged.
 | [**DropMultiplier**](mods/dropmultiplier)     | Chỉnh tỉ lệ rớt đồ của quái                                             | [11075](https://www.nexusmods.com/eldenring/mods/11075) |
 | [**FasterRevival**](mods/fasterrevival)       | Rút ngắn thời gian từ lúc chết đến lúc hồi sinh                         | [11160](https://www.nexusmods.com/eldenring/mods/11160) |
 | [**InfiniteAilment**](mods/infiniteailment)   | Chỉnh thời lượng và sát thương Poison, Scarlet Rot mà người chơi gây ra | [11087](https://www.nexusmods.com/eldenring/mods/11087) |
-| [**JourneyHud**](mods/journeyhud)             | HUD góc phải: máu và poise của kẻ địch đang khoá mục tiêu               | nội bộ                                                  |
+| [**JourneyHud**](mods/journeyhud)             | HUD góc phải: máu, poise của kẻ địch đang khoá và minimap             | nội bộ                                                  |
 | [**PassiveRunes**](mods/passiverunes)         | Cộng rune theo thời gian, có bonus theo mốc                             | [10528](https://www.nexusmods.com/eldenring/mods/10528) |
 | [**RiseArcher**](mods/risearcher)             | Buff Bow, Crossbow, Ballista, Arrow, Bolt                               | [5807](https://www.nexusmods.com/eldenring/mods/5807)   |
 | [**RuneMultiplier**](mods/runemultiplier)     | Nhân lượng rune nhận được từ mọi nguồn                                  | [10630](https://www.nexusmods.com/eldenring/mods/10630) |
@@ -43,6 +43,7 @@ Seamless Co-op và các bản mod lớn như Convergence và Reforged.
 | [**SpiritMultiplier**](mods/spiritmultiplier) | Nhân số linh hồn (spirit ash) triệu hồi, vượt trần mặc định             | [11168](https://www.nexusmods.com/eldenring/mods/11168) |
 | [**WeightMultiplier**](mods/weightmultiplier) | Nhân hệ số Trọng Tải                                                    | [10549](https://www.nexusmods.com/eldenring/mods/10549) |
 | [**WindowResize**](mods/windowresize)         | Kéo viền để đổi kích thước cửa sổ Windowed                              | nội bộ                                                  |
+| [**InputBridge**](mods/inputbridge)           | Gửi phím vào game đang ở nền, để agent kiểm tra mod tự động            | nội bộ                                                  |
 | [**SomeTweaks**](mods/sometweaks)             | Gói QoL thử nghiệm, đã ngừng phát triển                                 | không đăng                                              |
 
 Phiên bản và ghi chú phát hành của từng mod nằm ở `CHANGELOG.md` trong thư mục mod đó.
