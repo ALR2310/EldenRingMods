@@ -34,6 +34,10 @@
     "label": "Tạm dừng khi chiến đấu",
     "help": "Không tự nhặt khi bạn đang chiến đấu."
   },
+  "animation": {
+    "label": "Bỏ animation nhặt",
+    "help": "Bỏ animation khi nhặt vật phẩm nằm trên mặt đất."
+  },
   "log": {
     "label": "File log",
     "help": "Ghi file log cạnh DLL để dò lỗi."

@@ -13,7 +13,7 @@ use common::logger;
 
 use crate::config::{self, Config};
 use crate::groups::Group;
-use crate::{combat, hook, range};
+use crate::{animation, combat, hook, range};
 
 fn group_config(config: &Config, group: Group) -> config::Group {
     match group {
@@ -49,6 +49,12 @@ fn apply_ranges(repo: &mut SoloParamRepository, config: &Config, suffix: &str) {
     }
 }
 
+fn apply_animation(repo: &mut SoloParamRepository, config: &Config) {
+    if let Err(reason) = animation::apply(repo, config.general.no_pickup_animation) {
+        logger::warn(&format!("Animation: failed ({reason})"));
+    }
+}
+
 /// Never returns: run it on its own worker thread.
 pub fn run() {
     let mut last_seen_generation = common::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
@@ -57,7 +63,9 @@ pub fn run() {
     hook::set_enabled(enabled_mask(&config));
     hook::install();
 
-    apply_ranges(common::player::wait_for_solo_param_repository(), &config, "");
+    let repo = common::player::wait_for_solo_param_repository();
+    apply_ranges(repo, &config, "");
+    apply_animation(repo, &config);
 
     let mut waiting_logged = false;
     let mut ranges_pending = false;
@@ -88,6 +96,7 @@ pub fn run() {
                     waiting_logged = false;
                     ranges_pending = false;
                     apply_ranges(repo, &config, " (reload)");
+                    apply_animation(repo, &config);
                 }
             }
 

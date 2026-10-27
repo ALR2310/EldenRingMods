@@ -1,5 +1,6 @@
 #![allow(non_snake_case)] // crate name is "AutoPickup" to control the output DLL's filename
 
+mod animation;
 mod combat;
 mod config;
 mod groups;
