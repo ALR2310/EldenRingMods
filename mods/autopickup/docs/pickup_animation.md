@@ -24,6 +24,10 @@ Giống `vanilla_pickup_animations` của ErdTools (`tmp/repos/Erd-Tools-CPP/Erd
 - Rủi ro: nếu vật phẩm chỉ được trao ở `event_kick_timing` bên trong animation thì bỏ animation có thể làm vật phẩm không vào túi.
 - `elden_ring_item_randomiser.dll` đang bật cùng lúc khi thử lần này; nên tắt nó khi thử nhặt đồ (theo quy tắc "tin kết quả thử có điều kiện" trong `CLAUDE.md`).
 
+## Mặc định
+
+`NoPickupAnimation = true` ở file mẫu, tức animation nhặt bị tắt sẵn cho mọi người (2026-10-27, người dùng chốt giữ khi phát hiện bản 1.1.0 đã đăng mang giá trị này). Người đã cài 1.0.0 nhận key này từ file mẫu khi cập nhật nên cũng bị tắt animation; changelog 1.1.0 chỉ ghi "Added option".
+
 ## Nguồn animation tìm được (2026-10-27, từ `GameSystemCommonParam` và `ObjActParam` vanilla)
 
 `GameSystemCommonParam` (một dòng) có ba bộ `msbEventGeomTreasureInfo_*` cho kho báu đặt trên bản đồ:
