@@ -53,7 +53,7 @@ KEYS = {
 BUTTONS = {"left", "right", "middle"}
 
 server = MCPServer(
-    name="eldenring-input",
+    name="er-input",
     instructions="""\
 Call notes() first: it holds what earlier sessions learned (key bindings, how to get from the
 title screen into the world, timings). When the user corrects you or a test proves something
