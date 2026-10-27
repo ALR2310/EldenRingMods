@@ -51,12 +51,18 @@ const MAP_SEGMENTS: usize = 72;
 
 /// Gap between the minimap and the target bar under it, at 1080p.
 const COLUMN_GAP: f32 = 14.0;
+/// Height of the row of the in-game time under the minimap, at 1080p.
+const CLOCK_ROW: f32 = 22.0;
 
 /// Height the minimap takes at the top of the right-hand column, gap included,
 /// for the target bar to sit under it. Follows the setting, not the fade, so
 /// the bar does not jump when the minimap hides.
 pub fn column_height(res: f32) -> f32 {
-    if settings::minimap_enabled() { (2.0 * settings::minimap_size() * settings::minimap_scale() + COLUMN_GAP) * res } else { 0.0 }
+    if !settings::minimap_enabled() {
+        return 0.0;
+    }
+    let clock = if settings::minimap_clock() { CLOCK_ROW } else { 0.0 };
+    (2.0 * settings::minimap_size() * settings::minimap_scale() + clock + COLUMN_GAP) * res
 }
 
 /// The basis that keeps north (+Z) up and east (+X) to the right.
@@ -192,6 +198,9 @@ impl Radar {
             view.draw_compass(ui, &draw);
         }
         view.draw_player(&draw);
+        if settings::minimap_clock() {
+            view.draw_clock(ui, &draw, snapshot, res);
+        }
     }
 }
 
@@ -538,6 +547,18 @@ impl View<'_> {
             draw.add_text([pos[0] + shadow, pos[1] + shadow], self.color(OUTLINE), letter);
             draw.add_text(pos, self.color(if i == 0 { NORTH } else { COMPASS }), letter);
         }
+    }
+
+    /// The in-game time, centered in its row right under the minimap.
+    fn draw_clock(&self, ui: &Ui, draw: &DrawListMut<'_>, snapshot: &Snapshot, res: f32) {
+        let Some([hours, minutes]) = snapshot.clock else { return };
+        let text = format!("{hours:02}:{minutes:02}");
+        let size = ui.calc_text_size(&text);
+        let row_top = self.center[1] + self.radius;
+        let pos = [(self.center[0] - size[0] / 2.0).round(), (row_top + (CLOCK_ROW * res - size[1]) / 2.0).round()];
+        let shadow = self.s.max(1.0);
+        draw.add_text([pos[0] + shadow, pos[1] + shadow], self.color(OUTLINE), &text);
+        draw.add_text(pos, self.color(COMPASS), &text);
     }
 
     /// The player's own arrow in the middle.

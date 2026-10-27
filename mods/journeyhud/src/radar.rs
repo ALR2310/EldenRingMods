@@ -9,7 +9,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use eldenring::cs::{
-    CSCamera, CSEventFlagMan, CSFade, CSFeManHudState, CSFeManImp, SoloParamRepository, WorldChrMan, WorldMapPieceParam,
+    BossHealthDisplayEntry, CSCamera, CSEventFlagMan, CSFade, CSFeManHudState, CSFeManImp, SoloParamRepository, WorldAreaTime, WorldChrMan, WorldMapPieceParam,
 };
 use fromsoftware_shared::FromStatic;
 
@@ -18,6 +18,14 @@ use common::{logger, params};
 use crate::map::tiles::MapId;
 use crate::map::{beacons, graces, mfg, points, world};
 use crate::settings;
+
+// The layouts read here were checked in IDA on 2.6.2.0 to 2.7.2.0, see `docs/offsets.md`: a
+// `fromsoftware-rs` that moves them stops the build.
+const _: () = {
+    assert!(std::mem::offset_of!(CSFeManImp, boss_health_displays) == 0x5BF0);
+    assert!(std::mem::size_of::<BossHealthDisplayEntry>() == 0x20);
+    assert!(std::mem::offset_of!(WorldAreaTime, clock) == 0);
+};
 
 /// Another character as the radar draws it.
 #[derive(Clone, Copy)]
@@ -60,6 +68,8 @@ pub struct Snapshot {
     pub in_cave: bool,
     /// The map fragments the player has, one bit per fragment (all set when the whole map shows).
     pub fragments: u32,
+    /// The in-game time of day: hours and minutes.
+    pub clock: Option<[u8; 2]>,
     pub partners: Vec<Dot>,
     pub spirits: Vec<Dot>,
     /// Offset of the locked-on enemy.
@@ -134,6 +144,7 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
     if settings::minimap_spirits() {
         common::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| spirits.extend(dot(chr)));
     }
+    let clock = unsafe { WorldAreaTime::instance() }.ok().map(|time| [time.clock.hours(), time.clock.minutes()]);
     let fragments = if settings::minimap_full_map() { u32::MAX } else { map_fragments(map) };
 
     Some(Snapshot {
@@ -168,6 +179,7 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
         boss_fight,
         in_cave,
         fragments,
+        clock,
         partners,
         spirits,
         target,

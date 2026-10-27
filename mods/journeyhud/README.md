@@ -28,6 +28,7 @@ thành HUD hành trình (minimap có nền bản đồ), xem `docs/design.md`.
 | **Grace** | các điểm grace đã tìm thấy hiện trên minimap bằng chính icon của game, tắt được |
 | **Địa điểm** | di tích, nhà thờ, hang, pháo đài, boss... của bản đồ thế giới hiện trên minimap bằng chính icon của game, tắt được |
 | **Beacon** | các beacon đã đặt trên bản đồ thế giới hiện trên minimap bằng icon của game, tắt được |
+| **Đồng hồ** | giờ trong game (ngày/đêm) hiện ngay dưới minimap, giữa minimap và thanh mục tiêu, tắt được |
 | **Đường đã đi** | vệt đường bạn vừa đi trên minimap, mờ dần về phía cũ, tắt được |
 | **Map for Goblins** | marker của mod Map for Goblins DLL (vật phẩm, địa điểm) hiện trên minimap bằng icon của nó, khi mod đó được cài; đọc qua API của nó, tắt được |
 | **Tự ẩn** | không khoá thì không vẽ gì; kẻ địch không có thanh posture thì chỉ hiện máu |

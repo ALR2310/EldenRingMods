@@ -71,6 +71,7 @@ Chi tiết: `mods/journeyhud/docs/design.md`
 - [ ] [verify] JourneyHUD: ẩn minimap trong hang và hầm mộ (`Hide.InCaves`, hầm ngầm vẫn hiện) và khi đánh boss (`Hide.InBossFights`, hiện lại sau trận)
 - [ ] [verify] JourneyHUD: `FullMap = false` (nền chỉ hiện phần mảnh bản đồ đã có, nhặt mảnh mới thì vẽ lại ngay) (`docs/map.md`)
 - [ ] [verify] JourneyHUD: marker Map for Goblins (cần thêm `MapForGoblins.dll` vào `external_dlls`; log `Map for Goblins icon(s) uploaded`, icon đúng chỗ) (`docs/map.md`)
+- [ ] [verify] JourneyHUD: đồng hồ giờ trong game dưới minimap (`Minimap.Clock`; giờ khớp đồng hồ của game; bố cục đã kiểm IDA cả 4 bản, `docs/offsets.md`)
 - [ ] [verify] JourneyHUD: vệt đường đã đi (`Minimap.Trail`, mặc định tắt; mờ dần, xoá khi dịch chuyển hoặc đổi dungeon) (`docs/radar.md`)
 - [ ] [verify] JourneyHUD: minimap (mũi tên đúng hướng, xoay đúng chiều khi quay camera, đồng đội/spirit/kẻ địch khoá đúng chỗ, ẩn khi mở menu/tải) (`docs/radar.md`)
 - [ ] [verify] JourneyHUD: nền bản đồ (khớp vị trí, xoay theo camera, dời cửa sổ không giật, hầm ngầm và dungeon, không treo ở màn hình tải) (`docs/map.md`)
