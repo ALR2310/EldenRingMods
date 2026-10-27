@@ -1,4 +1,4 @@
-# JourneyHud - Changelog
+# JourneyHUD - Changelog
 
 Release notes shown to users on the Nexus changelog tab: one short bullet per
 user-facing change, plain text. Add new items under `[Unreleased]`; the

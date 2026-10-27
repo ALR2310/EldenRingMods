@@ -158,7 +158,7 @@ impl ImguiRenderLoop for HudRenderLoop {
         if let (Some(map), Some(snapshot), true) = (self.map.as_mut(), snapshot.as_ref(), show_map) {
             if let Some(id) = snapshot.map {
                 // The window must stay ahead of the widest view, within what it can hold.
-                map.follow(id, snapshot.position, settings::minimap_range() + 20.0);
+                map.follow(id, snapshot.position, settings::minimap_range() + 20.0, snapshot.fragments);
             }
         }
         self.radar.draw(ui, snapshot.as_ref(), &Placement { area: self.area }, self.map.as_ref(), show_map);

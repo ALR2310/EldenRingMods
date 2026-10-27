@@ -1,6 +1,6 @@
 <div align="center">
 
-# JourneyHud
+# JourneyHUD
 
 **HUD gọn ở góc phải màn hình: máu và posture của kẻ địch đang khoá mục tiêu.**
 
@@ -14,7 +14,7 @@
 
 ## Giới thiệu
 
-JourneyHud vẽ một overlay nhỏ ở góc trên bên phải: khi khoá mục tiêu một kẻ địch, panel hiện
+JourneyHUD vẽ một overlay nhỏ ở góc trên bên phải: khi khoá mục tiêu một kẻ địch, panel hiện
 **máu** và **posture** (thanh stagger) của nó, tắt đi khi bỏ khoá; phía trên nó là một **minimap** tròn, cùng một cột ở góc phải. Mod được thiết kế để mở rộng
 thành HUD hành trình (minimap có nền bản đồ), xem `docs/design.md`.
 
@@ -32,14 +32,14 @@ thành HUD hành trình (minimap có nền bản đồ), xem `docs/design.md`.
 
 ## Cấu hình
 
-Vị trí của cột (lệch so với góc phải trên) và cỡ panel chỉnh trong `JourneyHud.toml` cạnh DLL; tên key và
+Vị trí của cột (lệch so với góc phải trên) và cỡ panel chỉnh trong `JourneyHUD.toml` cạnh DLL; tên key và
 mặc định nằm ở chú thích file đó. Panel neo vào khung hình 16:9 của game (trong dải đen trên màn 16:10 hay
 siêu rộng) và co giãn theo độ cao khung đó.
 
 ## Menu trong game
 
 Có `ERNativeUI.dll` thì hiện hàng **Journey HUD** ở System > Game Options (bật tắt, số máu, độ dài, cỡ, hai lề); đổi
-là áp dụng ngay và được ghi lại vào `JourneyHud.toml`. Không có thì mod chạy bằng file đó như bình thường.
+là áp dụng ngay và được ghi lại vào `JourneyHUD.toml`. Không có thì mod chạy bằng file đó như bình thường.
 
 ## Cách hoạt động
 

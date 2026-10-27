@@ -274,15 +274,15 @@
             "problemMatcher": "$rustc"
         },
         {
-            "label": "Cargo: Build JourneyHud (Release)",
-            "detail": "Builds JourneyHud (release), then copies JourneyHud.dll + JourneyHud.ini into builds/<crate>/",
+            "label": "Cargo: Build JourneyHUD (Release)",
+            "detail": "Builds JourneyHUD (release), then copies JourneyHUD.dll + JourneyHUD.toml into builds/<crate>/",
             "type": "process",
             "command": "powershell.exe",
             "args": [
                 "-NoProfile",
                 "-ExecutionPolicy", "Bypass",
                 "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "JourneyHud"
+                "-Mod", "JourneyHUD"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -311,7 +311,7 @@
                 "Cargo: Build AnimCancel (Release)",
                 "Cargo: Build AutoPickup (Release)",
                 "Cargo: Build InputBridge (Release)",
-                "Cargo: Build JourneyHud (Release)"
+                "Cargo: Build JourneyHUD (Release)"
             ],
             "group": "build",
             "problemMatcher": []

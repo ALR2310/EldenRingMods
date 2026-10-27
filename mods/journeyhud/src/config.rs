@@ -1,4 +1,4 @@
-//! `JourneyHud.toml`, loaded through `common::toml_config`. Defaults live only in
+//! `JourneyHUD.toml`, loaded through `common::toml_config`. Defaults live only in
 //! the embedded template: `Default` on these structs is the derived zero value the
 //! loader needs while parsing, never a config in use (see the test
 //! `template_sets_every_field`).
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use common::toml_config::{LoadReport, Migration, Step, TomlConfig};
 
 /// Embedded verbatim at compile time - single source of truth for the default file.
-pub const TEMPLATE: &str = include_str!("../JourneyHud.toml");
+pub const TEMPLATE: &str = include_str!("../JourneyHUD.toml");
 
 /// Format migration steps for `General.ConfigVersion`: `STEPS[i]` takes a file from
 /// version `i + 1` to `i + 2`. Append only - a released step must never change.
@@ -60,6 +60,8 @@ pub struct Minimap {
     pub scale: f64,
     pub range: i32,
     pub rotate: bool,
+    pub compass: bool,
+    pub full_map: bool,
     #[serde(deserialize_with = "common::toml_config::key_name")]
     pub zoom_in_key: String,
     #[serde(deserialize_with = "common::toml_config::key_name")]
@@ -75,6 +77,8 @@ pub struct Layers {
     pub graces: bool,
     pub points: bool,
     pub beacons: bool,
+    pub coop_players: bool,
+    pub spirits: bool,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]

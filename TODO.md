@@ -59,15 +59,15 @@ Chi tiết từng mục: `docs/cleanup_verify.md`. Chỉ build và unit test, ch
 
 - [ ] Gắn `common::conflict` (cảnh báo hook trùng mod khác) vào các mod hook byte còn lại: autoregen, runemultiplier; xem `shared/docs/conflict.md`. AOB đầu hàm hỏng khi bị hook trước nên cần pattern đuôi
 
-## JourneyHud
+## JourneyHUD
 
 Chi tiết: `mods/journeyhud/docs/design.md`
 
-- [ ] [verify] JourneyHud: poise giảm khi đánh trúng, khối vàng/vệt sáng khi mất máu, chạy trên 2.7.1.0 (đã thử 2.7.2.0)
-- [ ] [verify] JourneyHud: menu ERNativeUI (hàng Journey HUD, đổi cỡ/độ dài/lề áp dụng ngay, lưu ini, không có host thì chạy bằng ini)
-- [ ] [verify] JourneyHud: minimap (mũi tên đúng hướng, xoay đúng chiều khi quay camera, đồng đội/spirit/kẻ địch khoá đúng chỗ, ẩn khi mở menu/tải) (`docs/radar.md`)
-- [ ] [verify] JourneyHud: nền bản đồ (khớp vị trí, xoay theo camera, dời cửa sổ không giật, hầm ngầm và dungeon, không treo ở màn hình tải) (`docs/map.md`)
-- [ ] [verify] JourneyHud: grace trên minimap (chấm vàng đúng chỗ so với bản đồ trong game, chỉ grace đã tìm thấy, cả dungeon) (`docs/map.md`)
-- [ ] [verify] JourneyHud: địa điểm trên minimap (icon đúng loại và đúng chỗ so với bản đồ trong game, ẩn khi chưa mở, boss đã hạ thì mờ) (`docs/map.md`)
-- [ ] [verify] JourneyHud: beacon trên minimap (đặt beacon trên bản đồ rồi xem tia xanh đúng chỗ, số slot, ngoài tầm thì ghim viền); grace không còn che địa điểm (`docs/map.md`)
-- [ ] [research] JourneyHud: kiểm đầu chuỗi beacon (CSMenuMan +0x80 +0x250) trên 2.6.2.0 đến 2.7.1.0, bản đồ Shadow of the Erdtree (area 61), mảnh bản đồ theo cờ; kẻ địch xung quanh và phím thu phóng (`docs/map.md`)
+- [ ] [verify] JourneyHUD: poise giảm khi đánh trúng, khối vàng/vệt sáng khi mất máu, chạy trên 2.7.1.0 (đã thử 2.7.2.0)
+- [ ] [verify] JourneyHUD: menu ERNativeUI (hàng Journey HUD, đổi cỡ/độ dài/lề áp dụng ngay, lưu ini, không có host thì chạy bằng ini)
+- [ ] [verify] JourneyHUD: minimap (mũi tên đúng hướng, xoay đúng chiều khi quay camera, đồng đội/spirit/kẻ địch khoá đúng chỗ, ẩn khi mở menu/tải) (`docs/radar.md`)
+- [ ] [verify] JourneyHUD: nền bản đồ (khớp vị trí, xoay theo camera, dời cửa sổ không giật, hầm ngầm và dungeon, không treo ở màn hình tải) (`docs/map.md`)
+- [ ] [verify] JourneyHUD: grace trên minimap (chấm vàng đúng chỗ so với bản đồ trong game, chỉ grace đã tìm thấy, cả dungeon) (`docs/map.md`)
+- [ ] [verify] JourneyHUD: địa điểm trên minimap (icon đúng loại và đúng chỗ so với bản đồ trong game, ẩn khi chưa mở, boss đã hạ thì mờ) (`docs/map.md`)
+- [ ] [verify] JourneyHUD: beacon trên minimap (đặt beacon trên bản đồ rồi xem tia xanh đúng chỗ, số slot, ngoài tầm thì ghim viền); grace không còn che địa điểm (`docs/map.md`)
+- [ ] [research] JourneyHUD: kiểm đầu chuỗi beacon (CSMenuMan +0x80 +0x250) trên 2.6.2.0 đến 2.7.1.0, bản đồ Shadow of the Erdtree (area 61), mảnh bản đồ theo cờ; kẻ địch xung quanh và phím thu phóng (`docs/map.md`)

@@ -1,4 +1,4 @@
-# JourneyHud: offset và kiểm chứng theo bản exe
+# JourneyHUD: offset và kiểm chứng theo bản exe
 
 **Status 2026-10-26: đã kiểm trong IDA trên 2.6.2.0, 2.7.0.0, 2.7.1.0, 2.7.2.0 (tĩnh). Chưa kiểm trong game; +0x14 của poise chưa xác nhận được bằng IDA.**
 

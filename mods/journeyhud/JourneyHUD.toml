@@ -31,7 +31,9 @@ Enabled = true
 Size = 110          # radius in pixels at 1080p (40 - 200)
 Scale = 1.0         # size multiplier (0.5 - 3.0)
 Range = 100         # meters from center to rim (20 - 200)
-Rotate = true       # turn with the camera; false keeps north at the top
+Rotate = false      # turn with the camera; false keeps north at the top
+Compass = true      # N, E, S, W letters on the rim
+FullMap = true      # false shows only what your map fragments reveal
 ZoomInKey = "0xBB"  # zoom in (shorter range), "0xBB" is +
 ZoomOutKey = "0xBD" # zoom out (longer range), "0xBD" is -
 
@@ -41,6 +43,8 @@ Map = true          # the game's world map, read from its own files
 Graces = true       # sites of grace you have found
 Points = true       # ruins, churches, caves, bosses...
 Beacons = true      # beacons you placed on the world map
+CoopPlayers = true  # co-op partners (Seamless Co-op included)
+Spirits = true      # your summoned spirits
 
 
 [Minimap.Hide]

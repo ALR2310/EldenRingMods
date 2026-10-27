@@ -1,4 +1,4 @@
-#![allow(non_snake_case)] // crate name is "JourneyHud" to control the output DLL's filename
+#![allow(non_snake_case)] // crate name is "JourneyHUD" to control the output DLL's filename
 
 mod config;
 mod map;
@@ -24,13 +24,13 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
 
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
-        let report = config::init(&format!("{dir}\\JourneyHud.toml"));
+        let report = config::init(&format!("{dir}\\JourneyHUD.toml"));
 
         // `LogFile` gates the log file entirely, see common::logger.
         logger::set_enabled(config::get().logging.log_file);
-        logger::init(&dir, "JourneyHud.log");
+        logger::init(&dir, "JourneyHUD.log");
         logger::install_panic_hook();
-        report.log("JourneyHud.toml");
+        report.log("JourneyHUD.toml");
 
         settings::load(&config::get());
         // Early: the menu host only takes registrations in the first seconds.

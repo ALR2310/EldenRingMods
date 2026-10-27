@@ -1,4 +1,4 @@
-# JourneyHud: minimap, lớp chấm (radar)
+# JourneyHUD: minimap, lớp chấm (radar)
 
 **Status 2026-10-27: bản đầu đã có code, chưa thử trong game. Chưa có nền bản đồ (giai đoạn 4).**
 
@@ -26,7 +26,7 @@ phía trên), chấm cho đồng đội, spirit của mình và kẻ địch đa
   vào viền và mờ đi.
 - **Khi nào ẩn:** `CSFeManImp.hud_state != Default` (menu đang đổi HUD) hoặc `CSFade` đang phủ (màn hình tải, warp, tối
   đa các `fade_plates[i].current_color.a`) thì mờ dần rồi ẩn, vì menu và bản đồ thế giới vẽ ngay chỗ đặt radar.
-- **hudhook:** nạp texture ở thời điểm lạ có thể làm treo trên màn hình tải, và mỗi lần nạp lại rò bộ đệm; JourneyHud nạp
+- **hudhook:** nạp texture ở thời điểm lạ có thể làm treo trên màn hình tải, và mỗi lần nạp lại rò bộ đệm; JourneyHUD nạp
   texture đúng một lần lúc khởi tạo và radar không dùng texture.
 
 Không lấy: toàn bộ phần bản đồ (giải mã archive của game, ghép tile, `maptiles.rs`, `archive.rs`, `formats.rs`), icon của Map
@@ -35,7 +35,7 @@ for Goblins (`mfg.rs`), khung và mũi tên bằng ảnh (`assets/`).
 ## Khác với minimap
 
 - Radar không có nền bản đồ; ô tròn chỉ có nền tối mờ, hai vòng chỉ dẫn và viền be (cùng màu đường dưới thanh máu).
-- Spirit là chấm của riêng JourneyHud (lấy từ `summon_buddy_chr_set`, gồm cả spirit của người khác nếu có).
+- Spirit là chấm của riêng JourneyHUD (lấy từ `summon_buddy_chr_set`, gồm cả spirit của người khác nếu có).
 - Chỉ đọc các singleton qua `instance()` theo tên (không `rva::get()`).
 
 ## Ghi chú và việc chưa kiểm chứng

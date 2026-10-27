@@ -1,6 +1,6 @@
 //! The settings the overlay and the target reader use, held in atomics so a
 //! change from the in-game menu applies at once (the file is written a second
-//! later by the menu's saver). Defaults and meaning: `JourneyHud.toml`.
+//! later by the menu's saver). Defaults and meaning: `JourneyHUD.toml`.
 
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
 
@@ -29,6 +29,10 @@ static MINIMAP_GRACES: AtomicBool = AtomicBool::new(true);
 static MINIMAP_POINTS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_BEACONS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_ROTATE: AtomicBool = AtomicBool::new(true);
+static MINIMAP_COMPASS: AtomicBool = AtomicBool::new(true);
+static MINIMAP_FULL_MAP: AtomicBool = AtomicBool::new(true);
+static MINIMAP_COOP: AtomicBool = AtomicBool::new(true);
+static MINIMAP_SPIRITS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_HIDE_IN_CAVES: AtomicBool = AtomicBool::new(false);
 static MINIMAP_HIDE_IN_BOSS_FIGHTS: AtomicBool = AtomicBool::new(false);
 static MINIMAP_RANGE: AtomicI32 = AtomicI32::new(100);
@@ -52,6 +56,10 @@ pub fn load(config: &Config) {
     set_minimap_points(minimap.layers.points as u8);
     set_minimap_beacons(minimap.layers.beacons as u8);
     set_minimap_rotate(minimap.rotate as u8);
+    set_minimap_compass(minimap.compass as u8);
+    set_minimap_full_map(minimap.full_map as u8);
+    set_minimap_coop(minimap.layers.coop_players as u8);
+    set_minimap_spirits(minimap.layers.spirits as u8);
     set_minimap_hide_in_caves(minimap.hide.in_caves as u8);
     set_minimap_hide_in_boss_fights(minimap.hide.in_boss_fights as u8);
     set_minimap_range(f64::from(minimap.range));
@@ -116,6 +124,26 @@ pub fn minimap_beacons() -> bool {
 /// Whether the minimap turns with the camera (else north is up).
 pub fn minimap_rotate() -> bool {
     MINIMAP_ROTATE.load(Ordering::Relaxed)
+}
+
+/// Whether the N, E, S and W letters are drawn on the rim.
+pub fn minimap_compass() -> bool {
+    MINIMAP_COMPASS.load(Ordering::Relaxed)
+}
+
+/// Whether the whole world map shows, or only what the player's map fragments reveal.
+pub fn minimap_full_map() -> bool {
+    MINIMAP_FULL_MAP.load(Ordering::Relaxed)
+}
+
+/// Whether the co-op partners are marked.
+pub fn minimap_coop() -> bool {
+    MINIMAP_COOP.load(Ordering::Relaxed)
+}
+
+/// Whether the player's summoned spirits are marked.
+pub fn minimap_spirits() -> bool {
+    MINIMAP_SPIRITS.load(Ordering::Relaxed)
 }
 
 /// Whether the minimap hides in caves, catacombs and other dungeons.
@@ -211,6 +239,22 @@ pub fn set_minimap_beacons(value: u8) {
 
 pub fn set_minimap_rotate(value: u8) {
     MINIMAP_ROTATE.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_minimap_compass(value: u8) {
+    MINIMAP_COMPASS.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_minimap_full_map(value: u8) {
+    MINIMAP_FULL_MAP.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_minimap_coop(value: u8) {
+    MINIMAP_COOP.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_minimap_spirits(value: u8) {
+    MINIMAP_SPIRITS.store(value != 0, Ordering::Relaxed);
 }
 
 pub fn set_minimap_hide_in_caves(value: u8) {

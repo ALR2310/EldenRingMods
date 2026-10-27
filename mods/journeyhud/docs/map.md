@@ -1,4 +1,4 @@
-# JourneyHud: bản đồ thế giới dưới minimap
+# JourneyHUD: bản đồ thế giới dưới minimap
 
 **Status 2026-10-27: đọc archive và giải mã tile đã kiểm trên bản cài thật (2.7.2.0, ra ảnh Limgrave đúng); vẽ lên minimap chưa thử trong game. Chỉ overworld (area 60), hầm ngầm và dungeon qua bảng đổi toạ độ; chưa có bản đồ Shadow of the Erdtree (area 61).**
 
@@ -112,7 +112,7 @@ Làm tối dần vòng ngoài của đĩa (4 vòng mờ) để viền ăn khớp
 
 Luồng đọc archive (bản đồ, icon, địa điểm) chỉ khởi động **khi người chơi đã vào thế giới** (frame đầu tiên có `in_control`), không phải lúc game mới chạy. Lý do: nó cần vài trăm MB và vài giây
 đĩa và CPU, không nên tranh với game đang khởi động. Thử game 2026-10-27 có một lần crash ở engine khoảng 3 giây sau khi móc DX12, trước khi overlay kịp khởi tạo (AV đọc `0x30` trong getter
-`sub_141E937F0` do `sub_141E8B8B0`, hàm liên quan `CGShaderResourceView`, trên luồng không có khung nào của mod; cùng họ với crash 2026-10-04 khi chưa có JourneyHud, xem `docs/crash_dump_analysis.md`).
+`sub_141E937F0` do `sub_141E8B8B0`, hàm liên quan `CGShaderResourceView`, trên luồng không có khung nào của mod; cùng họ với crash 2026-10-04 khi chưa có JourneyHUD, xem `docs/crash_dump_analysis.md`).
 Chưa chứng minh mod liên quan; chuyển sang đọc muộn để loại một nguồn nhiễu.
 
 ## Lưu ý kỹ thuật (lấy từ minimap gốc)

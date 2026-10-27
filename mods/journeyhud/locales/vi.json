@@ -46,6 +46,22 @@
     "label": "Beacon",
     "help": "Đánh dấu các beacon bạn đã đặt trên bản đồ thế giới trên minimap."
   },
+  "minimap_coop": {
+    "label": "Người chơi co-op",
+    "help": "Đánh dấu đồng đội co-op trên minimap."
+  },
+  "minimap_spirits": {
+    "label": "Spirit",
+    "help": "Đánh dấu spirit đã triệu hồi của bạn trên minimap."
+  },
+  "minimap_full_map": {
+    "label": "Bản đồ đầy đủ",
+    "help": "Hiện toàn bộ bản đồ thế giới. Tắt thì chỉ hiện phần các mảnh bản đồ bạn có đã mở."
+  },
+  "minimap_compass": {
+    "label": "La bàn",
+    "help": "Hiện N, E, S, W ở viền minimap."
+  },
   "minimap_rotate": {
     "label": "Xoay theo camera",
     "help": "Xoay minimap theo camera. Tắt thì hướng bắc luôn ở trên."

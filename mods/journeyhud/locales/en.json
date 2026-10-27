@@ -46,6 +46,22 @@
     "label": "Beacons",
     "help": "Mark the beacons you have placed on the world map on the minimap."
   },
+  "minimap_coop": {
+    "label": "Co-op players",
+    "help": "Mark your co-op partners on the minimap."
+  },
+  "minimap_spirits": {
+    "label": "Spirits",
+    "help": "Mark your summoned spirits on the minimap."
+  },
+  "minimap_full_map": {
+    "label": "Full map",
+    "help": "Show the whole world map. Off shows only what your map fragments reveal."
+  },
+  "minimap_compass": {
+    "label": "Compass",
+    "help": "Show N, E, S and W on the rim of the minimap."
+  },
   "minimap_rotate": {
     "label": "Turn with camera",
     "help": "Turn the minimap with the camera. Off keeps north at the top."

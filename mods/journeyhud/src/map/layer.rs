@@ -124,19 +124,24 @@ impl MapLayer {
     }
 
     /// Asks for a window around `position` on `map` when there is none, when it is for
-    /// another map, or when the player is within `margin` meters of its edge.
-    pub fn follow(&mut self, map: MapId, position: [f32; 2], margin: f32) {
+    /// another map, when the fragments to show changed, or when the player is within `margin`
+    /// meters of its edge.
+    pub fn follow(&mut self, map: MapId, position: [f32; 2], margin: f32, fragments: u32) {
         let pixel = map_pixel(position);
         let reload = match self.requested {
-            Some((requested_map, origin, _)) if requested_map == map => (0..2).any(|axis| {
-                let offset = pixel[axis] - (origin[axis] * TILE as i32) as f32;
-                !(margin..WINDOW as f32 - margin).contains(&offset)
-            }),
+            // A newly found fragment redraws the window in place.
+            Some((requested_map, origin, shown)) if requested_map == map => {
+                shown != fragments
+                    || (0..2).any(|axis| {
+                        let offset = pixel[axis] - (origin[axis] * TILE as i32) as f32;
+                        !(margin..WINDOW as f32 - margin).contains(&offset)
+                    })
+            }
             _ => true,
         };
         if reload {
             let cell = pixel.map(|p| (p / TILE as f32).floor() as i32);
-            let wanted = (map, [cell[0] - 1, cell[1] - 1], u32::MAX);
+            let wanted = (map, [cell[0] - 1, cell[1] - 1], fragments);
             self.loader.request(wanted);
             self.requested = Some(wanted);
         }
