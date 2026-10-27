@@ -15,8 +15,8 @@ HUD overlay (DX12, ImGui qua hudhook, cùng nền với SoulsTeleport) ở góc 
 
 | Repo | Giấy phép | Dùng cho |
 | --- | --- | --- |
-| `tmp/souls_vision` (C++, samjviana) | **GPL-3.0** | Cách tìm mục tiêu, nơi đọc HP/stagger. Không copy code, không dịch từng dòng. |
-| `tmp/kubilaiswf-minimap` (Rust, kubilaiswf) | MIT | Đổi toạ độ ô sang bản đồ, đọc tile bản đồ từ bản cài game, camera, vẽ khung. Được tham khảo và dùng lại có ghi nguồn. |
+| `tmp/repos/souls_vision` (C++, samjviana) | **GPL-3.0** | Cách tìm mục tiêu, nơi đọc HP/stagger. Không copy code, không dịch từng dòng. |
+| `tmp/repos/kubilaiswf-minimap` (Rust, kubilaiswf) | MIT | Đổi toạ độ ô sang bản đồ, đọc tile bản đồ từ bản cài game, camera, vẽ khung. Được tham khảo và dùng lại có ghi nguồn. |
 
 Vì souls_vision là GPL-3.0 nên phần panel mục tiêu phải viết độc lập: dựa vào kết quả dịch ngược và kiểu Rust của `fromsoftware-rs`, không nhìn code C++ khi viết.
 
@@ -28,7 +28,7 @@ Vì souls_vision là GPL-3.0 nên phần panel mục tiêu phải viết độc 
 
 ## Texture của game
 
-`assets/Bar.png`, `BarBG.png`, `BarEdge.png`, `BarEdge2.png` là texture thanh máu trích từ HUD gốc của game (cùng bản có trong `tmp/souls_vision/sv_assets/` và `tmp/Elden_Ring_game_tools/Resources/OverlayAssets/`, trùng hash), nhúng vào DLL bằng `include_bytes!` và nạp một lần qua `RenderContext::load_texture` (`src/textures.rs`). Người dùng quyết định dùng lại (2026-10-26).
+`assets/Bar.png`, `BarBG.png`, `BarEdge.png`, `BarEdge2.png` là texture thanh máu trích từ HUD gốc của game (cùng bản có trong `tmp/repos/souls_vision/sv_assets/` và `tmp/repos/Elden_Ring_game_tools/Resources/OverlayAssets/`, trùng hash), nhúng vào DLL bằng `include_bytes!` và nạp một lần qua `RenderContext::load_texture` (`src/textures.rs`). Người dùng quyết định dùng lại (2026-10-26).
 
 - `Bar.png` (820x26, xám, 24 hàng thấy được): tô màu bằng vertex color rồi cắt theo UV theo tỉ lệ máu; cũng dùng cho khối máu vừa mất (vàng) và poise (vàng nâu). Màu chia cho độ sáng trung bình 0,86 của texture để ra đúng màu đã đo.
 - `BarBG.png`: nền trong mờ, tô tối, đặt trên nền đen.

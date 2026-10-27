@@ -11,7 +11,7 @@ phía trên), chấm cho đồng đội, spirit của mình và kẻ địch đa
 
 ## Học từ kubilaiswf-minimap (MIT)
 
-Đã đọc `tmp/kubilaiswf-minimap/src/game.rs` và `minimap.rs`. Những gì lấy làm ý tưởng:
+Đã đọc `tmp/repos/kubilaiswf-minimap/src/game.rs` và `minimap.rs`. Những gì lấy làm ý tưởng:
 
 - **Chụp snapshot trên task game, luồng render chỉ đọc bản sao** (`game::LATEST`). Cùng mô hình với panel mục tiêu.
 - **Hướng camera:** `CSCamera::instance().pers_cam_1.matrix` (ma trận nhìn): `camera_right = (m.0.0, m.0.2)`,
