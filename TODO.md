@@ -78,4 +78,5 @@ Chi tiết: `mods/journeyhud/docs/design.md`
 - [ ] [verify] JourneyHUD: grace trên minimap (chấm vàng đúng chỗ so với bản đồ trong game, chỉ grace đã tìm thấy, cả dungeon) (`docs/map.md`)
 - [ ] [verify] JourneyHUD: địa điểm trên minimap (icon đúng loại và đúng chỗ so với bản đồ trong game, ẩn khi chưa mở, boss đã hạ thì mờ) (`docs/map.md`)
 - [ ] [verify] JourneyHUD: beacon trên minimap (đặt beacon trên bản đồ rồi xem tia xanh đúng chỗ, số slot, ngoài tầm thì ghim viền); grace không còn che địa điểm (`docs/map.md`)
+- [ ] [research] JourneyHUD: thanh tích tụ trạng thái của kẻ địch (độc, thối đỏ, chảy máu...): đã tra layout và icon, cần thử chiều giá trị và ngưỡng miễn nhiễm trong game, rồi làm (`docs/buildup.md`)
 - [ ] [research] JourneyHUD: kiểm đầu chuỗi beacon (CSMenuMan +0x80 +0x250) trên 2.6.2.0 đến 2.7.1.0, bản đồ Shadow of the Erdtree (area 61), mảnh bản đồ theo cờ; kẻ địch xung quanh trên minimap (`docs/map.md`)
