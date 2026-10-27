@@ -10,6 +10,10 @@
     "label": "Health numbers",
     "help": "Show the health and posture numbers."
   },
+  "buildup": {
+    "label": "Status buildup",
+    "help": "Show the poison, rot, bleed, death blight, frost, sleep and madness buildup of the target."
+  },
   "width": {
     "label": "Bar length",
     "help": "Length of the target bar."

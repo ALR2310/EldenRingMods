@@ -43,6 +43,7 @@ pub struct Target {
     pub width: i32,
     pub scale: f64,
     pub show_numbers: bool,
+    pub buildup: bool,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]

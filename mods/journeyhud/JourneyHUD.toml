@@ -23,6 +23,7 @@ Enabled = true
 Width = 220             # Bar length in pixels (100 - 1600).
 Scale = 1.0             # Panel size multiplier (0.5 - 3.0).
 ShowNumbers = true      # Show health and posture numbers.
+Buildup = true          # Status buildup bars (poison, rot, bleed...) under the posture bar.
 
 
 [Minimap]

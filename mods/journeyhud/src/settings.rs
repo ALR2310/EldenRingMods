@@ -16,6 +16,7 @@ const ZOOM_LEVELS: [i32; 3] = [50, 100, 200];
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
 static SHOW_NUMBERS: AtomicBool = AtomicBool::new(true);
+static BUILDUP: AtomicBool = AtomicBool::new(true);
 static WIDTH: AtomicI32 = AtomicI32::new(220);
 static OFFSET_X: AtomicI32 = AtomicI32::new(48);
 static OFFSET_Y: AtomicI32 = AtomicI32::new(47);
@@ -49,6 +50,7 @@ pub fn load(config: &Config) {
     let (target, minimap) = (&config.target, &config.minimap);
     set_enabled(target.enabled as u8);
     set_show_numbers(target.show_numbers as u8);
+    set_buildup(target.buildup as u8);
     set_width(f64::from(target.width));
     set_offset_x(f64::from(config.layout.offset_x));
     set_offset_y(f64::from(config.layout.offset_y));
@@ -77,6 +79,11 @@ pub fn load(config: &Config) {
 
 pub fn enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
+}
+
+/// Whether the status buildup bars of the target are shown.
+pub fn buildup() -> bool {
+    BUILDUP.load(Ordering::Relaxed)
 }
 
 pub fn show_numbers() -> bool {
@@ -212,6 +219,10 @@ pub fn minimap_size() -> f32 {
 
 pub fn set_enabled(value: u8) {
     ENABLED.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_buildup(value: u8) {
+    BUILDUP.store(value != 0, Ordering::Relaxed);
 }
 
 pub fn set_show_numbers(value: u8) {

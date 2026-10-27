@@ -7,6 +7,7 @@ mod radar;
 mod radar_ui;
 mod settings;
 mod target;
+mod text;
 mod textures;
 mod ui;
 

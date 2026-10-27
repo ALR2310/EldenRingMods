@@ -9,11 +9,12 @@ use hudhook::{Hudhook, ImguiRenderLoop, RenderContext};
 
 use common::{input, logger};
 
-use crate::map::layer::MapLayer;
+use crate::map::layer::{Icon, MapLayer};
 use crate::radar::{self, Snapshot as RadarSnapshot};
 use crate::radar_ui::{self, Placement, Radar};
 use crate::settings;
-use crate::target::{self, Target};
+use crate::target::{self, Buildup, Target};
+use crate::text;
 use crate::textures::{self, Textures};
 
 /// The game draws its HUD in a 16:9 area fitted into the window (black bars on
@@ -26,9 +27,27 @@ const BASE_HEIGHT: f32 = 1080.0;
 /// length is a setting.
 const HP_HEIGHT: f32 = 12.0;
 /// Flush under the HP bar, no gap.
-const POISE_HEIGHT: f32 = 6.0;
-/// Gap between the bars and the poise numbers under them.
-const POISE_TEXT_GAP: f32 = 4.0;
+const POISE_HEIGHT: f32 = 12.0;
+/// Font size of the numbers inside the health and the posture bar, at 1080p: small enough that
+/// the digits stay inside bars 12 px thick.
+const BAR_NUMBER: f32 = 10.0;
+/// The buildup bars under the tan line: a row each, with the icon, the bar and the gap to the
+/// bars above (and the posture numbers, which need a row of their own when shown).
+const BUILDUP_ROW: f32 = 17.0;
+const BUILDUP_ICON: f32 = 16.0;
+const BUILDUP_ICON_GAP: f32 = 0.0;
+const BUILDUP_BAR: f32 = 12.0;
+const BUILDUP_GAP: f32 = 4.0;
+/// One color per status, in the order of `target::BUILDUP`.
+const BUILDUP_COLORS: [[f32; 4]; 7] = [
+    [0.39, 0.44, 0.05, 1.0],
+    [0.62, 0.22, 0.10, 1.0],
+    [0.60, 0.06, 0.08, 1.0],
+    [0.62, 0.58, 0.46, 1.0],
+    [0.42, 0.62, 0.74, 1.0],
+    [0.52, 0.46, 0.72, 1.0],
+    [0.78, 0.58, 0.12, 1.0],
+];
 /// Thickness of the tan line under the bars.
 const LINE: f32 = 2.0;
 /// ImGui's default font is 13px; this makes the text about 17px at 1080p.
@@ -129,8 +148,9 @@ impl ImguiRenderLoop for HudRenderLoop {
         let [w, h] = ctx.io().display_size;
         self.area = game_area(w, h);
         self.s = self.area[3] / BASE_HEIGHT * settings::scale();
-        // Not below 0.85 so the text stays readable in a small window.
-        ctx.io_mut().font_global_scale = (self.s * FONT_SCALE).max(0.85);
+        // Every text of the overlay sets its own size (`text.rs`), so the target's `Scale` does not
+        // resize the minimap's letters and clock.
+        ctx.io_mut().font_global_scale = (self.area[3] / BASE_HEIGHT * FONT_SCALE).max(0.85);
         // hudhook uploads on the game's queue and waits for the GPU; on loading screens that
         // queue can be waiting on the game, so only upload in normal play.
         if self.radar.in_control() {
@@ -174,6 +194,7 @@ impl ImguiRenderLoop for HudRenderLoop {
             s: self.s,
             show_numbers: settings::show_numbers(),
             textures: self.textures.as_ref(),
+            icons: self.map.as_ref(),
         };
         draw_target(ui, &target, &self.trail, &layout);
     }
@@ -197,6 +218,8 @@ struct Layout<'a> {
     s: f32,
     show_numbers: bool,
     textures: Option<&'a Textures>,
+    /// The game's icons, for the buildup bars.
+    icons: Option<&'a MapLayer>,
 }
 
 /// What a bar is drawn with: where it is, how full, and how.
@@ -243,21 +266,12 @@ fn draw_target(ui: &Ui, target: &Target, trail: &Trail, layout: &Layout) {
     };
     draw_bar(&draw, &hp_bar);
     if layout.show_numbers {
-        // Centered on the health bar, over the red and the dark track alike.
-        let size = ui.calc_text_size(&label);
-        let pos = [(left + right - size[0]) / 2.0, (y + hp_bottom - size[1]) / 2.0];
-        draw_text(&draw, pos, &label, s);
+        draw_bar_number(ui, &label, [left, right, y, hp_bottom], BAR_NUMBER * s, s);
     }
 
     let mut bottom = hp_bottom;
     if let Some((poise, max)) = target.poise {
         bottom += POISE_HEIGHT * s;
-        if layout.show_numbers {
-            // The bar is too thin for text: right-aligned in a row under the tan line.
-            let label = format!("{:.0} / {:.0}", poise, max);
-            let size = ui.calc_text_size(&label);
-            draw_text(&draw, [right - size[0], bottom + POISE_TEXT_GAP * s], &label, s);
-        }
         let poise_bar = Bar {
             from: [left, hp_bottom],
             to: [right, bottom],
@@ -270,15 +284,54 @@ fn draw_target(ui: &Ui, target: &Target, trail: &Trail, layout: &Layout) {
             textures: layout.textures,
         };
         draw_bar(&draw, &poise_bar);
+        if layout.show_numbers {
+            let label = format!("{poise:.0} / {max:.0}");
+            draw_bar_number(ui, &label, [left, right, hp_bottom, bottom], BAR_NUMBER * s, s);
+        }
     }
     frame(&draw, left, right, top, bottom, s);
+
+    // Under the tan line.
+    let mut row_top = bottom + (LINE + BUILDUP_GAP) * s;
+    for buildup in &target.buildup {
+        draw_buildup(&draw, buildup, [left, row_top, right], layout);
+        row_top += BUILDUP_ROW * s;
+    }
 }
 
-/// `text` at `pos` with a shadow so it reads over both the bar and the track.
-fn draw_text(draw: &DrawListMut<'_>, pos: [f32; 2], text: &str, s: f32) {
-    let shadow = s.max(1.0);
-    draw.add_text([pos[0] + shadow, pos[1] + shadow], TEXT_SHADOW, text);
-    draw.add_text(pos, TEXT, text);
+/// One buildup bar: the game's icon of the status, then a thin bar filled with what has built up.
+fn draw_buildup(draw: &DrawListMut<'_>, buildup: &Buildup, [left, top, right]: [f32; 3], layout: &Layout) {
+    let s = layout.s;
+    let middle = top + BUILDUP_ROW * s / 2.0;
+    let mut bar_left = left;
+    if let Some(icon) = layout.icons.and_then(|map| Icon::buildup(buildup.kind).and_then(|icon| map.icon(icon))) {
+        let height = BUILDUP_ICON * s;
+        let width = height * icon.size[0] / icon.size[1];
+        draw.add_image(icon.texture, [left, middle - height / 2.0], [left + width, middle + height / 2.0]).build();
+        bar_left = left + width + BUILDUP_ICON_GAP * s;
+    }
+    let color = BUILDUP_COLORS[buildup.kind];
+    let half = BUILDUP_BAR * s / 2.0;
+    let bar = Bar {
+        from: [bar_left, middle - half],
+        to: [right, middle + half],
+        fraction: buildup.built as f32 / buildup.max as f32,
+        trail: None,
+        glow: 0.0,
+        core: color,
+        edge: color,
+        s,
+        textures: layout.textures,
+    };
+    draw_bar(draw, &bar);
+}
+
+/// `text` centered in the bar `[left, right, top, bottom]`, set at a font size of `em` pixels so it
+/// stays inside the bar, with a shadow so it reads over both the bar and the track.
+fn draw_bar_number(ui: &Ui, text: &str, [left, right, top, bottom]: [f32; 4], em: f32, s: f32) {
+    let size = text::measure(ui, text, em);
+    let pos = [((left + right - size[0]) / 2.0).round(), ((top + bottom - size[1]) / 2.0).round()];
+    text::add_shadowed(text, pos, em, TEXT, TEXT_SHADOW, s.max(1.0));
 }
 
 fn draw_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>) {
@@ -393,7 +446,7 @@ mod tests {
     }
 
     fn target(id: usize, hp: i32) -> Target {
-        Target { id, npc_param_id: 1, offset: [0.0, 0.0], hp, max_hp: 100, poise: None }
+        Target { id, npc_param_id: 1, offset: [0.0, 0.0], hp, max_hp: 100, poise: None, buildup: Vec::new() }
     }
 
     #[test]

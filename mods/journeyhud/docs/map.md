@@ -95,7 +95,7 @@ Khoá `MinimapBeacons`. **Chưa thử trong game.**
 
 Như game (người dùng, 2026-10-27), từ dưới lên: **địa điểm < NPC < grace < beacon < spirit, đồng đội, kẻ địch khoá < người chơi**. NPC là các icon 80, 86, 87, 88 (người, dấu
 triệu hồi, kẻ xâm nhập), còn lại là địa điểm. Cỡ theo sprite của game: địa điểm 0,2 lần (to nhất, nhà thờ cao hơn đĩa grace nên vẫn thấy khi grace nằm đè lên), NPC 0,17 lần, grace 0,15 lần,
-không icon điểm nào quá 62 px. Cỡ chốt sau thử game 2026-10-27: gấp đôi bản đầu rồi bớt 30% (0,28 / 0,24 / 0,21 lần sprite; nhà thờ khoảng 39x53 px ở 1080p), người dùng thấy vậy là vừa. Bản trước dời grace xuống góc phải khi che địa điểm; bỏ vì game không làm vậy và lớp mới đã giải quyết.
+không icon điểm nào quá 42 px. Cỡ sau thử game 2026-10-27: gấp đôi bản đầu rồi bớt 30% (0,28 / 0,24 / 0,21 lần sprite), rồi người dùng thấy icon tàn tích còn to nên chốt **một hệ số chung cho địa điểm, NPC và grace** (`ICON_SCALE`, thay cho ba hệ số riêng; 0,18 rồi người dùng nâng lên 0,20); icon gốc 156 px thành khoảng 31 px, người dùng thấy vậy là vừa. Bản trước dời grace xuống góc phải khi che địa điểm; bỏ vì game không làm vậy và lớp mới đã giải quyết.
 
 ## Điểm không hiện (đã tra, 2026-10-27)
 

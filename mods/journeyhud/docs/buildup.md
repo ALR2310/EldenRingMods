@@ -1,6 +1,6 @@
 # JourneyHUD: thanh tích tụ trạng thái (buildup) của kẻ địch
 
-**Status 2026-10-27: nghiên cứu xong, chưa có code. Vị trí dữ liệu và bố cục module đã kiểm tĩnh trong IDA trên 2.6.2.0, 2.7.0.0, 2.7.1.0, 2.7.2.0; chiều của giá trị (đếm xuống từ tối đa) và cách nhận kẻ địch miễn nhiễm còn là suy ra từ souls_vision, cần thử trong game.**
+**Status 2026-10-27: nghiên cứu xong và đã có code (`Target.Buildup`, `target.rs::read_buildup`, `ui.rs::draw_buildup`), chưa thử trong game. Vị trí dữ liệu và bố cục module đã kiểm tĩnh trong IDA trên 2.6.2.0, 2.7.0.0, 2.7.1.0, 2.7.2.0; chiều của giá trị (đếm xuống từ tối đa) và cách nhận kẻ địch miễn nhiễm còn là suy ra từ souls_vision, cần thử trong game.**
 
 Mục tiêu: dưới thanh máu và posture của kẻ địch đang khoá, hiện 7 thanh tích tụ (độc, thối đỏ, chảy máu, tử khí, đóng băng, ngủ, điên loạn) giống cách souls_vision làm, bằng icon và khung của chính game.
 
@@ -29,12 +29,14 @@ Menu sprite sheet của game đã có sẵn, đọc được bằng cách `map/s
 
 Đây là các thành phần của thanh trạng thái người chơi trong HUD game, nên vẽ giống HUD hơn là bản souls_vision tự đóng gói.
 
-## Hướng làm
+## Hướng làm (đã làm, chưa thử trong game)
 
 1. Đọc: trong `target.rs` thêm đọc module resist của kẻ địch khoá (kiểm con trỏ, đọc an toàn): 7 giá trị hiện tại và 7 tối đa, `const` assert offset như các chỗ khác.
 2. Lọc: hiện thanh khi tối đa > 0 và tối đa < 999 (không miễn nhiễm) và phần tích tụ > 0; sắp theo thứ tự cố định, tối đa vài thanh cùng lúc.
 3. Vẽ: dưới thanh posture, mỗi thanh một hàng nhỏ (icon + thanh theo màu loại + số), dùng sprite `SB_Condition` và `Condition_Bar`; sprite nạp một lần cùng các sprite khác trong `ICON_SPRITES`.
-4. Khoá cấu hình `Target.Buildup` (hoặc `Target.StatusBars`), mặc định theo bàn bạc.
+4. Khoá cấu hình `Target.Buildup` (mặc định bật, cũng trong menu game). Log ghi một dòng `Buildup: <loại> <đã tích>/<tối đa>` mỗi khi tập loại đang tích tụ đổi, để xem giá trị thật cư xử thế nào.
+
+Bố cục vẽ: mỗi loại một hàng 17 px (1080p) dưới đường be: icon `SB_Condition` cao 16 px (đã cắt lề trong suốt của sprite, chỉ còn phần hình; sprite gốc 126x108 có lề nên trước khi cắt icon trông nhỏ hơn và cách thanh vài px), thanh dày 12 px (bằng thanh máu) tô màu theo loại nối liền ngay sau icon (không cách), hai icon trên dưới cách nhau 1 px; thanh posture dày 12 px như thanh máu; không số.
 
 ## Cần thử trong game trước khi tin
 

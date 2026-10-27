@@ -130,6 +130,26 @@ const MAP_ICON_SHEETS: [&str; 3] = ["SB_MapCursor", "SB_MapCursor_02", "SB_MapCu
 const NAMED_MAP_ICONS: [(&str, u16); 1] = [("MENU_MAP_Church", 3)];
 
 impl Image {
+    /// The part of this image that is not transparent (alpha above `threshold`); the same image
+    /// when it has none. The game's sprites keep a margin around their art, and a size set for the
+    /// art alone needs it gone.
+    pub fn trimmed(&self, threshold: u8) -> Image {
+        let (mut min, mut max) = ([self.width, self.height], [0u32, 0u32]);
+        for y in 0..self.height {
+            for x in 0..self.width {
+                if self.rgba[((y * self.width + x) * 4 + 3) as usize] > threshold {
+                    min = [min[0].min(x), min[1].min(y)];
+                    max = [max[0].max(x), max[1].max(y)];
+                }
+            }
+        }
+        if min[0] > max[0] {
+            return Image { width: self.width, height: self.height, rgba: self.rgba.clone() };
+        }
+        let rect = [min[0], min[1], max[0] - min[0] + 1, max[1] - min[1] + 1];
+        crop(self, rect).unwrap_or_else(|_| Image { width: self.width, height: self.height, rgba: self.rgba.clone() })
+    }
+
     /// This image reduced by a whole factor (box filter, alpha-weighted) until neither side is
     /// longer than `max_side`; the same image if it already fits.
     pub fn shrunk(&self, max_side: u32) -> Image {
@@ -263,6 +283,21 @@ mod tests {
         assert_eq!(small.rgba, [200, 0, 0, 255, 0, 0, 0, 0]);
         let same = image.shrunk(8);
         assert_eq!((same.width, same.height), (4, 2));
+    }
+
+    #[test]
+    fn trimming_keeps_the_part_that_is_not_transparent() {
+        // 4x3 with opaque pixels only at (1, 1) and (2, 2).
+        let mut rgba = vec![0u8; 4 * 3 * 4];
+        for (x, y) in [(1, 1), (2, 2)] {
+            rgba[(y * 4 + x) * 4 + 3] = 255;
+            rgba[(y * 4 + x) * 4] = 7;
+        }
+        let image = Image { width: 4, height: 3, rgba }.trimmed(8);
+        assert_eq!((image.width, image.height), (2, 2));
+        assert_eq!(image.rgba[0], 7);
+        let empty = Image { width: 2, height: 2, rgba: vec![0; 16] }.trimmed(8);
+        assert_eq!((empty.width, empty.height), (2, 2));
     }
 
     #[test]

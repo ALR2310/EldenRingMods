@@ -24,6 +24,7 @@
 //!                                 Minimap scale   stepped
 //!                                 Target bar      on/off
 //!                                 Health numbers  on/off
+//!                                 Status buildup  on/off
 //!                                 Bar length      slider
 //!                                 Size            slider
 //!                                 Right margin    slider
@@ -44,6 +45,8 @@ use crate::settings;
 static ENABLED: Setting = Setting { key: "Target.Enabled", format: erui::format_bool, apply: Some(settings::set_enabled) };
 static SHOW_NUMBERS: Setting =
     Setting { key: "Target.ShowNumbers", format: erui::format_bool, apply: Some(settings::set_show_numbers) };
+static BUILDUP: Setting =
+    Setting { key: "Target.Buildup", format: erui::format_bool, apply: Some(settings::set_buildup) };
 static WIDTH: NumberSetting =
     NumberSetting::whole("Target.Width", 100.0, 1600.0, Some(settings::set_width)).slider(100.0, 800.0, 10.0);
 static SCALE: NumberSetting = NumberSetting::float("Target.Scale", 0.5, 3.0, Some(settings::set_scale)).stepped(0.1);
@@ -111,6 +114,7 @@ fn build(b: &mut erui::MenuBuilder) -> Result<(), String> {
     b.toggle(page, &t("numbers.label"), &t("numbers.help"), &SHOW_NUMBERS, || {
         config::get().target.show_numbers as u8
     })?;
+    b.toggle(page, &t("buildup.label"), &t("buildup.help"), &BUILDUP, || config::get().target.buildup as u8)?;
     b.number(page, &t("width.label"), &t("width.help"), &WIDTH, || f64::from(config::get().target.width))?;
     b.number(page, &t("scale.label"), &t("scale.help"), &SCALE, || config::get().target.scale)?;
     b.number(page, &t("offset_x.label"), &t("offset_x.help"), &OFFSET_X, || f64::from(config::get().layout.offset_x))?;
@@ -182,14 +186,14 @@ mod tests {
     /// have the same keys (nothing missing, nothing left over).
     #[test]
     fn language_files_match_the_menu_keys() {
-        TEXT.assert_matches_source(include_str!("menu.rs"), 49);
+        TEXT.assert_matches_source(include_str!("menu.rs"), 51);
     }
 
     /// Every key a row saves to is in the template, so a save never invents a key.
     #[test]
     fn menu_keys_are_in_the_template() {
         let doc: toml::Value = toml::from_str(config::TEMPLATE).unwrap();
-        let settings = [&ENABLED, &SHOW_NUMBERS, &MINIMAP, &MINIMAP_MAP, &MINIMAP_GRACES, &MINIMAP_POINTS, &MINIMAP_BEACONS, &MINIMAP_COMPASS, &MINIMAP_CLOCK, &MINIMAP_TRAIL, &MINIMAP_GOBLINS, &MINIMAP_FULL_MAP, &MINIMAP_COOP, &MINIMAP_SPIRITS];
+        let settings = [&ENABLED, &SHOW_NUMBERS, &BUILDUP, &MINIMAP, &MINIMAP_MAP, &MINIMAP_GRACES, &MINIMAP_POINTS, &MINIMAP_BEACONS, &MINIMAP_COMPASS, &MINIMAP_CLOCK, &MINIMAP_TRAIL, &MINIMAP_GOBLINS, &MINIMAP_FULL_MAP, &MINIMAP_COOP, &MINIMAP_SPIRITS];
         let numbers = [&WIDTH, &SCALE, &OFFSET_X, &OFFSET_Y, &MINIMAP_RANGE, &MINIMAP_SIZE, &MINIMAP_SCALE];
         let keys = settings.iter().map(|s| s.key).chain(numbers.iter().map(|n| n.key));
         for key in keys.chain([MINIMAP_ROTATE.key, MINIMAP_HIDE_IN_CAVES.key, MINIMAP_HIDE_IN_BOSS_FIGHTS.key]) {

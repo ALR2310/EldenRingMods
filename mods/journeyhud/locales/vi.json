@@ -10,6 +10,10 @@
     "label": "Số máu",
     "help": "Hiện số máu và số posture."
   },
+  "buildup": {
+    "label": "Tích tụ trạng thái",
+    "help": "Hiện độ tích tụ độc, thối đỏ, chảy máu, tử khí, đóng băng, ngủ và điên loạn của mục tiêu."
+  },
   "width": {
     "label": "Độ dài thanh",
     "help": "Độ dài của thanh mục tiêu."
