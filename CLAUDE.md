@@ -13,6 +13,12 @@ hết vào nhánh `mod/` của mod.
   `.vscode/tasks.json`, `Cargo.toml`) mà việc của mod đó cần thì cùng nhánh với
   mod. Việc không thuộc mod nào (hạ tầng, quy tắc chung) thì hỏi người dùng
   nhánh nào trước khi làm.
+- **Ngoại lệ: thay đổi cùng một kiểu trên nhiều mod** (vd. thêm một trường vào
+  `[package.metadata.winresource]` của mọi mod) làm và commit trên `main`, không
+  rải lên từng nhánh `mod/` (người dùng, 2026-10-27). Mod chỉ có trên nhánh của
+  nó (chưa vào `main`) thì sửa trên nhánh đó.
+- **Ngoại lệ: InputBridge** (người dùng, 2026-10-27): cải tiến `inputbridge` làm
+  thẳng trong phiên đang làm mod khác, không cần chuyển nhánh.
 - Không tự merge, xoá hay đổi tên nhánh; không tự commit khi chưa được kiểm
   (xem mục "Quy tắc code và quy trình thử" bên dưới).
 
@@ -166,6 +172,14 @@ Người dùng (2026-10-16) phải nhắc lại nhiều lần; viết đúng nga
 - **`CHANGELOG.md`:** mỗi bullet ngắn nhất có thể, nêu tên tính năng/sửa lỗi,
   không kể chi tiết (giá trị mặc định, "last forever", cơ chế). Dạng
   `Added <X> and <Y> options.` / `Fixed <loại lỗi>.`; chi tiết để ở HISTORY và docs.
+
+## Thông tin phiên bản trong DLL (Properties > Details)
+
+Mỗi mod khai báo ở `[package.metadata.winresource]` của `Cargo.toml` (`build.rs`
+chỉ gọi `winresource`): `ProductName`, `FileDescription`, `InternalName`,
+`OriginalFilename`, `LegalCopyright = "Copyright (c) 2026 ALR2310"` (tên theo
+`LICENSE`). File version lấy từ `version`. Mod mới làm đủ năm trường theo
+`mods/dropmultiplier/Cargo.toml`.
 
 ## Cập nhật `.vscode/tasks.json` khi thêm / xoá / đổi tên mod
 
