@@ -46,6 +46,10 @@ pub struct Snapshot {
     pub fade: f32,
     /// False while a menu has the HUD hidden or changed.
     pub hud_visible: bool,
+    /// A boss health bar is on screen.
+    pub boss_fight: bool,
+    /// The player is in a cave, catacomb or other dungeon block.
+    pub in_cave: bool,
     pub partners: Vec<Dot>,
     pub spirits: Vec<Dot>,
     /// Offset of the locked-on enemy.
@@ -78,7 +82,14 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
 
     let fade = unsafe { CSFade::instance() }
         .map_or(0.0, |fade| fade.fade_plates.iter().map(|plate| plate.current_color.a).fold(0.0, f32::max));
-    let hud_visible = unsafe { CSFeManImp::instance() }.map_or(true, |fe| fe.hud_state == CSFeManHudState::Default);
+    let fe = unsafe { CSFeManImp::instance() }.ok();
+    let hud_visible = fe.as_ref().map_or(true, |fe| fe.hud_state == CSFeManHudState::Default);
+    // A boss health bar is on screen while one of its slots names a character.
+    let boss_fight = fe.is_some_and(|fe| fe.boss_health_displays.iter().any(|boss| !boss.field_ins_handle.is_empty()));
+    // Catacombs, caves, tunnels and the like: any block outside the overworld, except the
+    // underground (area 12), which has a world map of its own.
+    let block = player.current_block_id;
+    let in_cave = !block.is_overworld() && block.area() != 12;
 
     // The camera and the physics matrices share axes and scale with the
     // world, so their direction vectors apply to offsets directly.
@@ -132,6 +143,8 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
         camera_forward: [view.2.0, view.2.2],
         fade,
         hud_visible,
+        boss_fight,
+        in_cave,
         partners,
         spirits,
         target,

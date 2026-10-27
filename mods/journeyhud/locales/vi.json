@@ -46,6 +46,18 @@
     "label": "Beacon",
     "help": "Đánh dấu các beacon bạn đã đặt trên bản đồ thế giới trên minimap."
   },
+  "minimap_rotate": {
+    "label": "Xoay theo camera",
+    "help": "Xoay minimap theo camera. Tắt thì hướng bắc luôn ở trên."
+  },
+  "minimap_hide_caves": {
+    "label": "Ẩn trong hang",
+    "help": "Ẩn minimap khi ở trong hang, hầm mộ và các dungeon khác."
+  },
+  "minimap_hide_boss": {
+    "label": "Ẩn khi đánh boss",
+    "help": "Ẩn minimap khi thanh máu boss đang hiện trên màn hình."
+  },
   "minimap_range": {
     "label": "Tầm minimap",
     "help": "Minimap nhìn được xa bao nhiêu, từ tâm tới viền, tính bằng mét."

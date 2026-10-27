@@ -57,6 +57,9 @@ pub fn column_height(res: f32) -> f32 {
     if settings::minimap_enabled() { (2.0 * settings::minimap_size() + COLUMN_GAP) * res } else { 0.0 }
 }
 
+/// The basis that keeps north (+Z) up and east (+X) to the right.
+const NORTH_UP: ([f32; 2], [f32; 2]) = ([1.0, 0.0], [0.0, 1.0]);
+
 /// What the radar remembers between frames.
 pub struct Radar {
     /// 0 to 1, follows whether the radar should be on screen.
@@ -94,14 +97,19 @@ impl Radar {
         let dt = ui.io().delta_time;
         let in_control = snapshot.is_some_and(|s| s.hud_visible && s.fade < 0.05);
         self.in_control = in_control;
-        let target = if in_control { 1.0 } else { 0.0 };
+        let hidden = snapshot.is_some_and(|s| {
+            (settings::minimap_hide_in_caves() && s.in_cave) || (settings::minimap_hide_in_boss_fights() && s.boss_fight)
+        });
+        let target = if in_control && !hidden { 1.0 } else { 0.0 };
         self.alpha += (target - self.alpha) * (dt * FADE_RATE).min(1.0);
         let Some(snapshot) = snapshot else { return };
         if self.alpha < 0.01 {
             return;
         }
 
-        if let (Some(right), Some(forward)) = (normalize(snapshot.camera_right), normalize(snapshot.camera_forward)) {
+        if !settings::minimap_rotate() {
+            self.camera = NORTH_UP;
+        } else if let (Some(right), Some(forward)) = (normalize(snapshot.camera_right), normalize(snapshot.camera_forward)) {
             self.camera = (right, forward);
         }
         if let Some([x, z]) = normalize(snapshot.facing) {
@@ -490,6 +498,15 @@ mod tests {
     fn normalize_skips_a_zero_vector() {
         assert_eq!(normalize([0.0, 0.0]), None);
         assert_eq!(normalize([0.0, 2.0]), Some([0.0, 1.0]));
+    }
+
+    #[test]
+    fn north_up_puts_north_at_the_top_and_east_on_the_right() {
+        let mut radar = Radar::default();
+        radar.camera = NORTH_UP;
+        let view = View { radar: &radar, center: [0.0, 0.0], radius: 96.0, s: 1.0, m: 1.0, pixels_per_meter: 1.0, layer: None };
+        assert_eq!(view.to_screen([0.0, 1.0]), [0.0, -1.0]);
+        assert_eq!(view.to_screen([1.0, 0.0]), [1.0, 0.0]);
     }
 
     #[test]
