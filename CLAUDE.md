@@ -81,7 +81,12 @@ Mỗi mod có 4 loại tài liệu, mỗi loại 1 vai trò, không trộn lẫn
   người dùng thấy, không ghi tên key ini hay chi tiết nội bộ (văn phong: xem
   memory `feedback_changelog_style`). Skill `deploy-nexus-mod` gửi nội dung này
   lên tab Changelog của Nexus; `nexus_page.bbcode` (trang mod) **không** chứa
-  changelog.
+  changelog. **Mod chưa phát hành** (chưa lên Nexus lần nào, chưa có Nexus ID
+  ở danh sách bên dưới): `[Unreleased]` chỉ giữ đúng một dòng `- Initial
+  release`, **không thêm bullet nào** vì chưa có bản phát hành nào để so các
+  thay đổi (người dùng, 2026-10-27); mọi thay đổi trong lúc phát triển chỉ ghi ở
+  HISTORY và docs. Khi mod lên Nexus lần đầu thì mục này thành version đầu tiên
+  với đúng dòng đó.
 - `mods/<mod>/HISTORY.md` = dòng thời gian, bảng `Ngày | Thay đổi | Chi
   tiết`, mỗi thay đổi **1 dòng**, mới nhất ở dưới cùng; chuyện nào có phân
   tích dài thì cột "Chi tiết" link sang file trong `docs/` của mod.
@@ -102,8 +107,9 @@ key, sửa bug về hành vi, đổi cấu trúc code/thư mục):
 
 1. **Luôn thêm 1 dòng** vào bảng `HISTORY.md`, ghi ngày hôm nay: đã đổi gì và
    vì sao (1-2 câu, đặc biệt nếu sửa 1 hiểu lầm/bug trong thiết kế trước đó).
-2. **Nếu người dùng nhìn thấy thay đổi đó** (tính năng, sửa lỗi, đổi hành vi):
-   thêm 1 bullet vào `## [Unreleased]` trong `CHANGELOG.md`.
+2. **Nếu người dùng nhìn thấy thay đổi đó** (tính năng, sửa lỗi, đổi hành vi) **và
+   mod đã phát hành**: thêm 1 bullet vào `## [Unreleased]` trong `CHANGELOG.md`.
+   Mod chưa phát hành thì bỏ qua bước này (xem quy tắc "Initial release" ở trên).
 3. **Sửa `README.md` tại chỗ** chỉ khi cách hoạt động, giới hạn hay trạng thái
    (đã phát hành / nội bộ / đã bỏ) thay đổi. Đổi key hay giá trị mặc định chỉ cần
    sửa chú thích trong file config (`.ini`/`.toml`), không đụng README (không thêm mục có ngày); sửa
