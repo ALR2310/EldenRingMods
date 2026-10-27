@@ -46,6 +46,18 @@
     "label": "Beacons",
     "help": "Mark the beacons you have placed on the world map on the minimap."
   },
+  "minimap_rotate": {
+    "label": "Turn with camera",
+    "help": "Turn the minimap with the camera. Off keeps north at the top."
+  },
+  "minimap_hide_caves": {
+    "label": "Hide in caves",
+    "help": "Hide the minimap in caves, catacombs and other dungeons."
+  },
+  "minimap_hide_boss": {
+    "label": "Hide in boss fights",
+    "help": "Hide the minimap while a boss health bar is on screen."
+  },
   "minimap_range": {
     "label": "Minimap range",
     "help": "How far the minimap sees, from its center to its rim, in meters."

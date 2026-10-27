@@ -25,6 +25,9 @@ static MINIMAP_MAP: AtomicBool = AtomicBool::new(true);
 static MINIMAP_GRACES: AtomicBool = AtomicBool::new(true);
 static MINIMAP_POINTS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_BEACONS: AtomicBool = AtomicBool::new(true);
+static MINIMAP_ROTATE: AtomicBool = AtomicBool::new(true);
+static MINIMAP_HIDE_IN_CAVES: AtomicBool = AtomicBool::new(false);
+static MINIMAP_HIDE_IN_BOSS_FIGHTS: AtomicBool = AtomicBool::new(false);
 static MINIMAP_RANGE: AtomicI32 = AtomicI32::new(100);
 /// Virtual-key codes of the zoom keys.
 static ZOOM_IN_KEY: AtomicI32 = AtomicI32::new(VK_OEM_PLUS);
@@ -44,6 +47,9 @@ pub fn load() {
     set_minimap_graces(config::get_bool("MinimapGraces", true) as u8);
     set_minimap_points(config::get_bool("MinimapPoints", true) as u8);
     set_minimap_beacons(config::get_bool("MinimapBeacons", true) as u8);
+    set_minimap_rotate(config::get_bool("MinimapRotate", true) as u8);
+    set_minimap_hide_in_caves(config::get_bool("MinimapHideInCaves", false) as u8);
+    set_minimap_hide_in_boss_fights(config::get_bool("MinimapHideInBossFights", false) as u8);
     set_minimap_range(config::get_int("MinimapRange", 100) as f64);
     ZOOM_IN_KEY.store(parse_virtual_key(&config::get_string("ZoomInKey", "0xBB"), VK_OEM_PLUS), Ordering::Relaxed);
     ZOOM_OUT_KEY.store(parse_virtual_key(&config::get_string("ZoomOutKey", "0xBD"), VK_OEM_MINUS), Ordering::Relaxed);
@@ -95,6 +101,21 @@ pub fn minimap_points() -> bool {
 /// Whether the beacons the player has placed on the world map are marked.
 pub fn minimap_beacons() -> bool {
     MINIMAP_BEACONS.load(Ordering::Relaxed)
+}
+
+/// Whether the minimap turns with the camera (else north is up).
+pub fn minimap_rotate() -> bool {
+    MINIMAP_ROTATE.load(Ordering::Relaxed)
+}
+
+/// Whether the minimap hides in caves, catacombs and other dungeons.
+pub fn minimap_hide_in_caves() -> bool {
+    MINIMAP_HIDE_IN_CAVES.load(Ordering::Relaxed)
+}
+
+/// Whether the minimap hides while a boss health bar is on screen.
+pub fn minimap_hide_in_boss_fights() -> bool {
+    MINIMAP_HIDE_IN_BOSS_FIGHTS.load(Ordering::Relaxed)
 }
 
 /// Meters from the center of the minimap to its rim.
@@ -172,6 +193,18 @@ pub fn set_minimap_points(value: u8) {
 
 pub fn set_minimap_beacons(value: u8) {
     MINIMAP_BEACONS.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_minimap_rotate(value: u8) {
+    MINIMAP_ROTATE.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_minimap_hide_in_caves(value: u8) {
+    MINIMAP_HIDE_IN_CAVES.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_minimap_hide_in_boss_fights(value: u8) {
+    MINIMAP_HIDE_IN_BOSS_FIGHTS.store(value != 0, Ordering::Relaxed);
 }
 
 /// At most 200: the map window holds 768 m, which has to cover the range with room to spare.

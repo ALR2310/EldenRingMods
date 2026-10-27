@@ -9,6 +9,9 @@
 //!                                 Graces          on/off
 //!                                 Points          on/off
 //!                                 Beacons         on/off
+//!                                 Turn with camera on/off
+//!                                 Hide in caves   on/off
+//!                                 Hide in boss fights on/off
 //!                                 Minimap range   slider
 //!                                 Minimap size    slider
 //!                                 Target bar      on/off
@@ -51,6 +54,15 @@ static MINIMAP_POINTS: Setting =
     Setting { key: "MinimapPoints", format: erui::format_bool, apply: Some(settings::set_minimap_points) };
 static MINIMAP_BEACONS: Setting =
     Setting { key: "MinimapBeacons", format: erui::format_bool, apply: Some(settings::set_minimap_beacons) };
+static MINIMAP_ROTATE: Setting =
+    Setting { key: "MinimapRotate", format: erui::format_bool, apply: Some(settings::set_minimap_rotate) };
+static MINIMAP_HIDE_IN_CAVES: Setting =
+    Setting { key: "MinimapHideInCaves", format: erui::format_bool, apply: Some(settings::set_minimap_hide_in_caves) };
+static MINIMAP_HIDE_IN_BOSS_FIGHTS: Setting = Setting {
+    key: "MinimapHideInBossFights",
+    format: erui::format_bool,
+    apply: Some(settings::set_minimap_hide_in_boss_fights),
+};
 static MINIMAP_RANGE: NumberSetting =
     NumberSetting::whole("MinimapRange", 20.0, 400.0, Some(settings::set_minimap_range)).slider(40.0, 200.0, 10.0);
 static MINIMAP_SIZE: NumberSetting =
@@ -90,6 +102,15 @@ fn build(b: &mut erui::MenuBuilder) -> Result<(), String> {
     b.toggle(page, &t("minimap_beacons.label"), &t("minimap_beacons.help"), &MINIMAP_BEACONS, || {
         config::get_bool("MinimapBeacons", true) as u8
     })?;
+    b.toggle(page, &t("minimap_rotate.label"), &t("minimap_rotate.help"), &MINIMAP_ROTATE, || {
+        config::get_bool("MinimapRotate", true) as u8
+    })?;
+    b.toggle(page, &t("minimap_hide_caves.label"), &t("minimap_hide_caves.help"), &MINIMAP_HIDE_IN_CAVES, || {
+        config::get_bool("MinimapHideInCaves", false) as u8
+    })?;
+    b.toggle(page, &t("minimap_hide_boss.label"), &t("minimap_hide_boss.help"), &MINIMAP_HIDE_IN_BOSS_FIGHTS, || {
+        config::get_bool("MinimapHideInBossFights", false) as u8
+    })?;
     b.number(page, &t("minimap_range.label"), &t("minimap_range.help"), &MINIMAP_RANGE, || config::get_int("MinimapRange", 100) as f64)?;
     b.number(page, &t("minimap_size.label"), &t("minimap_size.help"), &MINIMAP_SIZE, || config::get_int("MinimapSize", 110) as f64)?;
     Ok(())
@@ -110,7 +131,7 @@ mod tests {
     /// have the same keys (nothing missing, nothing left over).
     #[test]
     fn language_files_match_the_menu_keys() {
-        TEXT.assert_matches_source(include_str!("menu.rs"), 27);
+        TEXT.assert_matches_source(include_str!("menu.rs"), 33);
     }
 
     /// Every row meant to be a native slider has a valid range and step (else
