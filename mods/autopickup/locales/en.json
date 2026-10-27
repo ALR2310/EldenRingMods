@@ -34,6 +34,10 @@
     "label": "Pause in combat",
     "help": "Stop picking things up while you are in combat."
   },
+  "animation": {
+    "label": "No pickup animation",
+    "help": "Skip the animation of picking up an item from the ground."
+  },
   "log": {
     "label": "Log file",
     "help": "Write a log file next to the DLL, for troubleshooting."

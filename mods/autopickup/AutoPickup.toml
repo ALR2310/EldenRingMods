@@ -13,6 +13,9 @@ ReloadBanner = false
 # Stop picking up while you are in combat.
 PauseInCombat = true
 
+# Skip the animation of picking up an item from the ground.
+NoPickupAnimation = false
+
 
 [Materials]
 # Plants, mushrooms and other crafting materials.
