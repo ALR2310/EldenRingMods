@@ -18,7 +18,9 @@ hudhook = { version = "0.9.3", default-features = false, features = ["dx12"] }
 libloading = "0.8"
 png = "0.17"
 rsa = { version = "0.9", features = ["pem"] }
+serde.workspace = true
 texture2ddecoder = "0.1"
+toml.workspace = true
 
 [build-dependencies]
 winresource = "0.1"

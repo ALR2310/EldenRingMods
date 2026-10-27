@@ -4,11 +4,11 @@
   },
   "enabled": {
     "label": "Thanh mục tiêu",
-    "help": "Hiện máu và poise của kẻ địch đang khoá mục tiêu."
+    "help": "Hiện máu và posture của kẻ địch đang khoá mục tiêu."
   },
   "numbers": {
     "label": "Số máu",
-    "help": "Hiện số máu chính xác phía trên thanh mục tiêu."
+    "help": "Hiện số máu và số posture."
   },
   "width": {
     "label": "Độ dài thanh",
@@ -61,6 +61,10 @@
   "minimap_range": {
     "label": "Tầm minimap",
     "help": "Minimap nhìn được xa bao nhiêu, từ tâm tới viền, tính bằng mét."
+  },
+  "minimap_scale": {
+    "label": "Tỉ lệ minimap",
+    "help": "Tỉ lệ phóng to của minimap. 1 = bình thường."
   },
   "minimap_size": {
     "label": "Kích thước minimap",

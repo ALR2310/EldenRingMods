@@ -27,10 +27,10 @@ const BASE_HEIGHT: f32 = 1080.0;
 const HP_HEIGHT: f32 = 12.0;
 /// Flush under the HP bar, no gap.
 const POISE_HEIGHT: f32 = 6.0;
+/// Gap between the bars and the poise numbers under them.
+const POISE_TEXT_GAP: f32 = 4.0;
 /// Thickness of the tan line under the bars.
 const LINE: f32 = 2.0;
-/// Height of the row above the HP bar that holds the numbers, when shown.
-const TEXT_ROW: f32 = 22.0;
 /// ImGui's default font is 13px; this makes the text about 17px at 1080p.
 const FONT_SCALE: f32 = 1.3;
 
@@ -221,19 +221,10 @@ fn draw_target(ui: &Ui, target: &Target, trail: &Trail, layout: &Layout) {
     let res = layout.area[3] / BASE_HEIGHT;
     let right = layout.area[0] + layout.area[2] - layout.offset[0] * res;
     let left = right - layout.width * s;
-    let mut y = layout.area[1] + layout.offset[1] * res + radar_ui::column_height(res);
+    let y = layout.area[1] + layout.offset[1] * res + radar_ui::column_height(res);
 
     let draw = ui.get_foreground_draw_list();
-    if layout.show_numbers {
-        // Right-aligned above the bar, like the number on the game's boss bar.
-        let label = format!("{} / {}", target.hp, target.max_hp);
-        let size = ui.calc_text_size(&label);
-        let pos = [right - size[0], y + (TEXT_ROW * s - size[1]) / 2.0];
-        let shadow = s.max(1.0);
-        draw.add_text([pos[0] + shadow, pos[1] + shadow], TEXT_SHADOW, &label);
-        draw.add_text(pos, TEXT, label);
-        y += TEXT_ROW * s;
-    }
+    let label = format!("{} / {}", target.hp, target.max_hp);
 
     let top = y;
     let max_hp = target.max_hp as f32;
@@ -251,10 +242,22 @@ fn draw_target(ui: &Ui, target: &Target, trail: &Trail, layout: &Layout) {
         textures: layout.textures,
     };
     draw_bar(&draw, &hp_bar);
+    if layout.show_numbers {
+        // Centered on the health bar, over the red and the dark track alike.
+        let size = ui.calc_text_size(&label);
+        let pos = [(left + right - size[0]) / 2.0, (y + hp_bottom - size[1]) / 2.0];
+        draw_text(&draw, pos, &label, s);
+    }
 
     let mut bottom = hp_bottom;
     if let Some((poise, max)) = target.poise {
         bottom += POISE_HEIGHT * s;
+        if layout.show_numbers {
+            // The bar is too thin for text: right-aligned in a row under the tan line.
+            let label = format!("{:.0} / {:.0}", poise, max);
+            let size = ui.calc_text_size(&label);
+            draw_text(&draw, [right - size[0], bottom + POISE_TEXT_GAP * s], &label, s);
+        }
         let poise_bar = Bar {
             from: [left, hp_bottom],
             to: [right, bottom],
@@ -269,6 +272,13 @@ fn draw_target(ui: &Ui, target: &Target, trail: &Trail, layout: &Layout) {
         draw_bar(&draw, &poise_bar);
     }
     frame(&draw, left, right, top, bottom, s);
+}
+
+/// `text` at `pos` with a shadow so it reads over both the bar and the track.
+fn draw_text(draw: &DrawListMut<'_>, pos: [f32; 2], text: &str, s: f32) {
+    let shadow = s.max(1.0);
+    draw.add_text([pos[0] + shadow, pos[1] + shadow], TEXT_SHADOW, text);
+    draw.add_text(pos, TEXT, text);
 }
 
 fn draw_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>) {

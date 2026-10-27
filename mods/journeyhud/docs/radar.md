@@ -45,4 +45,4 @@ for Goblins (`mfg.rs`), khung và mũi tên bằng ảnh (`assets/`).
   thì radar xoay đúng chiều, đồng đội và spirit nằm đúng chỗ.
 - Lọc "cùng khu vực": chỉ lấy nhân vật cùng `block_id.area()` và trong 3 lần tầm radar, vì ở khu khác toạ độ chỉ
   trông gần.
-- Chưa có: kẻ địch xung quanh (ngoài mục tiêu khoá), nền bản đồ, thu phóng bằng phím (tầm chỉnh trong menu/ini).
+- Chưa có: kẻ địch xung quanh (ngoài mục tiêu khoá), nền bản đồ, thu phóng bằng phím (tầm chỉnh trong menu/toml).
