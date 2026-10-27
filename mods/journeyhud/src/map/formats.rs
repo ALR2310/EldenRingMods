@@ -1,5 +1,5 @@
 // Adapted from kubilaiswf-minimap (MIT, Copyright (c) 2026 kubilaiswf); the license
-// text is in LICENSE-kubilaiswf-minimap next to Cargo.toml. See docs/map.md.
+// text is in THIRD-PARTY-NOTICES.txt next to Cargo.toml. See docs/map.md.
 //! The container formats between an archive file and a texture: BXF4 binders, DCX
 //! compression and TPF texture packs. Layouts follow SoulsFormats.
 

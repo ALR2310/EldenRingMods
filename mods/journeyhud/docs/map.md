@@ -7,7 +7,7 @@ Bản đồ là chính các texture của game, đọc từ thư mục cài lúc
 ## Cách làm (theo kubilaiswf-minimap, MIT)
 
 Mã trong `src/map/` có 4 file (`reader.rs`, `archive.rs`, `formats.rs`, `tiles.rs`) chép từ `kubilaiswf-minimap` rồi sửa đường dẫn
-`use`, kèm chú thích nguồn ở đầu file và `LICENSE-kubilaiswf-minimap` cạnh `Cargo.toml`. `world.rs` và `layer.rs` viết theo ý tưởng
+`use`, kèm chú thích nguồn ở đầu file và `THIRD-PARTY-NOTICES.txt` cạnh `Cargo.toml`. `world.rs` và `layer.rs` viết theo ý tưởng
 của `game.rs` và `minimap.rs`. Năm khoá RSA công khai trong `src/map/keys/` là khoá của từng archive (cộng đồng đã công bố qua UXM
 và SoulsFormats), không phải khoá bí mật của ai.
 

@@ -1,5 +1,5 @@
 // The conversion follows kubilaiswf-minimap (MIT, Copyright (c) 2026 kubilaiswf, see
-// LICENSE-kubilaiswf-minimap), `game.rs`: same idea and constants, written against this
+// THIRD-PARTY-NOTICES.txt), `game.rs`: same idea and constants, written against this
 // crate's helpers. See docs/map.md.
 //! Where the player is on the world map: a block-local position converted to the
 //! map's coordinates (meters on the overworld grid), which space it belongs to

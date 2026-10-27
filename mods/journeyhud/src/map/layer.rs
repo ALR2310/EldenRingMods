@@ -1,5 +1,5 @@
 // The window logic follows kubilaiswf-minimap (MIT, Copyright (c) 2026 kubilaiswf, see
-// LICENSE-kubilaiswf-minimap), `minimap.rs`. See docs/map.md.
+// THIRD-PARTY-NOTICES.txt), `minimap.rs`. See docs/map.md.
 //! The map layer of the minimap: asks the loader for a 3x3 cell window of tiles
 //! around the player, uploads a finished one as a texture and hands it out to be
 //! drawn. hudhook leaks the staging buffer of every upload, so a new window is
