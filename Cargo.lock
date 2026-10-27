@@ -588,7 +588,9 @@ dependencies = [
  "libloading",
  "png",
  "rsa",
+ "serde",
  "texture2ddecoder",
+ "toml",
  "winresource",
 ]
 

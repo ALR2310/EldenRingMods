@@ -99,7 +99,7 @@ không icon điểm nào quá 62 px. Cỡ chốt sau thử game 2026-10-27: gấ
 
 ## Điểm không hiện (đã tra, 2026-10-27)
 
-Đã từng có khoá ini `MinimapDebug` ghi log các dòng bản đồ gần người chơi; đã gỡ sau khi tra xong. Kết quả thử game ở nhà thờ Elleh (bảng điểm 472 dòng): nhà thờ là dòng icon 3 (cờ mở bật,
+Đã từng có khoá config `MinimapDebug` ghi log các dòng bản đồ gần người chơi; đã gỡ sau khi tra xong. Kết quả thử game ở nhà thờ Elleh (bảng điểm 472 dòng): nhà thờ là dòng icon 3 (cờ mở bật,
 text hoạt động) nên chỉ thiếu sprite `MENU_MAP_03`, sửa bằng tên `MENU_MAP_Church`. Quy đổi toạ độ đúng (người chơi `m60_42_36` cục bộ (-63, 90), nhà thờ cách 25 m, grace 20 m). NPC khung hình người
 đội mũ trùm không có dòng nào gần: 71 dòng icon 80 nhưng gần nhất cách 208 m, icon 87 cách 738 m, icon 86 không có dòng nào. Ở chỗ khác NPC hiện bình thường (người dùng), nên chỗ Elleh có thể là
 trường hợp riêng (NPC không đi qua `WorldMapPointParam` hoặc là dấu của người chơi); chưa kết luận.

@@ -4,11 +4,11 @@
   },
   "enabled": {
     "label": "Target bar",
-    "help": "Show the health and poise of the enemy you are locked on to."
+    "help": "Show the health and posture of the enemy you are locked on to."
   },
   "numbers": {
     "label": "Health numbers",
-    "help": "Show the exact health above the target bar."
+    "help": "Show the health and posture numbers."
   },
   "width": {
     "label": "Bar length",
@@ -61,6 +61,10 @@
   "minimap_range": {
     "label": "Minimap range",
     "help": "How far the minimap sees, from its center to its rim, in meters."
+  },
+  "minimap_scale": {
+    "label": "Minimap scale",
+    "help": "Scale of the minimap. 1 = normal."
   },
   "minimap_size": {
     "label": "Minimap size",

@@ -1,5 +1,6 @@
 #![allow(non_snake_case)] // crate name is "JourneyHud" to control the output DLL's filename
 
+mod config;
 mod map;
 mod menu;
 mod radar;
@@ -9,11 +10,7 @@ mod target;
 mod textures;
 mod ui;
 
-use common::{config, dll_dir, logger};
-
-// The default config, embedded verbatim: the single source of truth for keys
-// and defaults.
-const DEFAULT_INI: &str = include_str!("../JourneyHud.ini");
+use common::{dll_dir, logger};
 
 /// # Safety
 /// This is exposed this way so the library loader can call it. Do not call it
@@ -27,19 +24,30 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
 
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
-        let ini_path = format!("{dir}\\JourneyHud.ini");
-        let added_keys = config::load_or_create_default(&ini_path, DEFAULT_INI);
+        let report = config::init(&format!("{dir}\\JourneyHud.toml"));
 
         // `LogFile` gates the log file entirely, see common::logger.
+        logger::set_enabled(config::get().logging.log_file);
         logger::init(&dir, "JourneyHud.log");
         logger::install_panic_hook();
-        if added_keys > 0 {
-            logger::log(&format!("JourneyHud.ini: added {added_keys} key(s) from the template"));
-        }
+        report.log("JourneyHud.toml");
 
-        settings::load();
+        settings::load(&config::get());
         // Early: the menu host only takes registrations in the first seconds.
-        menu::start(hmodule, ini_path);
+        menu::start(hmodule);
+        std::thread::spawn(|| {
+            common::reload::run_with(
+                || config::get().general.reload_key.clone(),
+                || config::get().general.reload_banner,
+                || {
+                    config::reload()?;
+                    logger::set_enabled(config::get().logging.log_file);
+                    settings::load(&config::get());
+                    menu::sync_from_config();
+                    Ok(())
+                },
+            )
+        });
         ui::install();
         common::diag::log_environment_when_game_ready();
         target::run();

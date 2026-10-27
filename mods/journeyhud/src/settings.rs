@@ -1,11 +1,12 @@
 //! The settings the overlay and the target reader use, held in atomics so a
-//! change from the in-game menu applies at once (the ini is written a second
-//! later by the menu's saver). Defaults and meaning: `JourneyHud.ini`.
+//! change from the in-game menu applies at once (the file is written a second
+//! later by the menu's saver). Defaults and meaning: `JourneyHud.toml`.
 
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
 
-use common::config;
 use common::input::parse_virtual_key;
+
+use crate::config::Config;
 
 const VK_OEM_PLUS: i32 = 0xBB;
 const VK_OEM_MINUS: i32 = 0xBD;
@@ -14,12 +15,14 @@ const VK_OEM_MINUS: i32 = 0xBD;
 const ZOOM_LEVELS: [i32; 3] = [50, 100, 200];
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
-static SHOW_NUMBERS: AtomicBool = AtomicBool::new(false);
+static SHOW_NUMBERS: AtomicBool = AtomicBool::new(true);
 static WIDTH: AtomicI32 = AtomicI32::new(220);
 static OFFSET_X: AtomicI32 = AtomicI32::new(48);
 static OFFSET_Y: AtomicI32 = AtomicI32::new(47);
 /// `f32` bits.
 static SCALE: AtomicU32 = AtomicU32::new(0x3F80_0000);
+/// `f32` bits.
+static MINIMAP_SCALE: AtomicU32 = AtomicU32::new(0x3F80_0000);
 static MINIMAP_ENABLED: AtomicBool = AtomicBool::new(true);
 static MINIMAP_MAP: AtomicBool = AtomicBool::new(true);
 static MINIMAP_GRACES: AtomicBool = AtomicBool::new(true);
@@ -34,26 +37,28 @@ static ZOOM_IN_KEY: AtomicI32 = AtomicI32::new(VK_OEM_PLUS);
 static ZOOM_OUT_KEY: AtomicI32 = AtomicI32::new(VK_OEM_MINUS);
 static MINIMAP_SIZE: AtomicI32 = AtomicI32::new(110);
 
-/// Reads every setting from the loaded config.
-pub fn load() {
-    set_enabled(config::get_bool("Enabled", true) as u8);
-    set_show_numbers(config::get_bool("ShowNumbers", false) as u8);
-    set_width(config::get_int("Width", 220) as f64);
-    set_offset_x(config::get_int("OffsetX", 48) as f64);
-    set_offset_y(config::get_int("OffsetY", 47) as f64);
-    set_scale(config::get_double("Scale", 1.0));
-    set_minimap_enabled(config::get_bool("MinimapEnabled", true) as u8);
-    set_minimap_map(config::get_bool("MinimapMap", true) as u8);
-    set_minimap_graces(config::get_bool("MinimapGraces", true) as u8);
-    set_minimap_points(config::get_bool("MinimapPoints", true) as u8);
-    set_minimap_beacons(config::get_bool("MinimapBeacons", true) as u8);
-    set_minimap_rotate(config::get_bool("MinimapRotate", true) as u8);
-    set_minimap_hide_in_caves(config::get_bool("MinimapHideInCaves", false) as u8);
-    set_minimap_hide_in_boss_fights(config::get_bool("MinimapHideInBossFights", false) as u8);
-    set_minimap_range(config::get_int("MinimapRange", 100) as f64);
-    ZOOM_IN_KEY.store(parse_virtual_key(&config::get_string("ZoomInKey", "0xBB"), VK_OEM_PLUS), Ordering::Relaxed);
-    ZOOM_OUT_KEY.store(parse_virtual_key(&config::get_string("ZoomOutKey", "0xBD"), VK_OEM_MINUS), Ordering::Relaxed);
-    set_minimap_size(config::get_int("MinimapSize", 110) as f64);
+/// Takes every setting from the loaded config.
+pub fn load(config: &Config) {
+    let (target, minimap) = (&config.target, &config.minimap);
+    set_enabled(target.enabled as u8);
+    set_show_numbers(target.show_numbers as u8);
+    set_width(f64::from(target.width));
+    set_offset_x(f64::from(config.layout.offset_x));
+    set_offset_y(f64::from(config.layout.offset_y));
+    set_scale(target.scale);
+    set_minimap_enabled(minimap.enabled as u8);
+    set_minimap_map(minimap.layers.map as u8);
+    set_minimap_graces(minimap.layers.graces as u8);
+    set_minimap_points(minimap.layers.points as u8);
+    set_minimap_beacons(minimap.layers.beacons as u8);
+    set_minimap_rotate(minimap.rotate as u8);
+    set_minimap_hide_in_caves(minimap.hide.in_caves as u8);
+    set_minimap_hide_in_boss_fights(minimap.hide.in_boss_fights as u8);
+    set_minimap_range(f64::from(minimap.range));
+    ZOOM_IN_KEY.store(parse_virtual_key(&minimap.zoom_in_key, VK_OEM_PLUS), Ordering::Relaxed);
+    ZOOM_OUT_KEY.store(parse_virtual_key(&minimap.zoom_out_key, VK_OEM_MINUS), Ordering::Relaxed);
+    set_minimap_size(f64::from(minimap.size));
+    set_minimap_scale(minimap.scale);
 }
 
 pub fn enabled() -> bool {
@@ -73,6 +78,11 @@ pub fn width() -> f32 {
 /// the top-right corner of the game's picture, in pixels at 1080p.
 pub fn offset() -> [f32; 2] {
     [OFFSET_X.load(Ordering::Relaxed) as f32, OFFSET_Y.load(Ordering::Relaxed) as f32]
+}
+
+/// Size multiplier of the minimap.
+pub fn minimap_scale() -> f32 {
+    f32::from_bits(MINIMAP_SCALE.load(Ordering::Relaxed))
 }
 
 pub fn scale() -> f32 {
@@ -169,6 +179,10 @@ pub fn set_offset_x(value: f64) {
 
 pub fn set_offset_y(value: f64) {
     OFFSET_Y.store(value.round().clamp(0.0, 400.0) as i32, Ordering::Relaxed);
+}
+
+pub fn set_minimap_scale(value: f64) {
+    MINIMAP_SCALE.store((value as f32).clamp(0.5, 3.0).to_bits(), Ordering::Relaxed);
 }
 
 pub fn set_scale(value: f64) {

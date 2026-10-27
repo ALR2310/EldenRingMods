@@ -54,7 +54,7 @@ const COLUMN_GAP: f32 = 14.0;
 /// for the target bar to sit under it. Follows the setting, not the fade, so
 /// the bar does not jump when the minimap hides.
 pub fn column_height(res: f32) -> f32 {
-    if settings::minimap_enabled() { (2.0 * settings::minimap_size() + COLUMN_GAP) * res } else { 0.0 }
+    if settings::minimap_enabled() { (2.0 * settings::minimap_size() * settings::minimap_scale() + COLUMN_GAP) * res } else { 0.0 }
 }
 
 /// The basis that keeps north (+Z) up and east (+X) to the right.
@@ -118,12 +118,14 @@ impl Radar {
             *yaw += wrap_angle(wanted - *yaw) * (dt * TURN_RATE).min(1.0);
         }
 
-        let s = placement.area[3] / 1080.0;
+        // `res` follows the screen only (where the column sits); `s` also holds the scale setting.
+        let res = placement.area[3] / 1080.0;
+        let s = res * settings::minimap_scale();
         let radius = settings::minimap_size() * s;
         let [offset_x, offset_y] = settings::offset();
         let center = [
-            placement.area[0] + placement.area[2] - offset_x * s - radius,
-            placement.area[1] + offset_y * s + radius,
+            placement.area[0] + placement.area[2] - offset_x * res - radius,
+            placement.area[1] + offset_y * res + radius,
         ];
         let draw = ui.get_foreground_draw_list();
         let view = View {
