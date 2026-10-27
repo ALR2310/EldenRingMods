@@ -14,6 +14,7 @@ use crate::map::layer::{Icon, IconTexture, MapIcon, MapLayer};
 use crate::map::points;
 use crate::map::tiles::{TILE, WINDOW, map_pixel};
 use crate::radar::{Dot, Snapshot};
+use crate::text;
 use crate::settings;
 
 /// Seconds-based easing rates (per second) of the fade in and out and of the
@@ -33,13 +34,11 @@ const GRACE: [f32; 4] = [1.0, 0.84, 0.47, 1.0];
 const NEEDLE_PIVOT: [f32; 2] = [0.5, 0.54];
 /// Height of a beacon's beam at 1080p.
 const BEACON_HEIGHT: f32 = 36.0;
-/// Pixels drawn per pixel of the game's map icon sprites (a normal icon is about 156 px).
-const POINT_SCALE: f32 = 0.28;
-/// People are a little smaller than the places and bigger than the grace, as in the game.
-const NPC_SCALE: f32 = 0.24;
-const GRACE_SCALE: f32 = 0.21;
+/// Pixels drawn per pixel of the game's map icon sprites (a normal icon is about 156 px); the
+/// places, the people and the graces all use it.
+const ICON_SCALE: f32 = 0.20;
 /// No point icon is drawn bigger than this many pixels on a side, at 1080p.
-const POINT_LIMIT: f32 = 62.0;
+const POINT_LIMIT: f32 = 42.0;
 const BADGE: [f32; 4] = [0.09, 0.08, 0.06, 0.78];
 const NORTH: [f32; 4] = [1.0, 0.87, 0.59, 1.0];
 const COMPASS: [f32; 4] = [0.84, 0.77, 0.59, 0.9];
@@ -49,8 +48,12 @@ const MAP_TINT: [f32; 4] = [0.93, 0.89, 0.82, 1.0];
 /// Wedges of the map disc.
 const MAP_SEGMENTS: usize = 72;
 
+/// Font size of the compass letters and the clock at 1080p (ImGui's 13 px font, 1.3 times).
+const TEXT_EM: f32 = 16.9;
 /// Gap between the minimap and the target bar under it, at 1080p.
 const COLUMN_GAP: f32 = 14.0;
+/// The same when the time sits in between: the gap under its row, tighter.
+const CLOCK_GAP: f32 = 6.0;
 /// Height of the row of the in-game time under the minimap, at 1080p.
 const CLOCK_ROW: f32 = 22.0;
 
@@ -61,8 +64,8 @@ pub fn column_height(res: f32) -> f32 {
     if !settings::minimap_enabled() {
         return 0.0;
     }
-    let clock = if settings::minimap_clock() { CLOCK_ROW } else { 0.0 };
-    (2.0 * settings::minimap_size() * settings::minimap_scale() + clock + COLUMN_GAP) * res
+    let below = if settings::minimap_clock() { CLOCK_ROW + CLOCK_GAP } else { COLUMN_GAP };
+    (2.0 * settings::minimap_size() * settings::minimap_scale() + below) * res
 }
 
 /// The basis that keeps north (+Z) up and east (+X) to the right.
@@ -199,7 +202,7 @@ impl Radar {
         }
         view.draw_player(&draw);
         if settings::minimap_clock() {
-            view.draw_clock(ui, &draw, snapshot, res);
+            view.draw_clock(ui, snapshot, res);
         }
     }
 }
@@ -355,8 +358,7 @@ impl View<'_> {
                 // The game's sprites are about 156 px for a normal icon; draw them at a fixed fraction
                 // of that, but never bigger than `POINT_LIMIT` pixels.
                 let npc = points::is_npc(point.icon);
-                let wanted = if npc { NPC_SCALE } else { POINT_SCALE };
-                let scale = (wanted * self.m).min(POINT_LIMIT * self.m / icon.size[1].max(icon.size[0]));
+                let scale = (ICON_SCALE * self.m).min(POINT_LIMIT * self.m / icon.size[1].max(icon.size[0]));
                 Some(PointMark {
                     at: self.at(screen, self.pixels_per_meter),
                     half: [icon.size[0] * scale / 2.0, icon.size[1] * scale / 2.0],
@@ -434,7 +436,7 @@ impl View<'_> {
             }
             let at = self.at(screen, self.pixels_per_meter);
             if let Some(icon) = icon {
-                self.draw_icon(draw, icon, at, icon.size[1] * GRACE_SCALE * self.m, 1.0);
+                self.draw_icon(draw, icon, at, icon.size[1] * ICON_SCALE * self.m, 1.0);
                 continue;
             }
             let [r, g, b, _] = GRACE;
@@ -537,28 +539,27 @@ impl View<'_> {
 
     /// N, E, S and W on the rim, turning with the camera.
     fn draw_compass(&self, ui: &Ui, draw: &DrawListMut<'_>) {
+        let em = TEXT_EM * self.m;
         for (i, letter) in ["N", "E", "S", "W"].into_iter().enumerate() {
             let (sin, cos) = (i as f32 * std::f32::consts::FRAC_PI_2).sin_cos();
             let at = self.at(self.to_screen([sin, cos]), self.radius - 12.0 * self.s);
             draw.add_circle(at, 8.0 * self.m, self.color(BADGE)).filled(true).build();
-            let size = ui.calc_text_size(letter);
+            let size = text::measure(ui, letter, em);
             let pos = [(at[0] - size[0] / 2.0).round(), (at[1] - size[1] / 2.0).round()];
-            let shadow = self.s.max(1.0);
-            draw.add_text([pos[0] + shadow, pos[1] + shadow], self.color(OUTLINE), letter);
-            draw.add_text(pos, self.color(if i == 0 { NORTH } else { COMPASS }), letter);
+            let color = self.color(if i == 0 { NORTH } else { COMPASS });
+            text::add_shadowed(letter, pos, em, color, self.color(OUTLINE), self.s.max(1.0));
         }
     }
 
     /// The in-game time, centered in its row right under the minimap.
-    fn draw_clock(&self, ui: &Ui, draw: &DrawListMut<'_>, snapshot: &Snapshot, res: f32) {
+    fn draw_clock(&self, ui: &Ui, snapshot: &Snapshot, res: f32) {
         let Some([hours, minutes]) = snapshot.clock else { return };
         let text = format!("{hours:02}:{minutes:02}");
-        let size = ui.calc_text_size(&text);
+        let em = TEXT_EM * res;
+        let size = text::measure(ui, &text, em);
         let row_top = self.center[1] + self.radius;
         let pos = [(self.center[0] - size[0] / 2.0).round(), (row_top + (CLOCK_ROW * res - size[1]) / 2.0).round()];
-        let shadow = self.s.max(1.0);
-        draw.add_text([pos[0] + shadow, pos[1] + shadow], self.color(OUTLINE), &text);
-        draw.add_text(pos, self.color(COMPASS), &text);
+        text::add_shadowed(&text, pos, em, self.color(COMPASS), self.color(OUTLINE), self.s.max(1.0));
     }
 
     /// The player's own arrow in the middle.

@@ -40,9 +40,28 @@ pub enum Icon {
     Enemy,
     /// A beacon: a thin beam whose lower tip is the spot.
     Beacon,
+    /// The status buildup icons, in the order of `target::BUILDUP`.
+    Poison,
+    ScarletRot,
+    Bleed,
+    DeathBlight,
+    Frostbite,
+    Sleep,
+    Madness,
 }
 
-const ICON_COUNT: usize = 8;
+impl Icon {
+    /// The icon of buildup `kind` (an index into `target::BUILDUP`).
+    pub fn buildup(kind: usize) -> Option<Icon> {
+        [Icon::Poison, Icon::ScarletRot, Icon::Bleed, Icon::DeathBlight, Icon::Frostbite, Icon::Sleep, Icon::Madness]
+            .get(kind)
+            .copied()
+    }
+}
+
+const ICON_COUNT: usize = 15;
+/// The icons from this one on (the buildup ones) are trimmed to their art.
+const BUILDUP_ICONS_FROM: usize = Icon::Poison as usize;
 
 /// Where each icon is in the game's menu sprite sheets, in the order of [Icon].
 const ICON_SPRITES: [SpriteRef; ICON_COUNT] = [
@@ -54,6 +73,13 @@ const ICON_SPRITES: [SpriteRef; ICON_COUNT] = [
     SpriteRef { sheet: "SB_MapCursor", name: "MENU_MAP_Friend_00" },
     SpriteRef { sheet: "SB_MapCursor", name: "MENU_MAP_Enemy_00" },
     SpriteRef { sheet: "SB_MapCursor", name: "MENU_MAP_Marker" },
+    SpriteRef { sheet: "SB_Condition", name: "MENU_RE_Poison" },
+    SpriteRef { sheet: "SB_Condition", name: "MENU_RE_Plague" },
+    SpriteRef { sheet: "SB_Condition", name: "MENU_RE_bleed" },
+    SpriteRef { sheet: "SB_Condition", name: "MENU_RE_Death" },
+    SpriteRef { sheet: "SB_Condition", name: "MENU_RE_Cold" },
+    SpriteRef { sheet: "SB_Condition", name: "MENU_RE_Sleep" },
+    SpriteRef { sheet: "SB_Condition", name: "MENU_RE_Mad" },
 ];
 
 /// An uploaded icon and its size in pixels.
@@ -214,7 +240,14 @@ impl MapLayer {
     fn upload_icons(&mut self, ctx: &mut dyn RenderContext, images: &[Image]) {
         let uploaded: Vec<IconTexture> = images
             .iter()
-            .filter_map(|image| {
+            .enumerate()
+            .filter_map(|(index, image)| {
+                // The buildup icons are sized for their art, without the margin of the sprite.
+                let image = if index >= BUILDUP_ICONS_FROM {
+                    image.trimmed(24)
+                } else {
+                    Image { width: image.width, height: image.height, rgba: image.rgba.clone() }
+                };
                 let texture = ctx.load_texture(&image.rgba, image.width, image.height).ok()?;
                 Some(IconTexture { texture, size: [image.width as f32, image.height as f32] })
             })

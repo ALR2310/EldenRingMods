@@ -23,6 +23,7 @@ thành HUD hành trình (minimap có nền bản đồ), xem `docs/design.md`.
 | Tính năng | Mô tả |
 |---|---|
 | **Panel mục tiêu** | thanh máu và thanh posture của kẻ địch đang khoá, vẽ giống thanh của game (số máu bật được) |
+| **Tích tụ trạng thái** | độ tích tụ độc, thối đỏ, chảy máu, tử khí, đóng băng, ngủ, điên loạn của kẻ địch đang khoá, dưới thanh posture, bằng icon của game; kẻ địch miễn nhiễm thì không hiện, tắt được |
 | **Minimap** | ô tròn xoay theo camera với đồng đội, spirit của mình và kẻ địch đang khoá, tắt được |
 | **Bản đồ** | bản đồ thế giới của game làm nền minimap, đọc từ thư mục game lúc chạy, tắt được |
 | **Grace** | các điểm grace đã tìm thấy hiện trên minimap bằng chính icon của game, tắt được |
