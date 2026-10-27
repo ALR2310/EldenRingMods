@@ -6,6 +6,8 @@
 
 use hudhook::imgui::{DrawListMut, Ui};
 
+use crate::map::layer::MapLayer;
+use crate::map::tiles::{TILE, WINDOW, map_pixel};
 use crate::radar::{Dot, Snapshot};
 use crate::settings;
 
@@ -24,6 +26,10 @@ const ENEMY: [f32; 4] = [0.78, 0.14, 0.12, 1.0];
 const NORTH: [f32; 4] = [1.0, 0.87, 0.59, 1.0];
 const COMPASS: [f32; 4] = [0.84, 0.77, 0.59, 0.9];
 const OUTLINE: [f32; 4] = [0.0, 0.0, 0.0, 0.85];
+/// Slightly warm, like the parchment of the map it is laid over.
+const MAP_TINT: [f32; 4] = [0.93, 0.89, 0.82, 1.0];
+/// Wedges of the map disc.
+const MAP_SEGMENTS: usize = 72;
 
 /// Gap between the minimap and the target bar under it, at 1080p.
 const COLUMN_GAP: f32 = 14.0;
@@ -43,11 +49,13 @@ pub struct Radar {
     yaw: Option<f32>,
     /// The camera's directions on the ground, last good ones.
     camera: ([f32; 2], [f32; 2]),
+    /// Whether the last frame was normal play (no menu changing the HUD, no fade).
+    in_control: bool,
 }
 
 impl Default for Radar {
     fn default() -> Self {
-        Radar { alpha: 0.0, yaw: None, camera: ([1.0, 0.0], [0.0, 1.0]) }
+        Radar { alpha: 0.0, yaw: None, camera: ([1.0, 0.0], [0.0, 1.0]), in_control: false }
     }
 }
 
@@ -58,10 +66,17 @@ pub struct Placement {
 }
 
 impl Radar {
-    /// Draws the radar for `snapshot` (`None` = nothing to show, fades out).
-    pub fn draw(&mut self, ui: &Ui, snapshot: Option<&Snapshot>, placement: &Placement) {
+    /// Whether the last frame was normal play: the time to upload textures.
+    pub fn in_control(&self) -> bool {
+        self.in_control
+    }
+
+    /// Draws the minimap for `snapshot` (`None` = nothing to show, fades out), with
+    /// the world map under the marks when `map` has a window for where the player is.
+    pub fn draw(&mut self, ui: &Ui, snapshot: Option<&Snapshot>, placement: &Placement, map: Option<&MapLayer>) {
         let dt = ui.io().delta_time;
         let in_control = snapshot.is_some_and(|s| s.hud_visible && s.fade < 0.05);
+        self.in_control = in_control;
         let target = if in_control { 1.0 } else { 0.0 };
         self.alpha += (target - self.alpha) * (dt * FADE_RATE).min(1.0);
         let Some(snapshot) = snapshot else { return };
@@ -96,6 +111,10 @@ impl Radar {
             pixels_per_meter: radius / settings::minimap_range(),
         };
         view.draw_plate(&draw);
+        if let Some(map) = map {
+            view.draw_map(&draw, snapshot, map);
+        }
+        view.draw_frame(&draw);
         view.draw_marks(&draw, snapshot);
         view.draw_compass(ui, &draw);
         view.draw_player(&draw);
@@ -128,8 +147,47 @@ impl View<'_> {
         [self.center[0] + direction[0] * distance, self.center[1] + direction[1] * distance]
     }
 
+    /// The inverse of `to_screen`: the camera's right and forward are orthonormal on the ground.
+    fn to_world(&self, [sx, sy]: [f32; 2]) -> [f32; 2] {
+        let ([rx, rz], [fx, fz]) = self.radar.camera;
+        [sx * rx - sy * fx, sx * rz - sy * fz]
+    }
+
     fn draw_plate(&self, draw: &DrawListMut<'_>) {
         draw.add_circle(self.center, self.radius, self.color(PLATE)).filled(true).num_segments(96).build();
+    }
+
+    /// The world map: a fan of wedges clips the texture to the disc and gives each
+    /// rim vertex its own rotated UV. Does nothing while there is no window for this spot.
+    fn draw_map(&self, draw: &DrawListMut<'_>, snapshot: &Snapshot, map: &MapLayer) {
+        let Some((texture, origin)) = snapshot.map.and_then(|id| map.window(id)) else { return };
+        let player = map_pixel(snapshot.position);
+        let meters_per_pixel = 1.0 / self.pixels_per_meter;
+        let uv = |offset: [f32; 2]| {
+            let world = self.to_world(offset.map(|d| d * meters_per_pixel));
+            let x = player[0] + world[0] - (origin[0] * TILE as i32) as f32;
+            let y = player[1] + world[1] - (origin[1] * TILE as i32) as f32;
+            [x / WINDOW as f32, 1.0 - y / WINDOW as f32]
+        };
+        let center_uv = uv([0.0, 0.0]);
+        // A window from somewhere else would draw the wrong place until the new one arrives.
+        if !center_uv.iter().all(|c| (0.0..=1.0).contains(c)) {
+            return;
+        }
+        let tint = self.color(MAP_TINT);
+        let rim = |k: usize| {
+            let (sin, cos) = (k as f32 / MAP_SEGMENTS as f32 * std::f32::consts::TAU).sin_cos();
+            [cos * self.radius, sin * self.radius]
+        };
+        for i in 0..MAP_SEGMENTS {
+            let (a, b) = (rim(i), rim(i + 1));
+            let (pa, pb) = ([self.center[0] + a[0], self.center[1] + a[1]], [self.center[0] + b[0], self.center[1] + b[1]]);
+            draw.add_image_quad(texture, self.center, pa, pb, pb).uv(center_uv, uv(a), uv(b), uv(b)).col(tint).build();
+        }
+    }
+
+    /// The guide rings and the rim.
+    fn draw_frame(&self, draw: &DrawListMut<'_>) {
         for fraction in [1.0 / 3.0, 2.0 / 3.0] {
             draw.add_circle(self.center, self.radius * fraction, self.color(GUIDE)).num_segments(96).thickness(self.s.max(1.0)).build();
         }

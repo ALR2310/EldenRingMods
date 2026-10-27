@@ -11,6 +11,8 @@ use std::time::{Duration, Instant};
 use eldenring::cs::{CSCamera, CSFade, CSFeManHudState, CSFeManImp, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
+use crate::map::tiles::MapId;
+use crate::map::world;
 use crate::settings;
 
 /// Another character as the radar draws it.
@@ -24,6 +26,11 @@ pub struct Dot {
 
 #[derive(Clone)]
 pub struct Snapshot {
+    /// Where the player is on the world map, in meters on the overworld grid
+    /// (see `map::world`).
+    pub position: [f32; 2],
+    /// The world map that shows the player's position, if any.
+    pub map: Option<MapId>,
     /// Horizontal direction the player faces.
     pub facing: [f32; 2],
     /// The camera's right and forward directions on the ground.
@@ -72,7 +79,8 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
     let view = &camera.pers_cam_1.matrix;
     let model = &player.chr_ins.chr_ctrl.physics_model_matrix;
     let origin = model.3;
-    let area = player.chr_ins.block_id.area();
+    let (position, space, map) =
+        world::locate(player.current_block_id, [player.block_position.x, player.block_position.z]);
     // Beyond this the other character is in some other part of the world
     // whose coordinates only look near.
     let reach = settings::minimap_range() * 3.0;
@@ -82,7 +90,7 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
         let offset = [model.3.0 - origin.0, model.3.2 - origin.2];
         let near = offset[0].hypot(offset[1]) <= reach;
         // Characters face down their model's -Z axis.
-        (chr.block_id.area() == area && near).then_some(Dot { offset, facing: [-model.2.0, -model.2.2] })
+        (near && world::locate(chr.block_id, [0.0, 0.0]).1 == space).then_some(Dot { offset, facing: [-model.2.0, -model.2.2] })
     };
 
     let partners = world_chr_man
@@ -95,6 +103,8 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
     common::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| spirits.extend(dot(chr)));
 
     Some(Snapshot {
+        position,
+        map,
         facing: [-model.2.0, -model.2.2],
         camera_right: [view.0.0, view.0.2],
         camera_forward: [view.2.0, view.2.2],
