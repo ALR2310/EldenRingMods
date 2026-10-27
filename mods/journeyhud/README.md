@@ -25,6 +25,9 @@ thành HUD hành trình (minimap có nền bản đồ), xem `docs/design.md`.
 | **Panel mục tiêu** | thanh máu và thanh poise của kẻ địch đang khoá, vẽ giống thanh của game (số máu bật được) |
 | **Minimap** | ô tròn xoay theo camera với đồng đội, spirit của mình và kẻ địch đang khoá, tắt được |
 | **Bản đồ** | bản đồ thế giới của game làm nền minimap, đọc từ thư mục game lúc chạy, tắt được |
+| **Grace** | các điểm grace đã tìm thấy hiện trên minimap bằng chính icon của game, tắt được |
+| **Địa điểm** | di tích, nhà thờ, hang, pháo đài, boss... của bản đồ thế giới hiện trên minimap bằng chính icon của game, tắt được |
+| **Beacon** | các beacon đã đặt trên bản đồ thế giới hiện trên minimap bằng icon của game, tắt được |
 | **Tự ẩn** | không khoá thì không vẽ gì; kẻ địch không có thanh poise thì chỉ hiện máu |
 
 ## Cấu hình
@@ -46,7 +49,7 @@ không chạm đối tượng game. Chi tiết: [docs/design.md](docs/design.md)
 
 ## Giới hạn
 
-- Bản đồ chỉ có overworld, hầm ngầm và dungeon (chưa có Shadow of the Erdtree), luôn hiện đủ, chưa có grace hay marker; minimap chưa hiện kẻ địch xung quanh (ngoài mục tiêu khoá); chưa có tên kẻ địch hay trạng thái (độc, chảy máu...).
+- Bản đồ chỉ có overworld, hầm ngầm và dungeon (chưa có Shadow of the Erdtree), luôn hiện đủ, chưa có marker ghi chú do người chơi đặt; minimap chưa hiện kẻ địch xung quanh (ngoài mục tiêu khoá); chưa có tên kẻ địch hay trạng thái (độc, chảy máu...).
 - Cần Elden Ring chạy DX12; có thể xung đột với phần mềm overlay khác hook DXGI (vd. MSI Afterburner).
 
 ## Tài liệu

@@ -3,9 +3,14 @@
 //! (`world`) and the layer that draws it (`layer`). Details: `docs/map.md`.
 
 mod archive;
+pub mod beacons;
+mod cache;
 mod formats;
+pub mod graces;
 pub mod layer;
+pub mod points;
 mod reader;
+pub mod sprites;
 pub mod tiles;
 pub mod world;
 

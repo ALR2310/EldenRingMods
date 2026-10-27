@@ -7,14 +7,80 @@
 //! only uploaded while the game is in normal play (on loading screens the upload
 //! can wait on a GPU queue that waits on the game).
 
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Mutex;
+use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
 use hudhook::RenderContext;
 use hudhook::imgui::TextureId;
 
 use common::logger;
 
+use super::sprites::{self, Image, SpriteRef};
 use super::tiles::{Loader, MapId, TILE, WINDOW, map_pixel};
+
+/// The game's own map icons the minimap draws marks with.
+#[derive(Clone, Copy)]
+pub enum Icon {
+    /// A site of grace.
+    Grace,
+    /// The player's own cursor: a needle that points the way, turning on its ring.
+    Player,
+    /// Another player's cursor, same shape.
+    Partner,
+    /// The figure inside the ring of the player's cursor.
+    PlayerEmblem,
+    /// The figure inside the ring of another player's cursor.
+    PartnerEmblem,
+    /// A summoned spirit.
+    Spirit,
+    /// The locked-on enemy.
+    Enemy,
+    /// A beacon: a thin beam whose lower tip is the spot.
+    Beacon,
+}
+
+const ICON_COUNT: usize = 8;
+
+/// Where each icon is in the game's menu sprite sheets, in the order of [Icon].
+const ICON_SPRITES: [SpriteRef; ICON_COUNT] = [
+    SpriteRef { sheet: "SB_MapCursor_02", name: "MENU_MAP_01_Bonfire" },
+    SpriteRef { sheet: "SB_MapCursor", name: "MENU_MAP_Player_01" },
+    SpriteRef { sheet: "SB_MapCursor", name: "MENU_MAP_Coop_01" },
+    SpriteRef { sheet: "SB_MapCursor", name: "MENU_MAP_Player_02" },
+    SpriteRef { sheet: "SB_MapCursor", name: "MENU_MAP_Coop_02" },
+    SpriteRef { sheet: "SB_MapCursor", name: "MENU_MAP_Friend_00" },
+    SpriteRef { sheet: "SB_MapCursor", name: "MENU_MAP_Enemy_00" },
+    SpriteRef { sheet: "SB_MapCursor", name: "MENU_MAP_Marker" },
+];
+
+/// An uploaded icon and its size in pixels.
+#[derive(Clone, Copy)]
+pub struct IconTexture {
+    pub texture: TextureId,
+    pub size: [f32; 2],
+}
+
+/// One world map icon in the atlas the icons are packed into.
+#[derive(Clone, Copy)]
+pub struct MapIcon {
+    pub uv_min: [f32; 2],
+    pub uv_max: [f32; 2],
+    /// Size of the game's sprite in pixels; the atlas holds it shrunk, same proportions.
+    pub size: [f32; 2],
+}
+
+struct MapIcons {
+    texture: TextureId,
+    cells: HashMap<u16, MapIcon>,
+}
+
+/// The atlas of world map icons is this many pixels on a side.
+const ATLAS: u32 = 1024;
+/// Longest side the icons are shrunk to, from the sharpest that fits the atlas to the smallest.
+const ICON_SIDES: [u32; 4] = [96, 80, 64, 48];
+const ICON_PADDING: u32 = 2;
 
 /// The window a request asks for: the map, its south-west cell and the fragments shown.
 type Wanted = (MapId, [i32; 2], u32);
@@ -25,6 +91,12 @@ pub struct MapLayer {
     /// The window in the texture: its map and south-west cell.
     shown: Option<(MapId, [i32; 2])>,
     requested: Option<Wanted>,
+    /// The sprites read on a background thread, until they are uploaded (or it is clear they
+    /// never will be).
+    /// In a `Mutex` only because the render loop must be `Sync`; `&mut self` reaches it unlocked.
+    sprites_pending: Mutex<Option<Receiver<sprites::Sprites>>>,
+    icons: Option<[IconTexture; ICON_COUNT]>,
+    map_icons: Option<MapIcons>,
 }
 
 impl MapLayer {
@@ -32,7 +104,23 @@ impl MapLayer {
     /// cannot be read no window is ever produced and the minimap stays without a map.
     pub fn new(game_dir: &Path) -> Self {
         logger::log("Map: loader started");
-        MapLayer { loader: Loader::spawn(game_dir), texture: None, shown: None, requested: None }
+        let (sender, sprites_pending) = channel();
+        let dir = game_dir.to_owned();
+        std::thread::spawn(move || match sprites::load(&dir, &ICON_SPRITES) {
+            Ok(sprites) => {
+                let _ = sender.send(sprites);
+            }
+            Err(e) => logger::warn(&format!("Map: sprites not read ({e}), drawn marks instead")),
+        });
+        MapLayer {
+            loader: Loader::spawn(game_dir),
+            texture: None,
+            shown: None,
+            requested: None,
+            sprites_pending: Mutex::new(Some(sprites_pending)),
+            icons: None,
+            map_icons: None,
+        }
     }
 
     /// Asks for a window around `position` on `map` when there is none, when it is for
@@ -56,6 +144,7 @@ impl MapLayer {
 
     /// Uploads the newest finished window, if any. Only call it in normal play.
     pub fn upload(&mut self, ctx: &mut dyn RenderContext) {
+        self.upload_sprites(ctx);
         let Some(window) = self.loader.poll() else { return };
         let size = WINDOW as u32;
         let uploaded = match self.texture {
@@ -85,5 +174,137 @@ impl MapLayer {
             (Some(texture), Some((shown, origin))) if shown == map => Some((texture, origin)),
             _ => None,
         }
+    }
+}
+
+impl MapLayer {
+    /// Uploads the sprites once they are read, and stops asking once they are or cannot be.
+    fn upload_sprites(&mut self, ctx: &mut dyn RenderContext) {
+        let pending = self.sprites_pending.get_mut().unwrap_or_else(|e| e.into_inner());
+        let Some(receiver) = pending.as_ref() else { return };
+        let sprites = match receiver.try_recv() {
+            Ok(sprites) => sprites,
+            Err(TryRecvError::Empty) => return,
+            Err(TryRecvError::Disconnected) => {
+                *pending = None;
+                return;
+            }
+        };
+        *pending = None;
+        match sprites.icons {
+            Ok(images) => self.upload_icons(ctx, &images),
+            Err(e) => logger::warn(&format!("Map: icons not read ({e}), drawn marks instead")),
+        }
+        match sprites.map_icons {
+            Ok(icons) => self.upload_map_icons(ctx, &icons),
+            Err(e) => logger::warn(&format!("Map: point icons not read ({e})")),
+        }
+    }
+
+    /// Uploads the icons (all of them or none).
+    fn upload_icons(&mut self, ctx: &mut dyn RenderContext, images: &[Image]) {
+        let uploaded: Vec<IconTexture> = images
+            .iter()
+            .filter_map(|image| {
+                let texture = ctx.load_texture(&image.rgba, image.width, image.height).ok()?;
+                Some(IconTexture { texture, size: [image.width as f32, image.height as f32] })
+            })
+            .collect();
+        match <[IconTexture; ICON_COUNT]>::try_from(uploaded) {
+            Ok(icons) => {
+                logger::log("Map: icons uploaded");
+                self.icons = Some(icons);
+            }
+            Err(_) => logger::warn("Map: icons could not be uploaded, drawn marks instead"),
+        }
+    }
+
+    /// The texture of a game icon, once it is read and uploaded.
+    pub fn icon(&self, icon: Icon) -> Option<IconTexture> {
+        self.icons.map(|icons| icons[icon as usize])
+    }
+}
+
+impl MapLayer {
+    /// Packs the world map's point icons into one texture and uploads it.
+    fn upload_map_icons(&mut self, ctx: &mut dyn RenderContext, icons: &[(u16, Image)]) {
+        let Some((rgba, cells)) = ICON_SIDES.iter().find_map(|&side| pack(icons, side)) else {
+            logger::warn("Map: point icons do not fit the atlas");
+            return;
+        };
+        match ctx.load_texture(&rgba, ATLAS, ATLAS) {
+            Ok(texture) => {
+                logger::log(&format!("Map: {} point icon(s) uploaded", cells.len()));
+                self.map_icons = Some(MapIcons { texture, cells });
+            }
+            Err(e) => logger::warn(&format!("Map: point icons could not be uploaded ({e:?})")),
+        }
+    }
+
+    /// The atlas texture and the cell of the world map icon `id` (a `WorldMapPointParam` icon id).
+    pub fn map_icon(&self, id: u16) -> Option<(TextureId, MapIcon)> {
+        let icons = self.map_icons.as_ref()?;
+        Some((icons.texture, *icons.cells.get(&id)?))
+    }
+}
+
+/// Shrinks every icon to at most `side` pixels and packs them in rows into an `ATLAS` square
+/// (RGBA), padded so filtering does not bleed one into the next. `None` if they do not fit.
+fn pack(icons: &[(u16, Image)], side: u32) -> Option<(Vec<u8>, HashMap<u16, MapIcon>)> {
+    let mut shrunk: Vec<(u16, [f32; 2], Image)> =
+        icons.iter().map(|(id, image)| (*id, [image.width as f32, image.height as f32], image.shrunk(side))).collect();
+    shrunk.sort_by_key(|(_, _, image)| std::cmp::Reverse(image.height));
+    let mut rgba = vec![0u8; (ATLAS * ATLAS * 4) as usize];
+    let mut cells = HashMap::new();
+    let (mut x, mut y, mut row) = (ICON_PADDING, ICON_PADDING, 0);
+    for (id, size, image) in &shrunk {
+        if x + image.width + ICON_PADDING > ATLAS {
+            (x, y, row) = (ICON_PADDING, y + row + ICON_PADDING, 0);
+        }
+        if y + image.height + ICON_PADDING > ATLAS {
+            return None;
+        }
+        for line in 0..image.height {
+            let from = (line * image.width * 4) as usize;
+            let to = (((y + line) * ATLAS + x) * 4) as usize;
+            rgba[to..to + (image.width * 4) as usize].copy_from_slice(&image.rgba[from..from + (image.width * 4) as usize]);
+        }
+        let uv = |px: u32, py: u32| [px as f32 / ATLAS as f32, py as f32 / ATLAS as f32];
+        cells.insert(*id, MapIcon { uv_min: uv(x, y), uv_max: uv(x + image.width, y + image.height), size: *size });
+        x += image.width + ICON_PADDING;
+        row = row.max(image.height);
+    }
+    Some((rgba, cells))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn square(side: u32, shade: u8) -> Image {
+        Image { width: side, height: side, rgba: [shade, 0, 0, 255].repeat((side * side) as usize) }
+    }
+
+    #[test]
+    fn icons_are_packed_without_overlapping_and_keep_their_original_size() {
+        let icons = vec![(4, square(40, 10)), (5, square(300, 20)), (6, square(40, 30))];
+        let (rgba, cells) = pack(&icons, 100).unwrap();
+        assert_eq!(cells.len(), 3);
+        // The 300 px icon is shrunk to 100 px in the atlas but reports its original size.
+        let big = cells[&5];
+        assert_eq!(big.size, [300.0, 300.0]);
+        assert!(((big.uv_max[0] - big.uv_min[0]) * ATLAS as f32 - 100.0).abs() < 0.5);
+        // Every cell holds its own shade at its top-left pixel, so none was overwritten.
+        for (id, shade) in [(4, 10), (5, 20), (6, 30)] {
+            let cell = cells[&id];
+            let at = (((cell.uv_min[1] * ATLAS as f32) as u32 * ATLAS + (cell.uv_min[0] * ATLAS as f32) as u32) * 4) as usize;
+            assert_eq!(rgba[at], shade, "icon {id}");
+        }
+    }
+
+    #[test]
+    fn icons_that_do_not_fit_are_refused() {
+        let icons: Vec<_> = (0..400u16).map(|id| (id, square(90, 1))).collect();
+        assert!(pack(&icons, 96).is_none());
     }
 }

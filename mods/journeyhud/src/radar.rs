@@ -12,7 +12,7 @@ use eldenring::cs::{CSCamera, CSFade, CSFeManHudState, CSFeManImp, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
 use crate::map::tiles::MapId;
-use crate::map::world;
+use crate::map::{beacons, graces, points, world};
 use crate::settings;
 
 /// Another character as the radar draws it.
@@ -31,6 +31,12 @@ pub struct Snapshot {
     pub position: [f32; 2],
     /// The world map that shows the player's position, if any.
     pub map: Option<MapId>,
+    /// Offsets of the sites of grace the player has found, within reach.
+    pub graces: Vec<[f32; 2]>,
+    /// The visible points of interest of the world map, within reach.
+    pub points: Vec<points::Point>,
+    /// Offsets of the beacons the player has placed on this map.
+    pub beacons: Vec<[f32; 2]>,
     /// Horizontal direction the player faces.
     pub facing: [f32; 2],
     /// The camera's right and forward directions on the ground.
@@ -105,6 +111,22 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
     Some(Snapshot {
         position,
         map,
+        beacons: match (settings::minimap_beacons(), map) {
+            (true, Some(map)) => beacons::placed(map)
+                .into_iter()
+                .map(|beacon| [beacon.position[0] - position[0], beacon.position[1] - position[1]])
+                .collect(),
+            _ => Vec::new(),
+        },
+        points: match (settings::minimap_points(), map) {
+            (true, Some(map)) => points::nearby(map, position, space, settings::minimap_range() * 1.2),
+            _ => Vec::new(),
+        },
+        graces: if settings::minimap_graces() {
+            graces::nearby(position, space, settings::minimap_range() * 1.2)
+        } else {
+            Vec::new()
+        },
         facing: [-model.2.0, -model.2.2],
         camera_right: [view.0.0, view.0.2],
         camera_forward: [view.2.0, view.2.2],
