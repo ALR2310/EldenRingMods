@@ -31,6 +31,7 @@ pwsh scripts/ida/run.ps1 <script> [-Version <ver|all>] <tham số...>
 | `decompile.py` | Decompile hàm, kèm callee ngắn / string tham chiếu | `run.ps1 decompile 1e92100 --callees --strings` |
 | `disasm.py` | Disasm kèm byte thô (dựng AOB, chọn độ dài patch) | `run.ps1 disasm 25e0e0:30` hoặc `... --func` |
 | `xrefs.py` | Nơi gọi và tham chiếu dữ liệu, nhiều tầng | `run.ps1 xrefs 25e0e0 --depth=2 --decompile` |
+| `imports.py` | Import khớp một chuỗi (DLL hoặc tên), kèm nơi gọi | `run.ps1 imports dinput xinput GetForegroundWindow` |
 | `strings.py` | Từ string tìm ra hàm (ASCII lẫn UTF-16) | `run.ps1 strings "Warping to" --decompile` |
 | `aob.py` | Một mẫu AOB có duy nhất không, ở những bản exe nào | `run.ps1 aob -Version all "48 8B 05 ?? ?? ?? ?? 48 85 C0"` |
 | `vtable.py` | Slot của vtable theo tên class RTTI hoặc địa chỉ | `run.ps1 vtable CSChrBehaviorModule --slots=40` |
