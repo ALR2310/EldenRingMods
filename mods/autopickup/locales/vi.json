@@ -28,7 +28,7 @@
   },
   "range": {
     "label": "Tầm nhặt",
-    "help": "Bạn có thể đứng xa đến đâu. 1.0 là khoảng cách gốc của game; cũng đổi khoảng cách hiện gợi ý nhặt."
+    "help": "Bạn có thể đứng xa đến đâu, từ 0.1 đến 10. 1.0 là khoảng cách gốc của game."
   },
   "combat": {
     "label": "Tạm dừng khi chiến đấu",

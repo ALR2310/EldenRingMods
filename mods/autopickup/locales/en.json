@@ -28,7 +28,7 @@
   },
   "range": {
     "label": "Range",
-    "help": "How far away you can be. 1.0 is the game's own distance; it also changes how far away the prompt shows."
+    "help": "How far away you can be, 0.1 to 10. 1.0 is the game's own distance."
   },
   "combat": {
     "label": "Pause in combat",
