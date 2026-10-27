@@ -7,7 +7,7 @@ use hudhook::hooks::dx12::ImguiDx12Hooks;
 use hudhook::imgui::{Context, DrawListMut, Ui};
 use hudhook::{Hudhook, ImguiRenderLoop, RenderContext};
 
-use common::logger;
+use common::{input, logger};
 
 use crate::map::layer::MapLayer;
 use crate::radar::{self, Snapshot as RadarSnapshot};
@@ -146,6 +146,13 @@ impl ImguiRenderLoop for HudRenderLoop {
     }
 
     fn render(&mut self, ui: &mut Ui) {
+        if settings::minimap_enabled() {
+            for (key, zoom_in) in [(settings::zoom_in_key(), true), (settings::zoom_out_key(), false)] {
+                if input::is_key_pressed(key) {
+                    settings::zoom(zoom_in);
+                }
+            }
+        }
         let snapshot: Option<RadarSnapshot> = radar::current();
         let show_map = settings::minimap_map();
         if let (Some(map), Some(snapshot), true) = (self.map.as_mut(), snapshot.as_ref(), show_map) {
