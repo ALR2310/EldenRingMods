@@ -7,7 +7,7 @@
 ![Rust](https://img.shields.io/badge/Rust-2024_edition-orange?logo=rust)
 ![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)
 ![Game](https://img.shields.io/badge/game-Elden_Ring-8a6d3b)
-![Mods](https://img.shields.io/badge/mods-15-green)
+![Mods](https://img.shields.io/badge/mods-16-green)
 
 </div>
 
@@ -42,6 +42,7 @@ Seamless Co-op và các bản mod lớn như Convergence và Reforged.
 | [**SpiritMultiplier**](mods/spiritmultiplier) | Nhân số linh hồn (spirit ash) triệu hồi, vượt trần mặc định             | [11168](https://www.nexusmods.com/eldenring/mods/11168) |
 | [**WeightMultiplier**](mods/weightmultiplier) | Nhân hệ số Trọng Tải                                                    | [10549](https://www.nexusmods.com/eldenring/mods/10549) |
 | [**WindowResize**](mods/windowresize)         | Kéo viền để đổi kích thước cửa sổ Windowed                              | nội bộ                                                  |
+| [**InputBridge**](mods/inputbridge)           | Gửi phím vào game đang ở nền, để agent kiểm tra mod tự động            | nội bộ                                                  |
 | [**SomeTweaks**](mods/sometweaks)             | Gói QoL thử nghiệm, đã ngừng phát triển                                 | không đăng                                              |
 
 Phiên bản và ghi chú phát hành của từng mod nằm ở `CHANGELOG.md` trong thư mục mod đó.

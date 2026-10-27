@@ -1,0 +1,24 @@
+[package]
+name = "inputbridge"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "InputBridge"
+crate-type = ["cdylib"]
+
+[dependencies]
+common = { path = "../../shared" }
+# MinHook (`hudhook::mh`), same as soulsteleport's input_block.rs; only the DX12 backend feature is needed to build.
+hudhook = { version = "0.9.3", default-features = false, features = ["dx12"] }
+
+[build-dependencies]
+winresource = "0.1"
+
+# Windows version resource (DLL Properties), see build.rs
+[package.metadata.winresource]
+ProductName = "Input Bridge"
+FileDescription = "Input Bridge - Elden Ring mod"
+InternalName = "InputBridge"
+OriginalFilename = "InputBridge.dll"
