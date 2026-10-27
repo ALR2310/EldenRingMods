@@ -37,7 +37,7 @@ nằm ở `Unique`) khỏi nhóm farm vô hại.
 ## Phân loại từng ô
 
 Dựa trên export vanilla 1.17 của `ItemLotParam_map` và `EquipParamGoods` (CSV
-trích bằng Smithbox, để trong `tmp/`, tạo lại được). Mỗi ô của 1 dòng lot rơi
+trích bằng Smithbox, để trong `tmp/csv/`, tạo lại được). Mỗi ô của 1 dòng lot rơi
 vào đúng một nhóm, hoặc không nhóm nào:
 
 1. **Không đụng**: ô không phải Goods (`lotItemCategory0N != 1`), hoặc Goods có
