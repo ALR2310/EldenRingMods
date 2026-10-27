@@ -17,6 +17,7 @@ members = [
     "mods/speedmultiplier",
     "mods/animcancel",
     "mods/autopickup",
+    "mods/inputbridge",
 ]
 
 [workspace.dependencies]
