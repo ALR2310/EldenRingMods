@@ -68,6 +68,16 @@ hết vào nhánh `mod/` của mod.
   `docs/nexus.md`. Phân tích dump crash: `docs/crash_dump_analysis.md`. Cổng "đã
   vào game", đọc/ghi param an toàn, hot reload, log riêng tư: `shared/docs/`.
 
+## Thư mục `tmp/` (git-ignored)
+
+- `tmp/repos/`: mã nguồn tham khảo clone về (souls_vision, kubilaiswf-minimap,
+  ERNativeUI...); trong tài liệu dẫn bằng `tmp/repos/<tên>`.
+- `tmp/csv/`: dữ liệu param xuất ra (bản vanilla, Convergence...).
+- `tmp/scratchpad/`: **mọi file tạm của phiên làm việc** (script sửa hàng loạt,
+  ảnh chụp, dump IDE...) lưu ở đây, không để ở thư mục scratchpad của hệ thống vì
+  Windows dọn nó (người dùng, 2026-10-27). Dump giải mã IDA lẻ để ở
+  `tmp/scratchpad/ida/`. Không để file lẻ ngay trong `tmp/`.
+
 ## Tài liệu của mỗi mod: README, CHANGELOG, HISTORY, docs
 
 Mỗi mod có 4 loại tài liệu, mỗi loại 1 vai trò, không trộn lẫn:
