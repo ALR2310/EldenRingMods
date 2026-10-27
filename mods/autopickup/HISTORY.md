@@ -15,3 +15,4 @@ link sang `docs/`.
 | 2026-10-27 | `NoPickupAnimation` không có tác dụng ở lần thử đầu (`animeID_DropItemPick` không phải animation vật phẩm trên đất); tìm ra `GameSystemCommonParam...itemGetAnimId_shine`, đổi code sang ghi trường đó. | [docs](docs/pickup_animation.md) |
 | 2026-10-27 | Người dùng thử trong game và xác nhận `NoPickupAnimation` (ghi `itemGetAnimId_shine` và `animeID_DropItemPick`) tắt được animation nhặt vật phẩm trên đất | [docs](docs/pickup_animation.md) |
 | 2026-10-27 | `NoPickupAnimation` đổi thêm animation nhặt hài cốt (`itemGetAnimId_corpse`) và rương (`itemGetAnimId_box`); người dùng thử và xác nhận ổn | [docs](docs/pickup_animation.md) |
+| 2026-10-27 | Phát hành 1.1.0 (`NoPickupAnimation`). Phát hiện file mẫu đăng kèm có mặc định `true`, người dùng chốt giữ; sửa test cho khớp | [docs](docs/pickup_animation.md) |
