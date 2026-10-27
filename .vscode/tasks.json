@@ -257,6 +257,23 @@
             "problemMatcher": "$rustc"
         },
         {
+            "label": "Cargo: Build InputBridge (Release)",
+            "detail": "Builds InputBridge (release), then copies InputBridge.dll + InputBridge.ini into builds/<crate>/",
+            "type": "process",
+            "command": "powershell.exe",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
+                "-Mod", "InputBridge"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": "$rustc"
+        },
+        {
             "label": "Cargo: Build JourneyHud (Release)",
             "detail": "Builds JourneyHud (release), then copies JourneyHud.dll + JourneyHud.ini into builds/<crate>/",
             "type": "process",
@@ -293,6 +310,7 @@
                 "Cargo: Build WindowResize (Release)",
                 "Cargo: Build AnimCancel (Release)",
                 "Cargo: Build AutoPickup (Release)",
+                "Cargo: Build InputBridge (Release)",
                 "Cargo: Build JourneyHud (Release)"
             ],
             "group": "build",
