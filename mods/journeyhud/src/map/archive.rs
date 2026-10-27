@@ -1,5 +1,5 @@
 // Adapted from kubilaiswf-minimap (MIT, Copyright (c) 2026 kubilaiswf); the license
-// text is in LICENSE-kubilaiswf-minimap next to Cargo.toml. See docs/map.md.
+// text is in THIRD-PARTY-NOTICES.txt next to Cargo.toml. See docs/map.md.
 //! Reads files out of Elden Ring's encrypted `DataN.bhd`/`DataN.bdt` archives.
 //! Formats follow SoulsFormats (BHD5) and UXM (keys, path hashes).
 

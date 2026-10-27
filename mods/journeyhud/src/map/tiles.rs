@@ -1,5 +1,5 @@
 // Adapted from kubilaiswf-minimap (MIT, Copyright (c) 2026 kubilaiswf); the license
-// text is in LICENSE-kubilaiswf-minimap next to Cargo.toml. See docs/map.md.
+// text is in THIRD-PARTY-NOTICES.txt next to Cargo.toml. See docs/map.md.
 //! Streams the game's own world map textures around the player.
 //!
 //! The menu map is a 41x41 grid of 256px tiles (`MENU_MapTile_Mxx_L0_XX_YY_flags`) at one pixel

@@ -1,5 +1,5 @@
 // Adapted from kubilaiswf-minimap (MIT, Copyright (c) 2026 kubilaiswf); the license
-// text is in LICENSE-kubilaiswf-minimap next to Cargo.toml. See docs/map.md.
+// text is in THIRD-PARTY-NOTICES.txt next to Cargo.toml. See docs/map.md.
 use std::io;
 
 /// Bounds-checked little-endian reads over the offset tables FromSoftware's formats are made of.
