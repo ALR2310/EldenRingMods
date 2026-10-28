@@ -2,6 +2,14 @@
   "mod": {
     "help": "Settings for the Journey HUD mod."
   },
+  "target_page": {
+    "title": "Target panel",
+    "help": "The health, posture and status buildup of the enemy you are locked on to, and where they sit."
+  },
+  "minimap_page": {
+    "title": "Minimap",
+    "help": "The round minimap: what it shows, how big it is and when it hides."
+  },
   "enabled": {
     "label": "Target bar",
     "help": "Show the health and posture of the enemy you are locked on to."

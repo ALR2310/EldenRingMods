@@ -30,6 +30,8 @@ const EMPTY: [u8; 4] = [40, 34, 26, 255];
 pub enum MapId {
     Overworld,
     Underground,
+    /// The Land of Shadow of the Shadow of the Erdtree (`M10`, area 61).
+    Shadow,
 }
 
 impl MapId {
@@ -37,16 +39,29 @@ impl MapId {
         match name {
             "M00" => Some(Self::Overworld),
             "M01" => Some(Self::Underground),
+            "M10" => Some(Self::Shadow),
             _ => None,
         }
     }
 }
 
-/// Converts an overworld-aligned position (meters, see `game.rs`) to menu map pixels, Y up.
-/// Map cell (i, j) shows overworld tile m60_{i+28}_{j+24}_00, centers aligned.
-pub fn map_pixel([x, z]: [f32; 2]) -> [f32; 2] {
+impl MapId {
+    /// The tile of the world (m60 or m61) that map cell (0, 0) shows: the Land of Shadow sits in the
+    /// same frame as the base map (checked in game, `docs/map.md`).
+    fn origin(self) -> [f32; 2] {
+        match self {
+            MapId::Overworld | MapId::Underground | MapId::Shadow => [28.0, 24.0],
+        }
+    }
+}
+
+/// Converts an overworld-aligned position (meters, see `game.rs`) on `map` to menu map pixels, Y up.
+/// Map cell (i, j) shows overworld tile m60_{i+28}_{j+24}, centers aligned (m61 for the Land of
+/// Shadow).
+pub fn map_pixel(map: MapId, [x, z]: [f32; 2]) -> [f32; 2] {
     const HALF: f32 = TILE as f32 / 2.0;
-    [x + HALF - 28.0 * TILE as f32, z + HALF - 24.0 * TILE as f32]
+    let [tile_x, tile_z] = map.origin();
+    [x + HALF - tile_x * TILE as f32, z + HALF - tile_z * TILE as f32]
 }
 
 /// 3x3 map cells stitched into one RGBA image, rows top (north) first.

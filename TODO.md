@@ -63,20 +63,12 @@ Chi tiết từng mục: `docs/cleanup_verify.md`. Chỉ build và unit test, ch
 
 Chi tiết: `mods/journeyhud/docs/design.md`
 
-- [ ] [verify] JourneyHUD: poise giảm khi đánh trúng, khối vàng/vệt sáng khi mất máu, chạy trên 2.7.1.0 (đã thử 2.7.2.0)
-- [ ] [verify] JourneyHUD: menu ERNativeUI (hàng Journey HUD, đổi cỡ/độ dài/lề áp dụng ngay, lưu `JourneyHUD.toml` giữ chú thích, không có host thì chạy bằng file)
-- [ ] [verify] JourneyHUD: nạp `JourneyHUD.toml` (tạo file mới, khoá sai báo lỗi kèm dòng, `F5` nạp lại và menu cập nhật), DLL tên `JourneyHUD` nạp theo `external_dlls`
-- [ ] [verify] JourneyHUD: số máu trong thanh và số posture dưới thanh (`Target.ShowNumbers`, chữ có tràn thanh 12 px không), `Target.Scale` và `Minimap.Scale`
-- [ ] [verify] JourneyHUD: phím zoom `+`/`-` vòng 50/100/200 m, `Rotate = false` (bắc luôn ở trên), `Compass`, `CoopPlayers`, `Spirits`
-- [ ] [verify] JourneyHUD: ẩn minimap trong hang và hầm mộ (`Hide.InCaves`, hầm ngầm vẫn hiện) và khi đánh boss (`Hide.InBossFights`, hiện lại sau trận)
-- [ ] [verify] JourneyHUD: `FullMap = false` (nền chỉ hiện phần mảnh bản đồ đã có, nhặt mảnh mới thì vẽ lại ngay) (`docs/map.md`)
-- [ ] [verify] JourneyHUD: marker Map for Goblins (cần thêm `MapForGoblins.dll` vào `external_dlls`; log `Map for Goblins icon(s) uploaded`, icon đúng chỗ) (`docs/map.md`)
-- [ ] [verify] JourneyHUD: đồng hồ giờ trong game dưới minimap (`Minimap.Clock`; giờ khớp đồng hồ của game; bố cục đã kiểm IDA cả 4 bản, `docs/offsets.md`)
-- [ ] [verify] JourneyHUD: vệt đường đã đi (`Minimap.Trail`, mặc định tắt; mờ dần, xoá khi dịch chuyển hoặc đổi dungeon) (`docs/radar.md`)
-- [ ] [verify] JourneyHUD: minimap (mũi tên đúng hướng, xoay đúng chiều khi quay camera, đồng đội/spirit/kẻ địch khoá đúng chỗ, ẩn khi mở menu/tải) (`docs/radar.md`)
-- [ ] [verify] JourneyHUD: nền bản đồ (khớp vị trí, xoay theo camera, dời cửa sổ không giật, hầm ngầm và dungeon, không treo ở màn hình tải) (`docs/map.md`)
-- [ ] [verify] JourneyHUD: grace trên minimap (chấm vàng đúng chỗ so với bản đồ trong game, chỉ grace đã tìm thấy, cả dungeon) (`docs/map.md`)
-- [ ] [verify] JourneyHUD: địa điểm trên minimap (icon đúng loại và đúng chỗ so với bản đồ trong game, ẩn khi chưa mở, boss đã hạ thì mờ) (`docs/map.md`)
-- [ ] [verify] JourneyHUD: beacon trên minimap (đặt beacon trên bản đồ rồi xem tia xanh đúng chỗ, số slot, ngoài tầm thì ghim viền); grace không còn che địa điểm (`docs/map.md`)
-- [ ] [verify] JourneyHUD: thanh tích tụ trạng thái của kẻ địch (`Target.Buildup`: giá trị đếm xuống từ tối đa, ngưỡng miễn nhiễm 999, icon đúng loại; xem dòng `Buildup:` trong log) (`docs/buildup.md`)
-- [ ] [research] JourneyHUD: kiểm đầu chuỗi beacon (CSMenuMan +0x80 +0x250) trên 2.6.2.0 đến 2.7.1.0, bản đồ Shadow of the Erdtree (area 61), mảnh bản đồ theo cờ; kẻ địch xung quanh trên minimap (`docs/map.md`)
+- [ ] [bug] JourneyHUD: game crash hỏng heap (0xC0000374, 2026-10-27 20:51, game đang giải phóng `MicrosoftDiskFileOperator`), chưa rõ mod nào; thử chỉ JourneyHUD, bấm F5 ít thôi
+- [ ] [verify] JourneyHUD: khối vàng của thanh posture khi bị rút, và poise/posture trên 2.7.1.0 (đã thử 2.7.2.0)
+- [ ] [verify] JourneyHUD: menu ERNativeUI (hàng Journey HUD, đổi cỡ/độ dài/lề áp dụng ngay, lưu `JourneyHUD.toml` giữ chú thích, F5 cập nhật hàng menu)
+- [ ] [verify] JourneyHUD: phím zoom số `0x6B`/`0x6D` (danh sách `ZoomInKey`/`ZoomOutKey`), `Spirits`, kẻ địch khoá trên minimap
+- [ ] [verify] JourneyHUD: cột HUD trượt lên khi minimap ẩn do `Hide.InCaves`/`Hide.InBossFights`, và giữ chỗ khi ẩn do menu hay màn hình tải
+- [ ] [verify] JourneyHUD: marker Map for Goblins cỡ 0,30 (`GOBLIN_SCALE`), beacon trên minimap (tia xanh đúng chỗ, số slot, ngoài tầm ghim viền) (`docs/map.md`)
+- [ ] [verify] JourneyHUD: bản đồ nền trong hầm ngầm và dungeon, không treo ở màn hình tải; grace chỉ hiện cái đã tìm thấy, cả dungeon (`docs/map.md`)
+- [ ] [verify] JourneyHUD: mảnh bản đồ DLC (`FullMap = false` ở DLC; log `Map: piece rows` có dải 200-204; nhặt mảnh DLC thì nền hiện thêm vùng) (`docs/map.md`)
+- [ ] [research] JourneyHUD: kẻ địch xung quanh trên minimap, đầu chuỗi beacon trên 2.6.2.0 đến 2.7.1.0 (`docs/map.md`)

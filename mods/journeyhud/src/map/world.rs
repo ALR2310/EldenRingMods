@@ -43,8 +43,12 @@ pub fn locate(block: BlockId, local: [f32; 2]) -> ([f32; 2], i32, Option<MapId>)
             local[0] + f32::from(block.block()) * tile + center,
             local[1] + f32::from(block.region()) * tile + center,
         ];
-        // The Shadow of the Erdtree map (area 61) has no tiles here.
-        let map = (block.area() == 60).then_some(MapId::Overworld);
+        // The base map is area 60, the Land of Shadow area 61.
+        let map = match block.area() {
+            60 => Some(MapId::Overworld),
+            61 => Some(MapId::Shadow),
+            _ => None,
+        };
         return (position, i32::from(block.area()), map);
     }
     // Roundtable Hold has a world map spot but is not anywhere on the map itself.
@@ -57,6 +61,7 @@ pub fn locate(block: BlockId, local: [f32; 2]) -> ([f32; 2], i32, Option<MapId>)
     let (space, map) = match (dst_area, block.area()) {
         (60, 12) => (12, Some(MapId::Underground)),
         (60, _) => (60, Some(MapId::Overworld)),
+        (61, _) => (61, Some(MapId::Shadow)),
         (area, _) => (i32::from(area), None),
     };
     (position, space, map)

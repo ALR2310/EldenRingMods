@@ -156,7 +156,7 @@ impl MapLayer {
     /// another map, when the fragments to show changed, or when the player is within `margin`
     /// meters of its edge.
     pub fn follow(&mut self, map: MapId, position: [f32; 2], margin: f32, fragments: u32) {
-        let pixel = map_pixel(position);
+        let pixel = map_pixel(map, position);
         let reload = match self.requested {
             // A newly found fragment redraws the window in place.
             Some((requested_map, origin, shown)) if requested_map == map => {

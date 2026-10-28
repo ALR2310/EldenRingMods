@@ -5,6 +5,7 @@
 //! Details: `docs/radar.md`.
 
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use hudhook::imgui::{DrawListMut, Ui};
 
@@ -37,6 +38,8 @@ const BEACON_HEIGHT: f32 = 36.0;
 /// Pixels drawn per pixel of the game's map icon sprites (a normal icon is about 156 px); the
 /// places, the people and the graces all use it.
 const ICON_SCALE: f32 = 0.20;
+/// Pixels drawn per pixel of the art of a Map for Goblins marker (96 px at most): 0.3, so 29 px.
+const GOBLIN_SCALE: f32 = 0.30;
 /// No point icon is drawn bigger than this many pixels on a side, at 1080p.
 const POINT_LIMIT: f32 = 42.0;
 const BADGE: [f32; 4] = [0.09, 0.08, 0.06, 0.78];
@@ -57,15 +60,23 @@ const CLOCK_GAP: f32 = 6.0;
 /// Height of the row of the in-game time under the minimap, at 1080p.
 const CLOCK_ROW: f32 = 22.0;
 
+/// How far the column has closed up over a minimap hidden by `Hide.InCaves` or
+/// `Hide.InBossFights`, 0 (open) to 1 (closed), as `f32` bits; set by [Radar::draw].
+static COLLAPSED: AtomicU32 = AtomicU32::new(0);
+/// How fast the column closes up and opens again, per second.
+const COLLAPSE_RATE: f32 = 8.0;
+
 /// Height the minimap takes at the top of the right-hand column, gap included,
-/// for the target bar to sit under it. Follows the setting, not the fade, so
-/// the bar does not jump when the minimap hides.
+/// for the target bar to sit under it. Follows the setting, not the fade, so the bar
+/// does not jump when the minimap hides for a menu or a loading screen; a minimap hidden by
+/// the cave or boss option gives its room to the bar, which slides up.
 pub fn column_height(res: f32) -> f32 {
     if !settings::minimap_enabled() {
         return 0.0;
     }
     let below = if settings::minimap_clock() { CLOCK_ROW + CLOCK_GAP } else { COLUMN_GAP };
-    (2.0 * settings::minimap_size() * settings::minimap_scale() + below) * res
+    let open = 1.0 - f32::from_bits(COLLAPSED.load(Ordering::Relaxed));
+    (2.0 * settings::minimap_size() * settings::minimap_scale() + below) * res * open
 }
 
 /// The basis that keeps north (+Z) up and east (+X) to the right.
@@ -87,6 +98,8 @@ pub struct Radar {
     camera: ([f32; 2], [f32; 2]),
     /// Whether the last frame was normal play (no menu changing the HUD, no fade).
     in_control: bool,
+    /// 0 to 1: how far the column has closed up over a minimap hidden by an option.
+    collapsed: f32,
     /// Where the player has been, oldest first, in `trail_space`.
     trail: VecDeque<[f32; 2]>,
     trail_space: i32,
@@ -94,7 +107,7 @@ pub struct Radar {
 
 impl Default for Radar {
     fn default() -> Self {
-        Radar { alpha: 0.0, yaw: None, camera: ([1.0, 0.0], [0.0, 1.0]), in_control: false, trail: VecDeque::new(), trail_space: 0 }
+        Radar { alpha: 0.0, yaw: None, camera: ([1.0, 0.0], [0.0, 1.0]), in_control: false, collapsed: 0.0, trail: VecDeque::new(), trail_space: 0 }
     }
 }
 
@@ -145,6 +158,8 @@ impl Radar {
         let hidden = snapshot.is_some_and(|s| {
             (settings::minimap_hide_in_caves() && s.in_cave) || (settings::minimap_hide_in_boss_fights() && s.boss_fight)
         });
+        self.collapsed += (if hidden { 1.0 } else { 0.0 } - self.collapsed) * (dt * COLLAPSE_RATE).min(1.0);
+        COLLAPSED.store(self.collapsed.to_bits(), Ordering::Relaxed);
         let target = if in_control && !hidden { 1.0 } else { 0.0 };
         self.alpha += (target - self.alpha) * (dt * FADE_RATE).min(1.0);
         let Some(snapshot) = snapshot else { return };
@@ -303,8 +318,9 @@ impl View<'_> {
     /// The world map: a fan of wedges clips the texture to the disc and gives each
     /// rim vertex its own rotated UV. Does nothing while there is no window for this spot.
     fn draw_map(&self, draw: &DrawListMut<'_>, snapshot: &Snapshot, map: &MapLayer) {
-        let Some((texture, origin)) = snapshot.map.and_then(|id| map.window(id)) else { return };
-        let player = map_pixel(snapshot.position);
+        let Some(id) = snapshot.map else { return };
+        let Some((texture, origin)) = map.window(id) else { return };
+        let player = map_pixel(id, snapshot.position);
         let meters_per_pixel = 1.0 / self.pixels_per_meter;
         let uv = |offset: [f32; 2]| {
             let world = self.to_world(offset.map(|d| d * meters_per_pixel));
@@ -415,7 +431,7 @@ impl View<'_> {
             }
             let Some((texture, icon)) = layer.goblin_icon(marker.icon) else { continue };
             let at = self.at(screen, self.pixels_per_meter);
-            let half = [icon.size[0] / 12.0 * self.m, icon.size[1] / 12.0 * self.m];
+            let half = [icon.size[0] * GOBLIN_SCALE / 2.0 * self.m, icon.size[1] * GOBLIN_SCALE / 2.0 * self.m];
             draw.add_image(texture, [at[0] - half[0], at[1] - half[1]], [at[0] + half[0], at[1] + half[1]])
                 .uv_min(icon.uv_min)
                 .uv_max(icon.uv_max)

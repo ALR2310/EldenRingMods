@@ -42,7 +42,7 @@ siêu rộng) và co giãn theo độ cao khung đó.
 
 ## Menu trong game
 
-Có `ERNativeUI.dll` thì hiện hàng **Journey HUD** ở System > Game Options (bật tắt, số máu, độ dài, cỡ, hai lề); đổi
+Có `ERNativeUI.dll` thì hiện hàng **Journey HUD** ở System > Game Options (hai trang con: Panel mục tiêu và Minimap, mỗi trang có các tuỳ chọn của nó); đổi
 là áp dụng ngay và được ghi lại vào `JourneyHUD.toml`. Không có thì mod chạy bằng file đó như bình thường.
 
 ## Cách hoạt động

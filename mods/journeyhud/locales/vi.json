@@ -2,6 +2,14 @@
   "mod": {
     "help": "Thiết lập cho mod Journey HUD."
   },
+  "target_page": {
+    "title": "Panel mục tiêu",
+    "help": "Máu, posture và tích tụ trạng thái của kẻ địch đang khoá, cùng vị trí của chúng."
+  },
+  "minimap_page": {
+    "title": "Minimap",
+    "help": "Minimap tròn: hiện gì, to cỡ nào và khi nào ẩn."
+  },
   "enabled": {
     "label": "Thanh mục tiêu",
     "help": "Hiện máu và posture của kẻ địch đang khoá mục tiêu."

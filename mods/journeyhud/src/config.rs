@@ -65,12 +65,37 @@ pub struct Minimap {
     pub trail: bool,
     pub clock: bool,
     pub full_map: bool,
-    #[serde(deserialize_with = "common::toml_config::key_name")]
-    pub zoom_in_key: String,
-    #[serde(deserialize_with = "common::toml_config::key_name")]
-    pub zoom_out_key: String,
+    #[serde(deserialize_with = "key_list")]
+    pub zoom_in_key: Vec<String>,
+    #[serde(deserialize_with = "key_list")]
+    pub zoom_out_key: Vec<String>,
     pub layers: Layers,
     pub hide: Hide,
+}
+
+/// A hotkey field that takes one key or a list of them: `"0xBB"`, `116` or `["0xBB", "0x6B"]`,
+/// each a key name or a virtual-key code (see `common::toml_config::key_name`).
+fn key_list<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Key {
+        Name(String),
+        Code(i64),
+    }
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Keys {
+        One(Key),
+        Many(Vec<Key>),
+    }
+    let name = |key: Key| match key {
+        Key::Name(name) => name,
+        Key::Code(code) => code.to_string(),
+    };
+    Ok(match Keys::deserialize(deserializer)? {
+        Keys::One(key) => vec![name(key)],
+        Keys::Many(keys) => keys.into_iter().map(name).collect(),
+    })
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
@@ -200,7 +225,16 @@ mod tests {
     fn zoom_keys_take_a_name_or_a_number() {
         let parsed: Config =
             common::toml_config::parse("[Minimap]\nZoomInKey = \"F8\"\nZoomOutKey = 0xBD\n", TEMPLATE).unwrap();
-        assert_eq!(parsed.minimap.zoom_in_key, "F8");
-        assert_eq!(common::input::parse_virtual_key(&parsed.minimap.zoom_out_key, 0), 0xBD);
+        assert_eq!(parsed.minimap.zoom_in_key, ["F8"]);
+        assert_eq!(common::input::parse_virtual_key(&parsed.minimap.zoom_out_key[0], 0), 0xBD);
+    }
+
+    #[test]
+    fn a_zoom_key_can_be_a_list_of_keys() {
+        let parsed: Config =
+            common::toml_config::parse("[Minimap]\nZoomInKey = [\"0xBB\", 107]\n", TEMPLATE).unwrap();
+        assert_eq!(parsed.minimap.zoom_in_key, ["0xBB", "107"]);
+        // The template gives the numpad keys too.
+        assert_eq!(template().minimap.zoom_out_key, ["0xBD", "0x6D"]);
     }
 }

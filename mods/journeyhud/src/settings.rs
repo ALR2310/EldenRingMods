@@ -11,6 +11,9 @@ use crate::config::Config;
 const VK_OEM_PLUS: i32 = 0xBB;
 const VK_OEM_MINUS: i32 = 0xBD;
 
+/// How many keys each zoom direction takes (0 = none).
+const ZOOM_KEYS: usize = 4;
+
 /// The minimap ranges (meters from the center to the rim) the zoom keys step through.
 const ZOOM_LEVELS: [i32; 3] = [50, 100, 200];
 
@@ -41,8 +44,8 @@ static MINIMAP_HIDE_IN_CAVES: AtomicBool = AtomicBool::new(false);
 static MINIMAP_HIDE_IN_BOSS_FIGHTS: AtomicBool = AtomicBool::new(false);
 static MINIMAP_RANGE: AtomicI32 = AtomicI32::new(100);
 /// Virtual-key codes of the zoom keys.
-static ZOOM_IN_KEY: AtomicI32 = AtomicI32::new(VK_OEM_PLUS);
-static ZOOM_OUT_KEY: AtomicI32 = AtomicI32::new(VK_OEM_MINUS);
+static ZOOM_IN_KEYS: [AtomicI32; ZOOM_KEYS] = [AtomicI32::new(VK_OEM_PLUS), AtomicI32::new(0), AtomicI32::new(0), AtomicI32::new(0)];
+static ZOOM_OUT_KEYS: [AtomicI32; ZOOM_KEYS] = [AtomicI32::new(VK_OEM_MINUS), AtomicI32::new(0), AtomicI32::new(0), AtomicI32::new(0)];
 static MINIMAP_SIZE: AtomicI32 = AtomicI32::new(110);
 
 /// Takes every setting from the loaded config.
@@ -71,8 +74,8 @@ pub fn load(config: &Config) {
     set_minimap_hide_in_caves(minimap.hide.in_caves as u8);
     set_minimap_hide_in_boss_fights(minimap.hide.in_boss_fights as u8);
     set_minimap_range(f64::from(minimap.range));
-    ZOOM_IN_KEY.store(parse_virtual_key(&minimap.zoom_in_key, VK_OEM_PLUS), Ordering::Relaxed);
-    ZOOM_OUT_KEY.store(parse_virtual_key(&minimap.zoom_out_key, VK_OEM_MINUS), Ordering::Relaxed);
+    store_keys(&ZOOM_IN_KEYS, &minimap.zoom_in_key);
+    store_keys(&ZOOM_OUT_KEYS, &minimap.zoom_out_key);
     set_minimap_size(f64::from(minimap.size));
     set_minimap_scale(minimap.scale);
 }
@@ -189,12 +192,21 @@ pub fn minimap_range() -> f32 {
     MINIMAP_RANGE.load(Ordering::Relaxed) as f32
 }
 
-pub fn zoom_in_key() -> i32 {
-    ZOOM_IN_KEY.load(Ordering::Relaxed)
+/// The virtual-key codes that zoom in (0 = unused).
+pub fn zoom_in_keys() -> [i32; ZOOM_KEYS] {
+    ZOOM_IN_KEYS.each_ref().map(|key| key.load(Ordering::Relaxed))
 }
 
-pub fn zoom_out_key() -> i32 {
-    ZOOM_OUT_KEY.load(Ordering::Relaxed)
+pub fn zoom_out_keys() -> [i32; ZOOM_KEYS] {
+    ZOOM_OUT_KEYS.each_ref().map(|key| key.load(Ordering::Relaxed))
+}
+
+/// Puts the first `ZOOM_KEYS` of `names` in `slots`; a name that is no key leaves its slot unused.
+fn store_keys(slots: &[AtomicI32; ZOOM_KEYS], names: &[String]) {
+    for (i, slot) in slots.iter().enumerate() {
+        let code = names.get(i).map_or(0, |name| parse_virtual_key(name, 0));
+        slot.store(code, Ordering::Relaxed);
+    }
 }
 
 /// Steps the range to the next level: smaller when zooming in, larger when zooming out, and

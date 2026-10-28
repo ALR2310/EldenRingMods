@@ -3,32 +3,13 @@
 //! `JourneyHUD.toml` file only. Layout (System > Game Options):
 //!
 //! ```text
-//! Journey HUD                -> opens a page with:
-//!                                 Minimap         on/off
-//!                                 Map             on/off
-//!                                 Graces          on/off
-//!                                 Points          on/off
-//!                                 Beacons         on/off
-//!                                 Map for Goblins on/off
-//!                                 Co-op players   on/off
-//!                                 Spirits         on/off
-//!                                 Full map        on/off
-//!                                 Clock           on/off
-//!                                 Trail           on/off
-//!                                 Compass         on/off
-//!                                 Turn with camera on/off
-//!                                 Hide in caves   on/off
-//!                                 Hide in boss fights on/off
-//!                                 Minimap range   slider
-//!                                 Minimap size    slider
-//!                                 Minimap scale   stepped
-//!                                 Target bar      on/off
-//!                                 Health numbers  on/off
-//!                                 Status buildup  on/off
-//!                                 Bar length      slider
-//!                                 Size            slider
-//!                                 Right margin    slider
-//!                                 Top margin      slider
+//! Journey HUD                -> two pages:
+//!   Target panel             -> Target bar on/off, Health numbers on/off, Status buildup on/off,
+//!                               Bar length slider, Size stepped, Right margin slider, Top margin slider
+//!   Minimap                  -> Minimap on/off, Map, Graces, Points, Beacons, Map for Goblins,
+//!                               Co-op players, Spirits, Full map, Clock, Trail, Compass, Turn with
+//!                               camera, Hide in caves, Hide in boss fights (all on/off),
+//!                               Minimap range and size (sliders), Minimap scale (stepped)
 //! ```
 //!
 //! Changes apply at once and are written back to `JourneyHUD.toml` shortly after the
@@ -109,60 +90,62 @@ fn t(key: &str) -> String {
 }
 
 fn build(b: &mut erui::MenuBuilder) -> Result<(), String> {
-    let page = b.submenu(b.root(), "Journey HUD", &t("mod.help"))?;
-    b.toggle(page, &t("enabled.label"), &t("enabled.help"), &ENABLED, || config::get().target.enabled as u8)?;
-    b.toggle(page, &t("numbers.label"), &t("numbers.help"), &SHOW_NUMBERS, || {
+    let root = b.submenu(b.root(), "Journey HUD", &t("mod.help"))?;
+    let target = b.submenu(root, &t("target_page.title"), &t("target_page.help"))?;
+    let minimap = b.submenu(root, &t("minimap_page.title"), &t("minimap_page.help"))?;
+    b.toggle(target, &t("enabled.label"), &t("enabled.help"), &ENABLED, || config::get().target.enabled as u8)?;
+    b.toggle(target, &t("numbers.label"), &t("numbers.help"), &SHOW_NUMBERS, || {
         config::get().target.show_numbers as u8
     })?;
-    b.toggle(page, &t("buildup.label"), &t("buildup.help"), &BUILDUP, || config::get().target.buildup as u8)?;
-    b.number(page, &t("width.label"), &t("width.help"), &WIDTH, || f64::from(config::get().target.width))?;
-    b.number(page, &t("scale.label"), &t("scale.help"), &SCALE, || config::get().target.scale)?;
-    b.number(page, &t("offset_x.label"), &t("offset_x.help"), &OFFSET_X, || f64::from(config::get().layout.offset_x))?;
-    b.number(page, &t("offset_y.label"), &t("offset_y.help"), &OFFSET_Y, || f64::from(config::get().layout.offset_y))?;
-    b.toggle(page, &t("minimap.label"), &t("minimap.help"), &MINIMAP, || config::get().minimap.enabled as u8)?;
-    b.toggle(page, &t("minimap_map.label"), &t("minimap_map.help"), &MINIMAP_MAP, || config::get().minimap.layers.map as u8)?;
-    b.toggle(page, &t("minimap_graces.label"), &t("minimap_graces.help"), &MINIMAP_GRACES, || {
+    b.toggle(target, &t("buildup.label"), &t("buildup.help"), &BUILDUP, || config::get().target.buildup as u8)?;
+    b.number(target, &t("width.label"), &t("width.help"), &WIDTH, || f64::from(config::get().target.width))?;
+    b.number(target, &t("scale.label"), &t("scale.help"), &SCALE, || config::get().target.scale)?;
+    b.number(target, &t("offset_x.label"), &t("offset_x.help"), &OFFSET_X, || f64::from(config::get().layout.offset_x))?;
+    b.number(target, &t("offset_y.label"), &t("offset_y.help"), &OFFSET_Y, || f64::from(config::get().layout.offset_y))?;
+    b.toggle(minimap, &t("minimap.label"), &t("minimap.help"), &MINIMAP, || config::get().minimap.enabled as u8)?;
+    b.toggle(minimap, &t("minimap_map.label"), &t("minimap_map.help"), &MINIMAP_MAP, || config::get().minimap.layers.map as u8)?;
+    b.toggle(minimap, &t("minimap_graces.label"), &t("minimap_graces.help"), &MINIMAP_GRACES, || {
         config::get().minimap.layers.graces as u8
     })?;
-    b.toggle(page, &t("minimap_points.label"), &t("minimap_points.help"), &MINIMAP_POINTS, || {
+    b.toggle(minimap, &t("minimap_points.label"), &t("minimap_points.help"), &MINIMAP_POINTS, || {
         config::get().minimap.layers.points as u8
     })?;
-    b.toggle(page, &t("minimap_beacons.label"), &t("minimap_beacons.help"), &MINIMAP_BEACONS, || {
+    b.toggle(minimap, &t("minimap_beacons.label"), &t("minimap_beacons.help"), &MINIMAP_BEACONS, || {
         config::get().minimap.layers.beacons as u8
     })?;
-    b.toggle(page, &t("minimap_goblins.label"), &t("minimap_goblins.help"), &MINIMAP_GOBLINS, || {
+    b.toggle(minimap, &t("minimap_goblins.label"), &t("minimap_goblins.help"), &MINIMAP_GOBLINS, || {
         config::get().minimap.layers.map_for_goblins as u8
     })?;
-    b.toggle(page, &t("minimap_coop.label"), &t("minimap_coop.help"), &MINIMAP_COOP, || {
+    b.toggle(minimap, &t("minimap_coop.label"), &t("minimap_coop.help"), &MINIMAP_COOP, || {
         config::get().minimap.layers.coop_players as u8
     })?;
-    b.toggle(page, &t("minimap_spirits.label"), &t("minimap_spirits.help"), &MINIMAP_SPIRITS, || {
+    b.toggle(minimap, &t("minimap_spirits.label"), &t("minimap_spirits.help"), &MINIMAP_SPIRITS, || {
         config::get().minimap.layers.spirits as u8
     })?;
-    b.toggle(page, &t("minimap_full_map.label"), &t("minimap_full_map.help"), &MINIMAP_FULL_MAP, || {
+    b.toggle(minimap, &t("minimap_full_map.label"), &t("minimap_full_map.help"), &MINIMAP_FULL_MAP, || {
         config::get().minimap.full_map as u8
     })?;
-    b.toggle(page, &t("minimap_clock.label"), &t("minimap_clock.help"), &MINIMAP_CLOCK, || {
+    b.toggle(minimap, &t("minimap_clock.label"), &t("minimap_clock.help"), &MINIMAP_CLOCK, || {
         config::get().minimap.clock as u8
     })?;
-    b.toggle(page, &t("minimap_trail.label"), &t("minimap_trail.help"), &MINIMAP_TRAIL, || {
+    b.toggle(minimap, &t("minimap_trail.label"), &t("minimap_trail.help"), &MINIMAP_TRAIL, || {
         config::get().minimap.trail as u8
     })?;
-    b.toggle(page, &t("minimap_compass.label"), &t("minimap_compass.help"), &MINIMAP_COMPASS, || {
+    b.toggle(minimap, &t("minimap_compass.label"), &t("minimap_compass.help"), &MINIMAP_COMPASS, || {
         config::get().minimap.compass as u8
     })?;
-    b.toggle(page, &t("minimap_rotate.label"), &t("minimap_rotate.help"), &MINIMAP_ROTATE, || {
+    b.toggle(minimap, &t("minimap_rotate.label"), &t("minimap_rotate.help"), &MINIMAP_ROTATE, || {
         config::get().minimap.rotate as u8
     })?;
-    b.toggle(page, &t("minimap_hide_caves.label"), &t("minimap_hide_caves.help"), &MINIMAP_HIDE_IN_CAVES, || {
+    b.toggle(minimap, &t("minimap_hide_caves.label"), &t("minimap_hide_caves.help"), &MINIMAP_HIDE_IN_CAVES, || {
         config::get().minimap.hide.in_caves as u8
     })?;
-    b.toggle(page, &t("minimap_hide_boss.label"), &t("minimap_hide_boss.help"), &MINIMAP_HIDE_IN_BOSS_FIGHTS, || {
+    b.toggle(minimap, &t("minimap_hide_boss.label"), &t("minimap_hide_boss.help"), &MINIMAP_HIDE_IN_BOSS_FIGHTS, || {
         config::get().minimap.hide.in_boss_fights as u8
     })?;
-    b.number(page, &t("minimap_range.label"), &t("minimap_range.help"), &MINIMAP_RANGE, || f64::from(config::get().minimap.range))?;
-    b.number(page, &t("minimap_scale.label"), &t("minimap_scale.help"), &MINIMAP_SCALE, || config::get().minimap.scale)?;
-    b.number(page, &t("minimap_size.label"), &t("minimap_size.help"), &MINIMAP_SIZE, || f64::from(config::get().minimap.size))?;
+    b.number(minimap, &t("minimap_range.label"), &t("minimap_range.help"), &MINIMAP_RANGE, || f64::from(config::get().minimap.range))?;
+    b.number(minimap, &t("minimap_scale.label"), &t("minimap_scale.help"), &MINIMAP_SCALE, || config::get().minimap.scale)?;
+    b.number(minimap, &t("minimap_size.label"), &t("minimap_size.help"), &MINIMAP_SIZE, || f64::from(config::get().minimap.size))?;
     Ok(())
 }
 
@@ -186,7 +169,7 @@ mod tests {
     /// have the same keys (nothing missing, nothing left over).
     #[test]
     fn language_files_match_the_menu_keys() {
-        TEXT.assert_matches_source(include_str!("menu.rs"), 51);
+        TEXT.assert_matches_source(include_str!("menu.rs"), 55);
     }
 
     /// Every key a row saves to is in the template, so a save never invents a key.

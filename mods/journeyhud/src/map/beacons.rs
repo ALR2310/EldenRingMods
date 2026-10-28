@@ -54,6 +54,7 @@ pub fn placed(map: MapId) -> Vec<Beacon> {
     let wanted = match map {
         MapId::Overworld => 0,
         MapId::Underground => 1,
+        MapId::Shadow => 2,
     };
     let Ok(menu) = CSMenuManImp::instance_ptr() else { return Vec::new() };
     let save = pointer(menu as usize + MENU_TO_OWNER)
