@@ -36,10 +36,11 @@ Menu sprite sheet của game đã có sẵn, đọc được bằng cách `map/s
 3. Vẽ: dưới thanh posture, mỗi thanh một hàng nhỏ (icon + thanh theo màu loại + số), dùng sprite `SB_Condition` và `Condition_Bar`; sprite nạp một lần cùng các sprite khác trong `ICON_SPRITES`.
 4. Khoá cấu hình `Target.Buildup` (mặc định bật, cũng trong menu game). Log ghi một dòng `Buildup: <loại> <đã tích>/<tối đa>` mỗi khi tập loại đang tích tụ đổi, để xem giá trị thật cư xử thế nào.
 
-Bố cục vẽ: mỗi loại một hàng 17 px (1080p) dưới đường be: icon `SB_Condition` cao 16 px (đã cắt lề trong suốt của sprite, chỉ còn phần hình; sprite gốc 126x108 có lề nên trước khi cắt icon trông nhỏ hơn và cách thanh vài px), thanh dày 12 px (bằng thanh máu) tô màu theo loại nối liền ngay sau icon (không cách), hai icon trên dưới cách nhau 1 px; thanh posture dày 12 px như thanh máu; không số.
+Bố cục vẽ (`ShowNumbers` bật thì mỗi thanh có `đã tích / tối đa` ở giữa, cùng cỡ chữ 10 px như số máu): mỗi loại một hàng 17 px (1080p) dưới đường be: icon `SB_Condition` cao 16 px (đã cắt lề trong suốt của sprite, chỉ còn phần hình; sprite gốc 126x108 có lề nên trước khi cắt icon trông nhỏ hơn và cách thanh vài px), thanh dày 12 px (bằng thanh máu) tô màu theo loại nối liền ngay sau icon (không cách), hai icon trên dưới cách nhau 1 px; thanh posture dày 12 px như thanh máu; không số.
 
 ## Cần thử trong game trước khi tin
 
 - Giá trị module thật sự đếm xuống từ tối đa (đánh một kẻ địch bằng vũ khí độc hoặc chảy máu rồi theo dõi).
 - Ngưỡng miễn nhiễm: đánh một boss miễn nhiễm (vd. một loại không dính chảy máu) xem tối đa trong module ra bao nhiêu, có phải >= 999 hay 0.
 - Hành vi trên boss nhiều pha, kẻ địch bị hạ, kẻ địch đổi giữa lúc khoá.
+- **Co-op (Seamless):** người dùng thấy souls_vision hiện buildup không đồng bộ giữa hai người chơi (2026-10-28), đoán là mỗi người tự gây buildup riêng chứ không cộng dồn. Cả hai mod đọc module resist của bản kẻ địch **trên máy mình**, nên chỉ thấy phần máy mình biết; trạng thái thật quyết định ở máy chủ. Chưa kiểm chứng: cho hai máy cùng đánh một kẻ địch và so dòng log `Buildup:` của hai bên (nếu máy chủ thấy tổng còn máy khách chỉ thấy phần mình thì đúng như đoán).

@@ -16,7 +16,7 @@
   },
   "numbers": {
     "label": "Số máu",
-    "help": "Hiện số máu và số posture."
+    "help": "Hiện số máu, số posture và số tích tụ."
   },
   "buildup": {
     "label": "Tích tụ trạng thái",
