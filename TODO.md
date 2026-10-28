@@ -65,12 +65,7 @@ Chi tiết: `mods/journeyhud/docs/design.md`
 
 - [ ] [bug] JourneyHUD: game crash hỏng heap (0xC0000374, 2026-10-27 20:51, game đang giải phóng `MicrosoftDiskFileOperator`), chưa rõ mod nào; thử chỉ JourneyHUD, bấm F5 ít thôi
 - [ ] [verify] JourneyHUD: khối vàng của thanh posture khi bị rút, và poise/posture trên 2.7.1.0 (đã thử 2.7.2.0)
-- [ ] [verify] JourneyHUD: menu ERNativeUI (hàng Journey HUD, đổi cỡ/độ dài/lề áp dụng ngay, lưu `JourneyHUD.toml` giữ chú thích, F5 cập nhật hàng menu)
-- [ ] [verify] JourneyHUD: phím zoom số `0x6B`/`0x6D` (danh sách `ZoomInKey`/`ZoomOutKey`), `Spirits`, kẻ địch khoá trên minimap
-- [ ] [verify] JourneyHUD: cột HUD trượt lên khi minimap ẩn do `Hide.InCaves`/`Hide.InBossFights`, và giữ chỗ khi ẩn do menu hay màn hình tải
-- [ ] [verify] JourneyHUD: marker Map for Goblins cỡ 0,30 (`GOBLIN_SCALE`), beacon trên minimap (tia xanh đúng chỗ, số slot, ngoài tầm ghim viền) (`docs/map.md`)
 - [ ] [verify] JourneyHUD: bản đồ nền trong hầm ngầm và dungeon, không treo ở màn hình tải; grace chỉ hiện cái đã tìm thấy, cả dungeon (`docs/map.md`)
-- [ ] [verify] JourneyHUD: mảnh bản đồ DLC (`FullMap = false` ở DLC; log `Map: piece rows` có dải 200-204; nhặt mảnh DLC thì nền hiện thêm vùng) (`docs/map.md`)
 - [ ] [research] JourneyHUD: buildup trong co-op Seamless (2026-10-28, chưa có dịp thử): hai máy cùng đánh một kẻ địch, so dòng log `Buildup:`; máy chủ thấy tổng, máy khách chỉ thấy phần mình? (`docs/buildup.md`)
 - [ ] [research] JourneyHUD: hiện hiệu ứng SpEffect đang chạy của kẻ địch khoá (icon và thời gian còn lại) dưới panel buildup, theo ý tưởng ERBuffTimer; layout đã kiểm IDA (còn bộ đếm trên 3 bản exe cũ), cần log xem kẻ địch có hiệu ứng nào có icon (`docs/effects.md`)
 - [ ] [research] JourneyHUD: kẻ địch xung quanh trên minimap, đầu chuỗi beacon trên 2.6.2.0 đến 2.7.1.0 (`docs/map.md`)

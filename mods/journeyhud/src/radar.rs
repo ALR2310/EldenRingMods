@@ -139,16 +139,19 @@ pub fn update(target: Option<[f32; 2]>) {
 fn log_piece_rows() {
     static DONE: AtomicBool = AtomicBool::new(false);
     static TRIES: AtomicU32 = AtomicU32::new(0);
-    if DONE.load(Ordering::Relaxed) || TRIES.fetch_add(1, Ordering::Relaxed) > 1200 {
+    if DONE.load(Ordering::Relaxed) {
         return;
     }
     let Ok(repo) = (unsafe { SoloParamRepository::instance() }) else { return };
     if params::check::<WorldMapPieceParam>(repo).is_err() {
-        DONE.store(true, Ordering::Relaxed);
+        // The table is not loaded yet at the title screen: look again for a while.
+        if TRIES.fetch_add(1, Ordering::Relaxed) > 6000 {
+            DONE.store(true, Ordering::Relaxed);
+        }
         return;
     }
     let mut runs: Vec<(u32, u32)> = Vec::new();
-    for id in 0..400 {
+    for id in 0..30000 {
         if repo.get::<WorldMapPieceParam>(id).is_some_and(|row| row.open_event_flag_id() != 0) {
             match runs.last_mut() {
                 Some((_, end)) if *end + 1 == id => *end = id,
@@ -156,12 +159,9 @@ fn log_piece_rows() {
             }
         }
     }
-    if runs.is_empty() {
-        return;
-    }
     DONE.store(true, Ordering::Relaxed);
     let runs: Vec<String> = runs.iter().map(|(from, to)| format!("{from}-{to}")).collect();
-    logger::log(&format!("Map: piece rows {}", runs.join(", ")));
+    logger::log(&format!("Map: piece rows {}", if runs.is_empty() { "none".to_string() } else { runs.join(", ") }));
 }
 
 /// Whether the game is in normal play, `None` while its HUD and fade are not there to read.
@@ -273,9 +273,8 @@ fn map_fragments(map: Option<MapId>) -> u32 {
     let base = match map {
         Some(MapId::Overworld) => 0,
         Some(MapId::Underground) => 100,
-        // The Land of Shadow keeps its five fragments in the rows after the underground's (to be
-        // confirmed by the `Map: piece rows` log line).
-        Some(MapId::Shadow) => 200,
+        // The Land of Shadow keeps its five fragments in rows 1000 to 1004 (`Map: piece rows` log).
+        Some(MapId::Shadow) => 1000,
         None => return u32::MAX,
     };
     static READABLE: OnceLock<bool> = OnceLock::new();

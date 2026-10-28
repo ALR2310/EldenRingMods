@@ -80,7 +80,7 @@
   },
   "minimap_deaths": {
     "label": "Số lần chết",
-    "help": "Hiện số lần chết dưới minimap."
+    "help": "Hiện số lần chết phía trên minimap."
   },
   "minimap_trail": {
     "label": "Đường đã đi",
