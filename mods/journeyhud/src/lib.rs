@@ -6,6 +6,7 @@ mod menu;
 mod radar;
 mod radar_ui;
 mod settings;
+mod state_icons;
 mod target;
 mod text;
 mod textures;
@@ -49,6 +50,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
                 },
             )
         });
+        state_icons::install();
         ui::install();
         common::diag::log_environment_when_game_ready();
         target::run();
