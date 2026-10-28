@@ -28,6 +28,10 @@ const THINK_FILE: &str = "SpiritThinkParam.ini";
 const NPC_FILE: &str = "SpiritParam.ini";
 const TICK_INTERVAL_MS: f64 = 1000.0;
 
+/// Byte offset of `isBuddyAI` in an `NpcThinkParam` row (checked against the
+/// field table by a test).
+const BUDDY_AI_OFFSET: usize = 0x99;
+
 const _: () = assert!(size_of::<NPC_THINK_PARAM_ST>() == ROW_SIZE);
 const _: () = assert!(size_of::<NPC_PARAM_ST>() == npc_fields::ROW_SIZE);
 
@@ -414,12 +418,31 @@ fn restore<P: SoloParam>(
     }
 }
 
+/// Whether the (original) row is dedicated to buddy AI. Spirits also borrow
+/// enemies' rows (`isBuddyAI` 0: vanilla Demi-Humans, many rows in Lord of
+/// Ashes), and a bundle written there changes those enemies too.
+///
+/// # Safety
+/// `row` must point to a whole `NpcThinkParam` row.
+unsafe fn is_buddy_row(row: *const u8) -> bool {
+    unsafe { row.add(BUDDY_AI_OFFSET).read() == 1 }
+}
+
 /// Restores every row from its snapshot, then writes the overrides: the
-/// bundles, the global and `[Row ...]` ones onto the NpcThinkParam rows, `[NpcParam]` ones onto
-/// the NpcParam rows.
-fn apply(repo: &mut SoloParamRepository, rows: &Snapshots, bundles: &[Override], config: &Config) {
+/// bundles (buddy-AI rows only), the global and `[Row ...]` ones onto the
+/// NpcThinkParam rows, `[NpcParam]` ones onto the NpcParam rows. Returns how
+/// many rows the bundles skipped as shared with enemies.
+fn apply(repo: &mut SoloParamRepository, rows: &Snapshots, bundles: &[Override], config: &Config) -> usize {
+    let skipped = std::cell::Cell::new(0);
     restore::<NpcThinkParam>(repo, &rows.think, ROW_SIZE, |ptr, id| unsafe {
-        for o in bundles.iter().chain(&config.global) {
+        if is_buddy_row(ptr) {
+            for o in bundles {
+                write(ptr, o);
+            }
+        } else {
+            skipped.set(skipped.get() + 1);
+        }
+        for o in &config.global {
             write(ptr, o);
         }
         for (_, overrides) in config.rows.iter().filter(|(ids, _)| ids.contains(&id)) {
@@ -433,6 +456,7 @@ fn apply(repo: &mut SoloParamRepository, rows: &Snapshots, bundles: &[Override],
             write(ptr, o);
         }
     });
+    skipped.get()
 }
 
 pub fn run(dir: String) {
@@ -494,10 +518,10 @@ pub fn run(dir: String) {
                 return;
             };
             config.npc = npc_config.npc;
-            apply(repo, rows, &bundles, &config);
+            let skipped = apply(repo, rows, &bundles, &config);
             let names: Vec<&str> = BUNDLES.iter().enumerate().filter(|(i, _)| bits & (1 << i) != 0).map(|(_, b)| b.0).collect();
             logger::log(&format!(
-                "ThinkOverride: {names:?} + {} file field(s) {} written to {} row(s)",
+                "ThinkOverride: {names:?} + {} file field(s) {} written to {} row(s), bundles skipped {skipped} shared row(s)",
                 config.count(),
                 config.describe(),
                 rows.think.len() + rows.npc.len()
@@ -622,6 +646,17 @@ mod tests {
         assert_eq!(row.team_attack_effectivity(), 100);
         assert!(row.enable_navi_flg_ladder() && row.enable_navi_flg_hole());
         assert_eq!(row.nose_dist(), 7);
+    }
+
+    /// Bundles only touch rows with `isBuddyAI` set; rows shared with enemies are left alone.
+    #[test]
+    fn buddy_row_filter() {
+        assert_eq!(FIELDS.iter().find(|f| f.0 == "is_buddy_ai").map(|f| f.1), Some(BUDDY_AI_OFFSET));
+        let mut row: NPC_THINK_PARAM_ST = unsafe { std::mem::zeroed() };
+        let ptr = &row as *const _ as *const u8;
+        assert!(!unsafe { is_buddy_row(ptr) });
+        row.set_is_buddy_ai(1);
+        assert!(unsafe { is_buddy_row(ptr) });
     }
 
     #[test]
