@@ -18,6 +18,14 @@
     "label": "Health numbers",
     "help": "Show the health, posture and buildup numbers."
   },
+  "effects": {
+    "label": "Target effects",
+    "help": "Show the effects on the target (poison, rot, frost, sleep...) with the time left."
+  },
+  "effects_player": {
+    "label": "Your effects",
+    "help": "Show your own effects with the time left, under the game's status icons."
+  },
   "buildup": {
     "label": "Status buildup",
     "help": "Show the poison, rot, bleed, death blight, frost, sleep and madness buildup of the target."

@@ -28,6 +28,9 @@ pub struct Image {
     pub rgba: Vec<u8>,
 }
 
+/// The sheets of the layouts that hold the status icons, called `MENU_StatusIcon_<icon id>`.
+const STATUS_ICON_SHEETS: [&str; 4] = ["SB_Status_00", "SB_Status_01", "SB_Status_02", "SB_Status_03"];
+
 /// What the sprites are read from, opened once: the layouts and the texture pack are
 /// decompressed a single time and each sheet is decoded at most once.
 struct Menu {
@@ -65,6 +68,20 @@ impl Menu {
         refs.iter().zip(rects).map(|(r, rect)| self.crop(r.sheet, rect)).collect()
     }
 
+    /// Every status icon with its icon id (`SpEffectParam.iconId`).
+    fn status_icons(&mut self) -> io::Result<Vec<(u32, Image)>> {
+        let mut found: Vec<(u32, &str, [u32; 4])> = Vec::new();
+        for sheet in STATUS_ICON_SHEETS {
+            for (name, rect) in sheet_sprites(&self.layouts, sheet) {
+                let Some(id) = name.strip_prefix("MENU_StatusIcon_").and_then(|n| n.parse::<u32>().ok()) else { continue };
+                if !found.iter().any(|(known, ..)| *known == id) {
+                    found.push((id, sheet, rect));
+                }
+            }
+        }
+        found.into_iter().map(|(id, sheet, rect)| Ok((id, self.crop(sheet, rect)?))).collect()
+    }
+
     /// Every world map icon with its icon id (the sprite is called `MENU_MAP_<id>`; the ids are
     /// the `iconId` of `WorldMapPointParam` rows).
     fn map_icons(&mut self) -> io::Result<Vec<(u16, Image)>> {
@@ -82,20 +99,22 @@ impl Menu {
     }
 }
 
-/// What [load] read. The two parts fail on their own: the minimap draws marks instead of the
+/// What [load] read. The parts fail on their own: the minimap draws marks instead of the
 /// game's icons, or leaves the points out.
 pub struct Sprites {
     /// The sprites asked for, in order.
     pub icons: io::Result<Vec<Image>>,
     /// The world map's point icons by icon id.
     pub map_icons: io::Result<Vec<(u16, Image)>>,
+    /// The status icons of the effects (`SpEffectParam.iconId`) by icon id.
+    pub status_icons: io::Result<Vec<(u32, Image)>>,
 }
 
 /// Reads `refs` and the world map's point icons from the game in `game_dir`. Takes a couple of
 /// seconds and a few hundred MB while it runs, so call it once on a background thread.
 pub fn load(game_dir: &Path, refs: &[SpriteRef]) -> io::Result<Sprites> {
     let mut menu = Menu::open(game_dir)?;
-    Ok(Sprites { icons: menu.sprites(refs), map_icons: menu.map_icons() })
+    Ok(Sprites { icons: menu.sprites(refs), map_icons: menu.map_icons(), status_icons: menu.status_icons() })
 }
 
 /// The sprites of `sheet` in the layouts: name (without `.png`) and `[x, y, width, height]`.
@@ -308,5 +327,35 @@ mod tests {
         let part = crop(&sheet, [1, 0, 2, 2]).unwrap();
         assert_eq!(part.rgba.iter().step_by(4).copied().collect::<Vec<_>>(), vec![1, 2, 4, 5]);
         assert!(crop(&sheet, [2, 0, 2, 1]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod extract {
+    use super::*;
+
+    /// Research: writes the HUD movie to `ER_GFX_OUT` for a look at its clip tree. Needs the game
+    /// (`ER_GAME_DIR`, default the Steam install). `cargo test -p journeyhud --release -- --ignored hud_movie --nocapture`.
+    #[test]
+    #[ignore]
+    fn hud_movie_from_the_installed_game() {
+        let dir = std::path::PathBuf::from(
+            std::env::var("ER_GAME_DIR").unwrap_or_else(|_| r"E:\SteamLibrary\steamapps\common\ELDEN RING\Game".to_string()),
+        );
+        let out = std::env::var("ER_GFX_OUT").expect("set ER_GFX_OUT");
+        let oodle = Oodle::load(&dir.join("oo2core_6_win64.dll")).unwrap();
+        for path in ["/menu/01_000_fe.gfx.dcx", "/menu/hi/01_000_fe.gfx.dcx", "/menu/01_000_fe.gfx", "/menu/hi/01_000_fe.gfx"] {
+            match archive::open(&dir, path) {
+                Ok(mut file) => {
+                    let raw = file.read_all().unwrap();
+                    let data = if path.ends_with(".dcx") { oodle.decompress_dcx(&raw).unwrap() } else { raw };
+                    println!("{path}: {} bytes", data.len());
+                    std::fs::write(&out, data).unwrap();
+                    return;
+                }
+                Err(e) => println!("{path}: {e}"),
+            }
+        }
+        panic!("no HUD movie found");
     }
 }

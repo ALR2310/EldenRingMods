@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use eldenring::cs::{
     CSChrDataModule, CSChrSuperArmorModule, CSTaskGroupIndex, ChrIns, ChrInsModuleContainer, ChrSet, FieldInsHandle,
-    PlayerIns, WorldChrMan,
+    PlayerIns, SpecialEffectEntry, WorldChrMan,
 };
 use eldenring::fd4::FD4TaskData;
 use fromsoftware_shared::FromStatic;
@@ -30,6 +30,11 @@ const _: () = {
     assert!(std::mem::offset_of!(CSChrDataModule, max_hp) == 0x13C);
     assert!(std::mem::offset_of!(CSChrSuperArmorModule, sa_durability) == 0x10);
     assert!(std::mem::offset_of!(CSChrSuperArmorModule, sa_durability_max) == 0x14);
+    // The effect list: `special_effect` of the chr, entries at 0x78 bytes with the time left at
+    // +0x44, the float after `removal_timer` (`docs/effects.md`).
+    assert!(std::mem::offset_of!(ChrIns, special_effect) == 0x178);
+    assert!(std::mem::offset_of!(SpecialEffectEntry, removal_timer) == 0x40);
+    assert!(std::mem::size_of::<SpecialEffectEntry>() == 0x78);
 };
 
 /// The seven status buildups, in the order the resist module keeps them.
@@ -53,6 +58,22 @@ pub struct Buildup {
     pub max: i32,
 }
 
+/// One active SpEffect the panel shows: one that has an icon, or the proc of a status buildup.
+#[derive(Clone, Copy, PartialEq)]
+pub struct Effect {
+    /// The `SpEffectParam` row.
+    pub param_id: i32,
+    /// `SpEffectParam.iconId`: the sprite `MENU_StatusIcon_<icon>`; 0 or less for a proc.
+    pub icon: i32,
+    /// The status whose buildup proc this is (an index into [BUILDUP]), drawn with that status'
+    /// icon; the params give these effects no icon.
+    pub kind: Option<usize>,
+    /// Seconds left; only meaningful when not [permanent](Effect::permanent).
+    pub left: f32,
+    /// The effect has no end (`effectEndurance` below zero): its cell shows no time.
+    pub permanent: bool,
+}
+
 /// What the panel shows for the locked-on enemy.
 #[derive(Clone)]
 pub struct Target {
@@ -67,6 +88,8 @@ pub struct Target {
     pub poise: Option<(f32, f32)>,
     /// The statuses that have started to build up and can still afflict the enemy.
     pub buildup: Vec<Buildup>,
+    /// The effects it has that show an icon, in the order the game keeps them.
+    pub effects: Vec<Effect>,
 }
 
 /// The latest target and when it was read; [current] drops it once stale
@@ -81,10 +104,24 @@ pub fn current() -> Option<Target> {
     (at.elapsed() < STALE_AFTER).then(|| target.clone())
 }
 
+/// The player's own effects and when they were read, kept like [SNAPSHOT].
+static OWN: Mutex<Option<(Vec<Effect>, Instant)>> = Mutex::new(None);
+
+/// The player's effects (the ones the game shows no timer for), `[]` when stale.
+pub fn own_effects_now() -> Vec<Effect> {
+    let Ok(guard) = OWN.lock() else { return Vec::new() };
+    match guard.as_ref() {
+        Some((effects, at)) if at.elapsed() < STALE_AFTER => effects.clone(),
+        _ => Vec::new(),
+    }
+}
+
 pub fn run() {
     let cs_task = common::task::wait_for_cs_task();
     let mut last = None;
     let mut last_kinds: Vec<usize> = Vec::new();
+    let mut last_effects: Vec<i32> = Vec::new();
+    let mut last_own: Vec<i32> = Vec::new();
     common::task::run_recurring_safe(cs_task, "Target", CSTaskGroupIndex::FrameBegin, move |_data: &FD4TaskData| {
         let read = if settings::enabled() { read() } else { None };
         radar::update(read.as_ref().map(|t| t.offset));
@@ -106,10 +143,68 @@ pub fn run() {
             }
             last_kinds = kinds;
         }
+        // One line when the set of effects changes: which ones show up, for `docs/effects.md`.
+        let effects: Vec<i32> = read.iter().flat_map(|t| t.effects.iter().map(|e| e.param_id)).collect();
+        if effects != last_effects {
+            if let Some(target) = &read {
+                logger::log(&format!("Effects: enemy {}", describe(&target.effects)));
+            }
+            last_effects = effects;
+        }
+        let own = own_effects();
+        let ids: Vec<i32> = own.iter().map(|e| e.param_id).collect();
+        if ids != last_own {
+            logger::log(&format!("Effects: player {}", describe(&own)));
+            last_own = ids;
+        }
+        if let Ok(mut guard) = OWN.lock() {
+            *guard = Some((shown_effects(own, MAX_EFFECTS), Instant::now()));
+        }
         if let Ok(mut guard) = SNAPSHOT.lock() {
             *guard = read.map(|target| (target, Instant::now()));
         }
     });
+}
+
+/// At most `max` of `effects`, in the same order: when there are more, the ones with the
+/// most time left (the permanent ones first) are dropped.
+pub fn shown_effects(mut effects: Vec<Effect>, max: usize) -> Vec<Effect> {
+    if effects.len() > max {
+        let mut by_time: Vec<usize> = (0..effects.len()).collect();
+        let time = |e: &Effect| if e.permanent { f32::INFINITY } else { e.left };
+        by_time.sort_by(|&a, &b| time(&effects[a]).total_cmp(&time(&effects[b])));
+        let mut keep = vec![false; effects.len()];
+        by_time.iter().take(max).for_each(|&i| keep[i] = true);
+        let mut at = 0;
+        effects.retain(|_| {
+            at += 1;
+            keep[at - 1]
+        });
+    }
+    effects
+}
+
+/// `id icon time` for each effect, for the log.
+fn describe(effects: &[Effect]) -> String {
+    if effects.is_empty() {
+        return "none".to_string();
+    }
+    let shown: Vec<String> = effects
+        .iter()
+        .take(40)
+        .map(|e| if e.permanent { format!("{} icon {} permanent", e.param_id, e.icon) } else { format!("{} icon {} {:.0}s", e.param_id, e.icon, e.left) })
+        .collect();
+    shown.join(", ")
+}
+
+/// The effects of the player, `[]` when out of the world. The procs of the status buildups are
+/// left out: the game has its own icons for them on the player.
+fn own_effects() -> Vec<Effect> {
+    let Ok(world_chr_man) = (unsafe { WorldChrMan::instance() }) else { return Vec::new() };
+    world_chr_man
+        .main_player
+        .as_ref()
+        .map_or_else(Vec::new, |player| read_effects(&player.chr_ins).into_iter().filter(|e| e.kind.is_none()).collect())
 }
 
 fn read() -> Option<Target> {
@@ -134,7 +229,49 @@ fn read() -> Option<Target> {
         poise: (armor.sa_durability_max > 0.0 && armor.sa_durability_max.is_finite())
             .then_some((armor.sa_durability.max(0.0), armor.sa_durability_max)),
         buildup: if settings::buildup() { read_buildup(chr) } else { Vec::new() },
+        effects: shown_effects(read_effects(chr), MAX_EFFECTS),
     })
+}
+
+/// The status a buildup proc effect belongs to, by its `SpEffectParam` row. The rows are named
+/// `<status> - Type N - Special M` and come in runs per status (`docs/effects.md`); the ones whose
+/// effect is instant (blood loss, madness, death blight) have no time to show and are left out.
+fn proc_kind(param_id: i32) -> Option<usize> {
+    match param_id {
+        6500..=6515 => Some(0),
+        6600..=6605 => Some(1),
+        6700..=6705 => Some(4),
+        6450..=6460 => Some(5),
+        _ => None,
+    }
+}
+
+/// The most effects kept in the snapshot: two rows of six. The panel shows fewer when its cells do not fit.
+const MAX_EFFECTS: usize = 12;
+
+/// The effects of `chr` that show an icon (`iconId` above 0) or are the proc of a status buildup,
+/// and either have no end or last longer than a second, with the time they have left. Rows with a tenth of a second exist only to re-apply a buff in cycles
+/// (Golden Vow's "Cycled" rows) and keep their icon: they would be a second, empty cell.
+fn read_effects(chr: &ChrIns) -> Vec<Effect> {
+    chr.special_effect
+        .entries()
+        .filter_map(|entry| {
+            // SAFETY: `param_data` is the live param row of the entry, `SpEffectParam`'s `iconId` is
+            // its first field.
+            let icon = unsafe { entry.param_data?.as_ref() }.icon_id();
+            // SAFETY: the entry is 0x78 bytes (asserted above); +0x44 is the time left.
+            let left = unsafe { std::ptr::read_unaligned((entry as *const SpecialEffectEntry as *const u8).add(0x44) as *const f32) };
+            let permanent = entry.duration < 0.0;
+            let kind = proc_kind(entry.param_id);
+            ((icon > 0 || kind.is_some()) && (permanent || entry.duration > 1.0)).then_some(Effect {
+                param_id: entry.param_id,
+                icon: icon as i32,
+                kind,
+                left: if left.is_finite() { left } else { 0.0 },
+                permanent,
+            })
+        })
+        .collect()
 }
 
 /// The status buildups of `chr`, from its resist module. The module keeps what is left to resist
@@ -186,6 +323,39 @@ fn chr_by_handle(world_chr_man: &WorldChrMan, handle: FieldInsHandle) -> Option<
 
 #[cfg(test)]
 mod tests {
+    fn effect(param_id: i32, left: f32, permanent: bool) -> Effect {
+        Effect { param_id, icon: 1, kind: None, left, permanent }
+    }
+
+    #[test]
+    fn proc_rows_belong_to_their_status() {
+        assert_eq!(proc_kind(6511), Some(0));
+        assert_eq!(proc_kind(6600), Some(1));
+        assert_eq!(proc_kind(6702), Some(4));
+        assert_eq!(proc_kind(6455), Some(5));
+        // Blood loss, madness and death blight are instant; 505 is the game's own marker.
+        assert_eq!((proc_kind(6405), proc_kind(6752), proc_kind(6801), proc_kind(505)), (None, None, None, None));
+    }
+
+    #[test]
+    fn more_than_twelve_effects_drop_the_ones_with_most_time_left() {
+        let mut all: Vec<Effect> = (0..12).map(|i| effect(i, 10.0 + i as f32, false)).collect();
+        all.push(effect(100, 0.0, true));
+        all.push(effect(101, 3.0, false));
+        let shown = shown_effects(all, MAX_EFFECTS);
+        let ids: Vec<i32> = shown.iter().map(|e| e.param_id).collect();
+        // The permanent one and the one with 21 s left (the longest timed) go; the order stays.
+        assert_eq!(shown.len(), MAX_EFFECTS);
+        assert!(!ids.contains(&100) && !ids.contains(&11));
+        assert_eq!(ids, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 101]);
+    }
+
+    #[test]
+    fn up_to_twelve_effects_are_all_shown() {
+        let all: Vec<Effect> = (0..12).map(|i| effect(i, 5.0, false)).collect();
+        assert_eq!(shown_effects(all, MAX_EFFECTS).len(), 12);
+    }
+
     use super::*;
 
     #[test]

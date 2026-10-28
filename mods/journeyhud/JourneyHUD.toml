@@ -26,6 +26,13 @@ Buildup = true          # Status buildup bars (poison, rot, bleed...).
 ShowNumbers = true      # Show health, posture and buildup numbers.
 
 
+[Effects]
+# The effects with the time left, as icons: the locked-on enemy's under its
+# bars (poison, rot, frost, sleep...), yours under the game's status icons.
+Target = true
+Player = true
+
+
 [Minimap]
 # Round minimap: other players, your spirits, the locked-on enemy.
 Enabled = true

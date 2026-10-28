@@ -21,6 +21,7 @@ const STEPS: &[Step] = &[];
 pub struct Config {
     pub general: General,
     pub target: Target,
+    pub effects: Effects,
     pub layout: Layout,
     pub minimap: Minimap,
     pub logging: Logging,
@@ -44,6 +45,13 @@ pub struct Target {
     pub scale: f64,
     pub show_numbers: bool,
     pub buildup: bool,
+}
+
+#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
+#[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
+pub struct Effects {
+    pub target: bool,
+    pub player: bool,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]

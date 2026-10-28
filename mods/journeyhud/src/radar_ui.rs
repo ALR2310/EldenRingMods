@@ -59,6 +59,8 @@ const COLUMN_GAP: f32 = 14.0;
 const CLOCK_GAP: f32 = 6.0;
 /// Height of the row of the in-game time under the minimap, at 1080p.
 const CLOCK_ROW: f32 = 22.0;
+/// Gap between the rim of the minimap and the time under it or the death count above it, at 1080p.
+const TEXT_GAP: f32 = 4.0;
 
 /// How far the column has closed up over a minimap hidden by `Hide.InCaves` or
 /// `Hide.InBossFights`, 0 (open) to 1 (closed), as `f32` bits; set by [Radar::draw].
@@ -74,7 +76,7 @@ pub fn column_height(res: f32) -> f32 {
     if !settings::minimap_enabled() {
         return 0.0;
     }
-    let below = if settings::minimap_clock() { CLOCK_ROW + CLOCK_GAP } else { COLUMN_GAP };
+    let below = if settings::minimap_clock() { CLOCK_ROW + CLOCK_GAP + TEXT_GAP } else { COLUMN_GAP };
     let open = 1.0 - f32::from_bits(COLLAPSED.load(Ordering::Relaxed));
     (2.0 * settings::minimap_size() * settings::minimap_scale() + below) * res * open
 }
@@ -573,7 +575,7 @@ impl View<'_> {
     /// The in-game time, centered in its row right under the minimap.
     fn draw_clock(&self, ui: &Ui, snapshot: &Snapshot, res: f32) {
         let Some([hours, minutes]) = snapshot.clock else { return };
-        let row_top = self.center[1] + self.radius;
+        let row_top = self.center[1] + self.radius + TEXT_GAP * res;
         self.draw_centered(ui, &format!("{hours:02}:{minutes:02}"), row_top, res);
     }
 
@@ -581,7 +583,7 @@ impl View<'_> {
     /// column (the minimap does not move down); at the very top of the screen it is clamped on.
     fn draw_deaths(&self, ui: &Ui, snapshot: &Snapshot, res: f32) {
         let Some(deaths) = snapshot.deaths else { return };
-        let row_top = (self.center[1] - self.radius - CLOCK_ROW * res).max(0.0);
+        let row_top = (self.center[1] - self.radius - (CLOCK_ROW + TEXT_GAP) * res).max(0.0);
         self.draw_centered(ui, &format!("Deaths {deaths}"), row_top, res);
     }
 

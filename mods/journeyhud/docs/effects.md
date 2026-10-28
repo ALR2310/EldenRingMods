@@ -1,6 +1,6 @@
 # JourneyHUD: hiệu ứng đang chạy của kẻ địch (SpEffect) và thời gian còn lại
 
-**Status 2026-10-28: nghiên cứu, chưa có code. Ý tưởng lấy từ mod ERBuffTimer 1.2.1 (hiện buff của người chơi); ta áp cho kẻ địch đang khoá: hiện icon và thời gian còn lại của các hiệu ứng nó đang dính, dưới panel buildup. Layout đã kiểm IDA: danh sách (head +0x08, next +0x30) trên cả 4 bản exe, bộ đếm thời gian trên 2.7.2.0; icon: sprite `MENU_StatusIcon_<iconId>` trong menu atlas.**
+**Status 2026-10-28: hàng effect của kẻ địch khoá đã có code (chưa thử vẽ trong game): đọc SpEffect có icon hoặc là effect nổ của độc, thối rữa, đóng băng, ngủ (ghép dải id, bảng bên dưới), vẽ ô icon và thời gian dưới thanh buildup, căn phải, 6 ô một hàng, tối đa 12 (khoá `Effects.Target`, `Effects.Player`). Chưa làm: hàng effect của người chơi (log `Effects: player` đã cho thấy dữ liệu đúng).**
 
 ## ERBuffTimer làm thế nào (phân tích tĩnh `ERBuffTimer.dll`, không chạy nó)
 
@@ -33,7 +33,7 @@ Mod đã tải về ở `C:\Users\Admin\Downloads\ERBuffTimer` (README, ini, tê
 
 `SpEffectParam` có các cột (tên ở `tmp/csv/base/SpEffectParam.csv`) để lọc: `iconId` (icon trạng thái; 0 là không hiện icon), `effectEndurance` (thời gian hiệu lực, -1 là vĩnh viễn), `enableLifeTime`, `stateInfo` và `dispIconNonactive`.
 
-## Hướng làm (khi làm)
+## Hướng làm (đã làm cho kẻ địch, xem "Đã làm")
 
 1. **Đọc** mỗi frame trong task `Target`, cho kẻ địch khoá: các entry có `param_data.icon_id != 0` và thời gian còn lại (+0x44) > 0, bỏ loại đã có thanh buildup, giữ tối đa vài cái, sắp theo thời gian còn lại. Bản đầu chỉ ghi log (`Effects: <param id> icon <iconId> <còn lại>s` khi tập hiệu ứng đổi) để xem kẻ địch có hiệu ứng nào đáng hiện.
 2. **Icon:** sprite `MENU_StatusIcon_<iconId>` của `SB_Status_00`, nạp một lần cùng các sprite khác (thêm dải sprite theo `iconId` hoặc đọc theo yêu cầu qua `sprites.rs`).
@@ -53,6 +53,33 @@ Kiểu xếp theo ERBuffTimer (người dùng, 2026-10-28): **mỗi effect là m
 - Hai khoá riêng: `Effects.Target` và `Effects.Player`.
 - Chừa chỗ cho khối sát thương giữa người chơi (co-op) ở cột trái dưới hàng effect; vị trí khung đồng đội của game khi co-op chưa kiểm.
 
+## Đã thử trong game (2026-10-28, 2.7.2.0)
+
+Log `Effects: player ...` khi dùng Golden Vow và Lightningproof Pickled Liver:
+
+- **+0x44 là giây còn lại thật:** `20501140 icon 20408 120s` rồi `67s` sau 53 giây; `1660000 icon 20406 80s` rồi `13s` sau 68 giây; effect biến mất đúng lúc hết giờ.
+- **Có dòng phụ:** `1660001` và `1660002` (Golden Vow "Cycled", `effectEndurance` 0.1) có icon nhưng thời gian luôn 0s; chúng tồn tại cùng Golden Vow. Bỏ bằng bộ lọc `duration > 1` (trường `duration` +0x48 của entry); effect vĩnh viễn (không có thời gian) chưa gặp, hiện bị lọc luôn.
+- **Hai effect khác nhau có thể trùng icon:** `20501140` và `1660002` cùng icon 20408 (icon "buff" chung của game).
+- **Kẻ địch: effect có icon hiếm, effect của trạng thái nổ có thời gian nhưng không có icon.** Khi nổ độc, thối rữa, đóng băng, log (`Effects: enemy timed`, 2.7.2.0) cho thấy các SpEffect nội bộ có thời gian: `6511 30/30s` (Poison - Type 2 - Special 2) sau khi độc nổ, `6600 90/90s` (Scarlet Rot - Type 1 - Special 1), `6702 30/30s` (Frostbite - Type 1 - Special 3), thời gian đếm xuống đúng (`6600 85/90s`, `68/90s`). Cả ba có `iconId = -1` trong param, nên đọc theo "effect có icon" không thấy gì.
+- **`505` (Poison/Scarlet Rot (Cycled), 900 giây, `stateInfo 275`)** xuất hiện cùng lúc với effect độc hoặc thối rữa và kéo dài 900 giây: dấu hiệu nội bộ, bỏ qua.
+- **Effect mặc định có icon của kẻ địch (từ `NpcParam.spEffectID0..31` với `iconId > 0`, vanilla):** chỉ 8 effect. Sáu cái vĩnh viễn: 17354 và 17131 và 18917 (icon 20286, Kindred of Rot, Disciple of Rot, Kindred of Rot Larva), 13865 (icon 20261, Cleanrot Knight), 11720 và 10695 (icon 20285, Sanguine Noble, Mohg); hai cái 60 giây của DLC (20502025 Priestess Heart và 20502015 Rock Heart, icon 20406; Dragon Communion Priestess, Ancient Dragon-Man).
+
+## Ghép effect nổ của kẻ địch với icon trạng thái (suy ra từ tên trong `SpEffectParam`, xác nhận trong game cho 6511, 6600, 6702)
+
+Các dải id theo tên "`<Trạng thái> - Type N - Special M`":
+
+| Trạng thái | Dải hàng | Thời gian (`effectEndurance`) | Hiện không |
+|---|---|---|---|
+| Độc (poison) | 6500-6515 | 30 hoặc 90 s (tuỳ loại) | có |
+| Thối rữa (scarlet rot) | 6600-6605 | 90 s | có |
+| Đóng băng (frostbite) | 6700-6705 | 30 s | có |
+| Ngủ (sleep) | 6450-6460 | 60 s | có |
+| Chảy máu (blood loss) | 6400-6415 | 1 s (tức thời) | không |
+| Phát điên (madness) | 6750-6755 | 1 s (tức thời) | không |
+| Tử huyết (death blight) | 6800-6805 | 0 (tức thời) | không |
+
+Thứ tự trạng thái khớp `BUILDUP` của `target.rs`, nên ô của effect nổ dùng icon `MENU_RE_*` đã nạp cho thanh buildup (không cần sprite `MENU_StatusIcon_*`); đếm ngược theo `+0x44`. Với effect có `iconId`, dùng sprite `MENU_StatusIcon_<iconId>`.
+
 ## Đã kiểm (2026-10-28)
 
 - **Danh sách:** hàm huỷ `CS::SpecialEffect` giống nhau ở 2.6.2.0 (4F327E), 2.7.0.0 và 2.7.1.0 (4F404E), 2.7.2.0 (4F4110): đầu danh sách ở `a1[1]` (+0x08), mỗi entry nối tới entry kế bằng `*(entry + 48)` (+0x30). `ChrIns.special_effect` +0x178 đã dùng ở các mod phát hành (SpeedMultiplier, SpiritMultiplier đọc `entries()` của người chơi) và ở IDA (`sub_1404FA370(player+0x178, ...)`, `mods/spiritmultiplier/docs/summon_anywhere.md`).
@@ -67,3 +94,31 @@ Kiểu xếp theo ERBuffTimer (người dùng, 2026-10-28): **mỗi effect là m
 - Hiệu ứng vĩnh viễn (`effectEndurance` bằng -1) hiện thế nào: bỏ qua hoặc hiện không kèm thời gian.
 - Trong co-op Seamless, thời gian còn lại của hiệu ứng trên kẻ địch có thể chỉ đúng với phần máy mình biết, như buildup (`docs/buildup.md`).
 - Hiệu ứng trạng thái đã kích hoạt (Scarlet Rot, Frostbite... đang chạy) có icon riêng không, và có trùng với thanh buildup đang hiện không.
+
+## Đã làm (2026-10-28)
+
+- `target.rs`: `read_effects` lấy effect có `iconId > 0` hoặc là effect nổ (`proc_kind`: độc 6500-6515, thối rữa 6600-6605, đóng băng 6700-6705, ngủ 6450-6460) và (vĩnh viễn hoặc `duration > 1`); `shown_effects` giữ tối đa 12 (bỏ cái còn nhiều thời gian nhất, vĩnh viễn trước), thứ tự game; log `Effects: enemy|player ...` khi tập effect đổi.
+- `map/sprites.rs` và `map/layer.rs`: nạp mọi sprite `MENU_StatusIcon_<id>` (`SB_Status_00..03`) thành một lưới ô 40 px (`status_icon(id)`).
+- `ui.rs`: `draw_effects`: ô 28 px (icon 16 px, thời gian 10 px dưới icon, `24s` hoặc `1:30`), căn phải, 6 ô một hàng, icon mờ dần trong 5 giây cuối; effect nổ dùng icon `MENU_RE_*` của thanh buildup.
+- Khoá `Target.Effects` (mặc định bật) trong `JourneyHUD.toml` và menu.
+
+## Cỡ icon (đo trên ảnh chụp 2560x1600, 2026-10-28)
+
+Khung hình game là vùng 16:9 (2560x1440), nên 1 px 1080p = 1,333 px ảnh.
+
+- **Icon trạng thái của game (hàng trên cùng bên trái, hình thoi có mũi tên):** rộng khoảng 38 px ở 1080p, cách nhau 42 px, từ x 137, y 105 đến 138. Hàng effect của người chơi đặt ngay dưới: gốc (140, 146).
+- **Bản đầu của mod (icon 16 px):** đo được khoảng 15 đến 16 px, tức nhỏ hơn icon của game khoảng 2,4 lần; người dùng thấy hơi nhỏ.
+- **Hiện tại (người dùng chốt: giảm số ô miễn là icon ngang icon của game):** icon **38 px**, ô 42 px (đúng cỡ và bước của hàng icon trạng thái của game), chữ thời gian 11 px, hàng cao 54 px, tối đa 2 hàng. Số ô mỗi hàng của kẻ địch tính từ bề rộng thanh: `floor(width / 42)`, tối đa 6 (220 px cho 5 ô, tức tối đa 10 effect); hàng của người chơi 6 ô (tối đa 12). Quá thì bỏ các effect còn nhiều thời gian nhất.
+
+## Hàng effect của người chơi
+
+`target::own_effects_now` (snapshot riêng `OWN`, đọc mỗi frame) và `ui::draw_effects` với `Cells { right_aligned: false }`; không có effect nổ của buildup (game có icon riêng cho người chơi), nên chỉ hiện effect có `iconId` (cả vĩnh viễn, không có số). Khoá `Effects.Player` (mặc định bật), cùng giới hạn 6 ô một hàng, 12 ô.
+
+## Kẻ địch không có effect có icon
+
+Black Blade Kindred (`NpcParam 47701242`) chỉ có các effect "NPC: Disable Poison / Scarlet Rot / Blood Loss / Death Blight / Frostbite / Madness" (miễn nhiễm, `iconId = -1`) và các effect của AI/scale; nên không có ô nào: đúng như thiết kế. Có thể hiện hàng "miễn nhiễm" sau này nếu muốn.
+
+## Chỉnh sau lần thử đầu (2026-10-28)
+
+- Chữ giờ và `Deaths` cách vành minimap 4 px (`TEXT_GAP`); thanh máu bên dưới dịch xuống theo.
+- Icon effect của **kẻ địch nhỏ lại 30%** (hệ số 0,7: icon 27 px, ô 30 px, chữ 10 px, 6 ô một hàng vì cột 220 px chứa được 7); hàng của người chơi giữ 38 px, đúng cỡ icon của game.

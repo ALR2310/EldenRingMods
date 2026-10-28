@@ -67,5 +67,5 @@ Chi tiết: `mods/journeyhud/docs/design.md`
 - [ ] [verify] JourneyHUD: khối vàng của thanh posture khi bị rút, và poise/posture trên 2.7.1.0 (đã thử 2.7.2.0)
 - [ ] [verify] JourneyHUD: bản đồ nền trong hầm ngầm và dungeon, không treo ở màn hình tải; grace chỉ hiện cái đã tìm thấy, cả dungeon (`docs/map.md`)
 - [ ] [research] JourneyHUD: buildup trong co-op Seamless (2026-10-28, chưa có dịp thử): hai máy cùng đánh một kẻ địch, so dòng log `Buildup:`; máy chủ thấy tổng, máy khách chỉ thấy phần mình? (`docs/buildup.md`)
-- [ ] [research] JourneyHUD: hiện hiệu ứng SpEffect đang chạy của kẻ địch khoá (icon và thời gian còn lại) dưới panel buildup, theo ý tưởng ERBuffTimer; layout đã kiểm IDA (còn bộ đếm trên 3 bản exe cũ), cần log xem kẻ địch có hiệu ứng nào có icon (`docs/effects.md`)
+- [ ] [verify] JourneyHUD: hàng effect dưới buildup của kẻ địch khoá (độc, rot, băng, ngủ có giờ; phe thối rữa/máu icon vĩnh viễn; icon `MENU_StatusIcon_*` đúng hình; xuống hàng khi quá 6) (`mods/journeyhud/docs/effects.md`); hàng effect của người chơi (`Effects.Player`, dưới icon trạng thái của game, cỡ icon 24 px); còn làm: khối sát thương co-op
 - [ ] [research] JourneyHUD: kẻ địch xung quanh trên minimap, đầu chuỗi beacon trên 2.6.2.0 đến 2.7.1.0 (`docs/map.md`)

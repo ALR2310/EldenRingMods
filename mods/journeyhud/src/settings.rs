@@ -20,6 +20,8 @@ const ZOOM_LEVELS: [i32; 3] = [50, 100, 200];
 static ENABLED: AtomicBool = AtomicBool::new(true);
 static SHOW_NUMBERS: AtomicBool = AtomicBool::new(true);
 static BUILDUP: AtomicBool = AtomicBool::new(true);
+static EFFECTS_TARGET: AtomicBool = AtomicBool::new(true);
+static EFFECTS_PLAYER: AtomicBool = AtomicBool::new(true);
 static WIDTH: AtomicI32 = AtomicI32::new(220);
 static OFFSET_X: AtomicI32 = AtomicI32::new(48);
 static OFFSET_Y: AtomicI32 = AtomicI32::new(47);
@@ -55,6 +57,8 @@ pub fn load(config: &Config) {
     set_enabled(target.enabled as u8);
     set_show_numbers(target.show_numbers as u8);
     set_buildup(target.buildup as u8);
+    set_effects_target(config.effects.target as u8);
+    set_effects_player(config.effects.player as u8);
     set_width(f64::from(target.width));
     set_offset_x(f64::from(config.layout.offset_x));
     set_offset_y(f64::from(config.layout.offset_y));
@@ -84,6 +88,16 @@ pub fn load(config: &Config) {
 
 pub fn enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
+}
+
+/// Whether the effects of the target (poison, rot, frost, sleep... with the time left) are shown.
+pub fn effects_target() -> bool {
+    EFFECTS_TARGET.load(Ordering::Relaxed)
+}
+
+/// Whether the effects of the player are shown.
+pub fn effects_player() -> bool {
+    EFFECTS_PLAYER.load(Ordering::Relaxed)
 }
 
 /// Whether the status buildup bars of the target are shown.
@@ -238,6 +252,14 @@ pub fn minimap_size() -> f32 {
 
 pub fn set_enabled(value: u8) {
     ENABLED.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_effects_target(value: u8) {
+    EFFECTS_TARGET.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_effects_player(value: u8) {
+    EFFECTS_PLAYER.store(value != 0, Ordering::Relaxed);
 }
 
 pub fn set_buildup(value: u8) {
