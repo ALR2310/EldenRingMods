@@ -7,7 +7,7 @@
 //!   Target panel             -> Target bar on/off, Health numbers on/off, Status buildup on/off,
 //!                               Bar length slider, Size stepped, Right margin slider, Top margin slider
 //!   Minimap                  -> Minimap on/off, Map, Graces, Points, Beacons, Map for Goblins,
-//!                               Co-op players, Spirits, Full map, Clock, Trail, Compass, Turn with
+//!                               Co-op players, Spirits, Full map, Clock, Deaths, Trail, Compass, Turn with
 //!                               camera, Hide in caves, Hide in boss fights (all on/off),
 //!                               Minimap range and size (sliders), Minimap scale (stepped)
 //! ```
@@ -50,6 +50,8 @@ static MINIMAP_COMPASS: Setting =
     Setting { key: "Minimap.Compass", format: erui::format_bool, apply: Some(settings::set_minimap_compass) };
 static MINIMAP_CLOCK: Setting =
     Setting { key: "Minimap.Clock", format: erui::format_bool, apply: Some(settings::set_minimap_clock) };
+static MINIMAP_DEATHS: Setting =
+    Setting { key: "Minimap.Deaths", format: erui::format_bool, apply: Some(settings::set_minimap_deaths) };
 static MINIMAP_TRAIL: Setting =
     Setting { key: "Minimap.Trail", format: erui::format_bool, apply: Some(settings::set_minimap_trail) };
 static MINIMAP_FULL_MAP: Setting =
@@ -128,6 +130,9 @@ fn build(b: &mut erui::MenuBuilder) -> Result<(), String> {
     b.toggle(minimap, &t("minimap_clock.label"), &t("minimap_clock.help"), &MINIMAP_CLOCK, || {
         config::get().minimap.clock as u8
     })?;
+    b.toggle(minimap, &t("minimap_deaths.label"), &t("minimap_deaths.help"), &MINIMAP_DEATHS, || {
+        config::get().minimap.deaths as u8
+    })?;
     b.toggle(minimap, &t("minimap_trail.label"), &t("minimap_trail.help"), &MINIMAP_TRAIL, || {
         config::get().minimap.trail as u8
     })?;
@@ -176,7 +181,7 @@ mod tests {
     #[test]
     fn menu_keys_are_in_the_template() {
         let doc: toml::Value = toml::from_str(config::TEMPLATE).unwrap();
-        let settings = [&ENABLED, &SHOW_NUMBERS, &BUILDUP, &MINIMAP, &MINIMAP_MAP, &MINIMAP_GRACES, &MINIMAP_POINTS, &MINIMAP_BEACONS, &MINIMAP_COMPASS, &MINIMAP_CLOCK, &MINIMAP_TRAIL, &MINIMAP_GOBLINS, &MINIMAP_FULL_MAP, &MINIMAP_COOP, &MINIMAP_SPIRITS];
+        let settings = [&ENABLED, &SHOW_NUMBERS, &BUILDUP, &MINIMAP, &MINIMAP_MAP, &MINIMAP_GRACES, &MINIMAP_POINTS, &MINIMAP_BEACONS, &MINIMAP_COMPASS, &MINIMAP_CLOCK, &MINIMAP_DEATHS, &MINIMAP_TRAIL, &MINIMAP_GOBLINS, &MINIMAP_FULL_MAP, &MINIMAP_COOP, &MINIMAP_SPIRITS];
         let numbers = [&WIDTH, &SCALE, &OFFSET_X, &OFFSET_Y, &MINIMAP_RANGE, &MINIMAP_SIZE, &MINIMAP_SCALE];
         let keys = settings.iter().map(|s| s.key).chain(numbers.iter().map(|n| n.key));
         for key in keys.chain([MINIMAP_ROTATE.key, MINIMAP_HIDE_IN_CAVES.key, MINIMAP_HIDE_IN_BOSS_FIGHTS.key]) {

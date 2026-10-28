@@ -36,6 +36,7 @@ static MINIMAP_ROTATE: AtomicBool = AtomicBool::new(true);
 static MINIMAP_COMPASS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_TRAIL: AtomicBool = AtomicBool::new(false);
 static MINIMAP_CLOCK: AtomicBool = AtomicBool::new(true);
+static MINIMAP_DEATHS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_FULL_MAP: AtomicBool = AtomicBool::new(true);
 static MINIMAP_GOBLINS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_COOP: AtomicBool = AtomicBool::new(true);
@@ -67,6 +68,7 @@ pub fn load(config: &Config) {
     set_minimap_compass(minimap.compass as u8);
     set_minimap_trail(minimap.trail as u8);
     set_minimap_clock(minimap.clock as u8);
+    set_minimap_deaths(minimap.deaths as u8);
     set_minimap_full_map(minimap.full_map as u8);
     set_minimap_goblins(minimap.layers.map_for_goblins as u8);
     set_minimap_coop(minimap.layers.coop_players as u8);
@@ -150,6 +152,11 @@ pub fn minimap_compass() -> bool {
 /// Whether the in-game time is shown under the minimap.
 pub fn minimap_clock() -> bool {
     MINIMAP_CLOCK.load(Ordering::Relaxed)
+}
+
+/// Whether the death count is shown under the minimap.
+pub fn minimap_deaths() -> bool {
+    MINIMAP_DEATHS.load(Ordering::Relaxed)
 }
 
 /// Whether the path the player has walked is drawn.
@@ -291,6 +298,10 @@ pub fn set_minimap_compass(value: u8) {
 
 pub fn set_minimap_clock(value: u8) {
     MINIMAP_CLOCK.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_minimap_deaths(value: u8) {
+    MINIMAP_DEATHS.store(value != 0, Ordering::Relaxed);
 }
 
 pub fn set_minimap_trail(value: u8) {

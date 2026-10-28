@@ -15,6 +15,7 @@ Panel đọc qua struct của `fromsoftware-rs` (rev của workspace). Không d�
 | Poise tối đa | +0x14 | **Chưa.** Xem bên dưới. |
 | Hàm tra nhân vật theo handle | slot 3 của vtable ChrSet | **Có, cả 4 bản.** |
 | Thanh máu boss (`CSFeManImp::boss_health_displays`) | +0x5BF0, 3 ô x 0x20, handle ở +8 (+0x5BF8), ô trống = -1 | **Có, cả 4 bản** (xem bên dưới). |
+| Số lần chết (`GameDataMan::death_count`) | +0x94 của `GameDataMan` | **AOB duy nhất ở cả 4 bản** (xem bên dưới); giá trị khớp 341 trong game (2026-10-28, chưa đối chiếu màn thống kê). |
 | Giờ trong game (`WorldAreaTime::clock`) | +0x00 (`time64`), +0x08 giờ ở bit 34-38 của số đóng gói | **Có, cả 4 bản** (xem bên dưới). |
 
 ## Thanh máu boss (`Minimap.Hide.InBossFights`)
@@ -65,3 +66,15 @@ bộ đếm hồi. Mức tối đa hiệu dụng là `vtable[2]() + [+0x18]` (�
 
 - Thử trong game, so log poise với thanh stagger thật (đánh trúng, chờ hồi).
 - Nếu max ở +0x14 không đúng, tìm lớp con thật của CSChrSuperArmorModule.
+
+## Số lần chết (`Minimap.Deaths`)
+
+`GameDataMan::instance()` đi qua bảng RVA nên panic trên 2.7.2.0, vì thế `radar.rs::death_count` tìm biến global bằng AOB
+`48 8B 05 ?? ?? ?? ?? 48 85 C0 74 05 48 8B 40 08 C3` (hàm nhỏ đọc `GameDataMan` rồi trả `[+8]`, tức `main_player_game_data`).
+`aob.py -Version all` cho `UNIQUE` ở 2.6.2.0 (8AE3A0), 2.7.0.0 và 2.7.1.0 (8AF520), 2.7.2.0 (8AF9D0). Địa chỉ biến là
+`rip + rel32` của lệnh `mov rax, [rip+..]` ở đầu hàm; `death_count` ở +0x94 (đếm theo `fromsoftware-rs`, ép bằng `const` assert).
+
+**Số ngày trong game: không dùng được.** `PackedDate` của đồng hồ có trường `day` (bit 29-33) nhưng nó mang **ngày thật của máy**
+(log 2026-10-28 đúng ngày chạy thử), game chỉ đổi giờ-phút-giây theo thời gian trong game. Chưa kiểm xem qua nửa đêm trong
+game có tăng `day` không; dù có thì nó chỉ là số ngày đã qua từ lúc vào game, mỗi lần vào lại lấy ngày thật.
+

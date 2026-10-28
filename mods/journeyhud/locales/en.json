@@ -78,6 +78,10 @@
     "label": "Clock",
     "help": "Show the in-game time under the minimap."
   },
+  "minimap_deaths": {
+    "label": "Deaths",
+    "help": "Show your death count under the minimap."
+  },
   "minimap_trail": {
     "label": "Trail",
     "help": "Draw the path you have walked on the minimap."
