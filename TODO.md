@@ -64,8 +64,6 @@ Chi tiết từng mục: `docs/cleanup_verify.md`. Chỉ build và unit test, ch
 Chi tiết: `mods/journeyhud/docs/design.md`
 
 - [ ] [bug] JourneyHUD: game crash hỏng heap (0xC0000374, 2026-10-27 20:51, game đang giải phóng `MicrosoftDiskFileOperator`), chưa rõ mod nào; thử chỉ JourneyHUD, bấm F5 ít thôi
-- [ ] [verify] JourneyHUD: khối vàng của thanh posture khi bị rút, và poise/posture trên 2.7.1.0 (đã thử 2.7.2.0)
-- [ ] [verify] JourneyHUD: bản đồ nền trong hầm ngầm và dungeon, không treo ở màn hình tải; grace chỉ hiện cái đã tìm thấy, cả dungeon (`docs/map.md`)
 - [ ] [research] JourneyHUD: buildup trong co-op Seamless (2026-10-28, chưa có dịp thử): hai máy cùng đánh một kẻ địch, so dòng log `Buildup:`; máy chủ thấy tổng, máy khách chỉ thấy phần mình? (`docs/buildup.md`)
-- [ ] [verify] JourneyHUD: hàng effect dưới buildup của kẻ địch khoá (độc, rot, băng, ngủ có giờ; phe thối rữa/máu icon vĩnh viễn; icon `MENU_StatusIcon_*` đúng hình; xuống hàng khi quá 5) (`mods/journeyhud/docs/effects.md`); còn làm: khối sát thương co-op, kiểm chữ giờ khi đổi cỡ HUD trong tuỳ chọn game
+- [ ] [verify] JourneyHUD: chữ giờ dưới icon trạng thái của game khi đổi cỡ HUD trong tuỳ chọn game (`mods/journeyhud/docs/effects.md`); còn làm: khối sát thương giữa người chơi (co-op)
 - [ ] [research] JourneyHUD: kẻ địch xung quanh trên minimap, đầu chuỗi beacon trên 2.6.2.0 đến 2.7.1.0 (`docs/map.md`)

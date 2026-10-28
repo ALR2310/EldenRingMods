@@ -1,6 +1,6 @@
 # JourneyHUD: hiệu ứng đang chạy của kẻ địch (SpEffect) và thời gian còn lại
 
-**Status 2026-10-28: hàng effect của kẻ địch khoá đã có code (chưa thử vẽ trong game): đọc SpEffect có icon hoặc là effect nổ của độc, thối rữa, đóng băng, ngủ (ghép dải id, bảng bên dưới), vẽ ô icon và thời gian dưới thanh buildup, căn phải, 6 ô một hàng, tối đa 12 (khoá `Effects.Target`, `Effects.Player`). Chưa làm: hàng effect của người chơi (log `Effects: player` đã cho thấy dữ liệu đúng).**
+**Status 2026-10-28: hàng effect của kẻ địch khoá đã có code (người dùng xác nhận chạy 2026-10-29): đọc SpEffect có icon hoặc là effect nổ của độc, thối rữa, đóng băng, ngủ (ghép dải id, bảng bên dưới), vẽ ô icon và thời gian dưới thanh buildup, căn phải, 6 ô một hàng, tối đa 12 (khoá `Effects.Target`, `Effects.Player`). Chưa làm: hàng effect của người chơi (log `Effects: player` đã cho thấy dữ liệu đúng).**
 
 ## ERBuffTimer làm thế nào (phân tích tĩnh `ERBuffTimer.dll`, không chạy nó)
 
