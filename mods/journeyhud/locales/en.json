@@ -80,7 +80,7 @@
   },
   "minimap_deaths": {
     "label": "Deaths",
-    "help": "Show your death count under the minimap."
+    "help": "Show your death count above the minimap."
   },
   "minimap_trail": {
     "label": "Trail",
