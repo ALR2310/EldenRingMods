@@ -16,7 +16,7 @@
   },
   "numbers": {
     "label": "Health numbers",
-    "help": "Show the health and posture numbers."
+    "help": "Show the health, posture and buildup numbers."
   },
   "buildup": {
     "label": "Status buildup",

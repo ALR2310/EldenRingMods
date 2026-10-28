@@ -332,13 +332,14 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
     // Under the tan line.
     let mut row_top = bottom + (LINE + BUILDUP_GAP) * s;
     for buildup in &target.buildup {
-        draw_buildup(&draw, buildup, [left, row_top, right], layout);
+        draw_buildup(ui, &draw, buildup, [left, row_top, right], layout);
         row_top += BUILDUP_ROW * s;
     }
 }
 
-/// One buildup bar: the game's icon of the status, then a thin bar filled with what has built up.
-fn draw_buildup(draw: &DrawListMut<'_>, buildup: &Buildup, [left, top, right]: [f32; 3], layout: &Layout) {
+/// One buildup bar: the game's icon of the status, then a bar filled with what has built up, with
+/// `built / max` in it when the numbers are shown.
+fn draw_buildup(ui: &Ui, draw: &DrawListMut<'_>, buildup: &Buildup, [left, top, right]: [f32; 3], layout: &Layout) {
     let s = layout.s;
     let middle = top + BUILDUP_ROW * s / 2.0;
     let mut bar_left = left;
@@ -366,6 +367,10 @@ fn draw_buildup(draw: &DrawListMut<'_>, buildup: &Buildup, [left, top, right]: [
         textures: layout.textures,
     };
     draw_bar(draw, &bar);
+    if layout.show_numbers {
+        let label = format!("{} / {}", buildup.built, buildup.max);
+        draw_bar_number(ui, &label, [bar_left, right, middle - half, middle + half], BAR_NUMBER * s, s);
+    }
 }
 
 /// `text` centered in the bar `[left, right, top, bottom]`, set at a font size of `em` pixels so it
