@@ -15,7 +15,7 @@ use crate::map::layer::{Icon, MapLayer};
 use crate::radar::{self, Snapshot as RadarSnapshot};
 use crate::radar_ui::{self, Placement, Radar};
 use crate::settings;
-use crate::target::{self, Buildup, Target};
+use crate::target::{self, Buildup, Effect, Target};
 use crate::text;
 use crate::textures::{self, Textures};
 
@@ -40,6 +40,26 @@ const BUILDUP_ICON: f32 = 16.0;
 const BUILDUP_ICON_GAP: f32 = 0.0;
 const BUILDUP_BAR: f32 = 12.0;
 const BUILDUP_GAP: f32 = 4.0;
+/// The effects, a cell each: the icon with the time left under it, six to a row. The target's sit
+/// under its buildup bars, filling from the right edge; the player's from the left, under the
+/// game's own status icons (`PLAYER_EFFECTS_AT`, 1080p pixels in the game's picture, measured in
+/// a screenshot: those icons are 38 px, 42 apart, from x 137, y 105 to 138).
+const EFFECT_CELL: f32 = 42.0;
+const EFFECT_ICON: f32 = 38.0;
+const EFFECT_TIME: f32 = 11.0;
+/// The target's cells are this much of the player's size (the player's match the game's own icons);
+/// its time text keeps a size that reads, `EFFECT_TIME_TARGET`.
+const TARGET_EFFECTS_SCALE: f32 = 0.77;
+const EFFECT_TIME_TARGET: f32 = 10.0;
+const EFFECT_ROW: f32 = 54.0;
+/// Rows of cells at most.
+const EFFECT_ROWS: usize = 2;
+/// Cells in a row of the player's effects (the target's depend on the width of its bars).
+const PLAYER_EFFECTS_PER_ROW: usize = 6;
+const EFFECTS_GAP: f32 = 4.0;
+const PLAYER_EFFECTS_AT: [f32; 2] = [140.0, 146.0];
+/// The icon fades over its last seconds.
+const EFFECT_FADE_SECONDS: f32 = 5.0;
 /// One color per status, in the order of `target::BUILDUP`.
 const BUILDUP_COLORS: [[f32; 4]; 7] = [
     [0.39, 0.44, 0.05, 1.0],
@@ -206,6 +226,21 @@ impl ImguiRenderLoop for HudRenderLoop {
         let wanted = if radar::in_control() { 1.0 } else { 0.0 };
         self.panel_alpha += (wanted - self.panel_alpha) * (dt * FADE_RATE).min(1.0);
         PANEL_ALPHA.store(self.panel_alpha.to_bits(), Ordering::Relaxed);
+        let layout = Layout {
+            area: self.area,
+            offset: settings::offset(),
+            width: settings::width(),
+            s: self.s,
+            show_numbers: settings::show_numbers(),
+            textures: self.textures.as_ref(),
+            icons: self.map.as_ref(),
+        };
+        if self.panel_alpha > 0.01 && settings::effects_player() {
+            let effects = target::own_effects_now();
+            let res = layout.area[3] / BASE_HEIGHT;
+            let origin = [layout.area[0] + PLAYER_EFFECTS_AT[0] * res, layout.area[1] + PLAYER_EFFECTS_AT[1] * res];
+            draw_effects(ui, &ui.get_foreground_draw_list(), &effects, Cells { origin, right_aligned: false, s: res, text: EFFECT_TIME * res, per_row: PLAYER_EFFECTS_PER_ROW }, &layout);
+        }
         let Some(target) = target::current() else {
             self.trail.id = 0;
             self.poise_trail.id = 0;
@@ -216,15 +251,6 @@ impl ImguiRenderLoop for HudRenderLoop {
             Some((poise, max)) => self.poise_trail.update(target.id, poise, max, dt),
             None => self.poise_trail.id = 0,
         }
-        let layout = Layout {
-            area: self.area,
-            offset: settings::offset(),
-            width: settings::width(),
-            s: self.s,
-            show_numbers: settings::show_numbers(),
-            textures: self.textures.as_ref(),
-            icons: self.map.as_ref(),
-        };
         if self.panel_alpha > 0.01 {
             draw_target(ui, &target, [&self.trail, &self.poise_trail], &layout);
         }
@@ -334,6 +360,78 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
     for buildup in &target.buildup {
         draw_buildup(ui, &draw, buildup, [left, row_top, right], layout);
         row_top += BUILDUP_ROW * s;
+    }
+    if settings::effects_target() && !target.effects.is_empty() {
+        let size = s * TARGET_EFFECTS_SCALE;
+        let per_row = (((right - left) / (EFFECT_CELL * size)).floor() as usize).clamp(1, PLAYER_EFFECTS_PER_ROW);
+        let cells = Cells {
+            origin: [right, row_top + EFFECTS_GAP * s],
+            right_aligned: true,
+            s: size,
+            text: EFFECT_TIME_TARGET * s,
+            per_row,
+        };
+        draw_effects(ui, &draw, &target.effects, cells, layout);
+    }
+}
+
+/// The time left as `24s`, or `1:30` from a minute on.
+fn effect_time(left: f32) -> String {
+    let seconds = left.max(0.0).ceil() as u32;
+    if seconds >= 60 { format!("{}:{:02}", seconds / 60, seconds % 60) } else { format!("{seconds}s") }
+}
+
+/// Where the cells of a row of effects start and how big they are.
+struct Cells {
+    /// The right edge of the first cell when `right_aligned`, the left edge otherwise; and the top.
+    origin: [f32; 2],
+    right_aligned: bool,
+    /// The size the cells are drawn at.
+    s: f32,
+    /// The font size of the time, in pixels.
+    text: f32,
+    /// Cells in a row; at most [EFFECT_ROWS] rows are drawn.
+    per_row: usize,
+}
+
+/// The effects as cells, `per_row` to a row, from the right edge leftwards or from the left
+/// edge rightwards.
+fn draw_effects(ui: &Ui, draw: &DrawListMut<'_>, effects: &[Effect], cells: Cells, layout: &Layout) {
+    let (s, [edge, top]) = (cells.s, cells.origin);
+    let shown = target::shown_effects(effects.to_vec(), cells.per_row * EFFECT_ROWS);
+    for (i, effect) in shown.iter().enumerate() {
+        let (row, column) = (i / cells.per_row, i % cells.per_row);
+        let (x0, x1) = if cells.right_aligned {
+            let x1 = edge - column as f32 * EFFECT_CELL * s;
+            (x1 - EFFECT_CELL * s, x1)
+        } else {
+            let x0 = edge + column as f32 * EFFECT_CELL * s;
+            (x0, x0 + EFFECT_CELL * s)
+        };
+        let y = top + row as f32 * EFFECT_ROW * s;
+        let alpha = if effect.permanent { 1.0 } else { (0.4 + 0.6 * effect.left / EFFECT_FADE_SECONDS).clamp(0.4, 1.0) };
+        let height = EFFECT_ICON * s;
+        let center = (x0 + x1) / 2.0;
+        let icon_top = y + (2.0 * s).round();
+        if let Some(icon) = effect.kind.and_then(Icon::buildup).and_then(|icon| layout.icons?.icon(icon)) {
+            let width = (height * icon.size[0] / icon.size[1]).min(EFFECT_CELL * s);
+            draw.add_image(icon.texture, [center - width / 2.0, icon_top], [center + width / 2.0, icon_top + height])
+                .col(fade([1.0, 1.0, 1.0, alpha]))
+                .build();
+        } else if let Some((texture, cell)) = layout.icons.and_then(|map| map.status_icon(effect.icon)) {
+            draw.add_image(texture, [center - height / 2.0, icon_top], [center + height / 2.0, icon_top + height])
+                .uv_min(cell.uv_min)
+                .uv_max(cell.uv_max)
+                .col(fade([1.0, 1.0, 1.0, alpha]))
+                .build();
+        }
+        if !effect.permanent {
+            let label = effect_time(effect.left);
+            let em = cells.text;
+            let size = text::measure(ui, &label, em);
+            let pos = [(center - size[0] / 2.0).round(), (icon_top + height + 1.0 * s).round()];
+            text::add_shadowed(&label, pos, em, fade(TEXT), fade(TEXT_SHADOW), s.max(1.0));
+        }
     }
 }
 
@@ -481,7 +579,16 @@ pub fn install() {
 
 #[cfg(test)]
 mod tests {
-    use super::{Trail, game_area};
+    #[test]
+    fn effect_time_counts_whole_seconds_and_switches_to_minutes() {
+        assert_eq!(effect_time(24.3), "25s");
+        assert_eq!(effect_time(9.0), "9s");
+        assert_eq!(effect_time(59.2), "1:00");
+        assert_eq!(effect_time(90.0), "1:30");
+        assert_eq!(effect_time(-1.0), "0s");
+    }
+
+    use super::{Trail, effect_time, game_area};
 
     #[test]
     fn area_is_the_16_9_rect_centered_in_the_display() {

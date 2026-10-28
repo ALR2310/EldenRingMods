@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! Journey HUD                -> two pages:
-//!   Target panel             -> Target bar on/off, Health numbers on/off, Status buildup on/off,
+//!   Target panel             -> Target bar on/off, Health numbers on/off, Status buildup on/off, Effects on/off (target, you),
 //!                               Bar length slider, Size stepped, Right margin slider, Top margin slider
 //!   Minimap                  -> Minimap on/off, Map, Graces, Points, Beacons, Map for Goblins,
 //!                               Co-op players, Spirits, Full map, Clock, Deaths, Trail, Compass, Turn with
@@ -26,6 +26,10 @@ use crate::settings;
 static ENABLED: Setting = Setting { key: "Target.Enabled", format: erui::format_bool, apply: Some(settings::set_enabled) };
 static SHOW_NUMBERS: Setting =
     Setting { key: "Target.ShowNumbers", format: erui::format_bool, apply: Some(settings::set_show_numbers) };
+static EFFECTS_TARGET: Setting =
+    Setting { key: "Effects.Target", format: erui::format_bool, apply: Some(settings::set_effects_target) };
+static EFFECTS_PLAYER: Setting =
+    Setting { key: "Effects.Player", format: erui::format_bool, apply: Some(settings::set_effects_player) };
 static BUILDUP: Setting =
     Setting { key: "Target.Buildup", format: erui::format_bool, apply: Some(settings::set_buildup) };
 static WIDTH: NumberSetting =
@@ -100,6 +104,10 @@ fn build(b: &mut erui::MenuBuilder) -> Result<(), String> {
         config::get().target.show_numbers as u8
     })?;
     b.toggle(target, &t("buildup.label"), &t("buildup.help"), &BUILDUP, || config::get().target.buildup as u8)?;
+    b.toggle(target, &t("effects.label"), &t("effects.help"), &EFFECTS_TARGET, || config::get().effects.target as u8)?;
+    b.toggle(target, &t("effects_player.label"), &t("effects_player.help"), &EFFECTS_PLAYER, || {
+        config::get().effects.player as u8
+    })?;
     b.number(target, &t("width.label"), &t("width.help"), &WIDTH, || f64::from(config::get().target.width))?;
     b.number(target, &t("scale.label"), &t("scale.help"), &SCALE, || config::get().target.scale)?;
     b.number(target, &t("offset_x.label"), &t("offset_x.help"), &OFFSET_X, || f64::from(config::get().layout.offset_x))?;
@@ -181,7 +189,7 @@ mod tests {
     #[test]
     fn menu_keys_are_in_the_template() {
         let doc: toml::Value = toml::from_str(config::TEMPLATE).unwrap();
-        let settings = [&ENABLED, &SHOW_NUMBERS, &BUILDUP, &MINIMAP, &MINIMAP_MAP, &MINIMAP_GRACES, &MINIMAP_POINTS, &MINIMAP_BEACONS, &MINIMAP_COMPASS, &MINIMAP_CLOCK, &MINIMAP_DEATHS, &MINIMAP_TRAIL, &MINIMAP_GOBLINS, &MINIMAP_FULL_MAP, &MINIMAP_COOP, &MINIMAP_SPIRITS];
+        let settings = [&ENABLED, &SHOW_NUMBERS, &BUILDUP, &EFFECTS_TARGET, &EFFECTS_PLAYER, &MINIMAP, &MINIMAP_MAP, &MINIMAP_GRACES, &MINIMAP_POINTS, &MINIMAP_BEACONS, &MINIMAP_COMPASS, &MINIMAP_CLOCK, &MINIMAP_DEATHS, &MINIMAP_TRAIL, &MINIMAP_GOBLINS, &MINIMAP_FULL_MAP, &MINIMAP_COOP, &MINIMAP_SPIRITS];
         let numbers = [&WIDTH, &SCALE, &OFFSET_X, &OFFSET_Y, &MINIMAP_RANGE, &MINIMAP_SIZE, &MINIMAP_SCALE];
         let keys = settings.iter().map(|s| s.key).chain(numbers.iter().map(|n| n.key));
         for key in keys.chain([MINIMAP_ROTATE.key, MINIMAP_HIDE_IN_CAVES.key, MINIMAP_HIDE_IN_BOSS_FIGHTS.key]) {

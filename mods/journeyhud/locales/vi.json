@@ -18,6 +18,14 @@
     "label": "Số máu",
     "help": "Hiện số máu, số posture và số tích tụ."
   },
+  "effects": {
+    "label": "Hiệu ứng mục tiêu",
+    "help": "Hiện các hiệu ứng trên mục tiêu (độc, thối đỏ, đóng băng, ngủ...) cùng thời gian còn lại."
+  },
+  "effects_player": {
+    "label": "Hiệu ứng của bạn",
+    "help": "Hiện các hiệu ứng của bạn cùng thời gian còn lại, dưới hàng icon trạng thái của game."
+  },
   "buildup": {
     "label": "Tích tụ trạng thái",
     "help": "Hiện độ tích tụ độc, thối đỏ, chảy máu, tử khí, đóng băng, ngủ và điên loạn của mục tiêu."

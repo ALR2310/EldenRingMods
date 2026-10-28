@@ -124,6 +124,7 @@ pub struct MapLayer {
     sprites_pending: Mutex<Option<Receiver<sprites::Sprites>>>,
     icons: Option<[IconTexture; ICON_COUNT]>,
     map_icons: Option<MapIcons>,
+    status_icons: Option<StatusIcons>,
     goblins: Goblins,
 }
 
@@ -148,6 +149,7 @@ impl MapLayer {
             sprites_pending: Mutex::new(Some(sprites_pending)),
             icons: None,
             map_icons: None,
+            status_icons: None,
             goblins: Goblins::Waiting,
         }
     }
@@ -234,6 +236,10 @@ impl MapLayer {
             Ok(icons) => self.upload_map_icons(ctx, &icons),
             Err(e) => logger::warn(&format!("Map: point icons not read ({e})")),
         }
+        match sprites.status_icons {
+            Ok(icons) => self.upload_status_icons(ctx, &icons),
+            Err(e) => logger::warn(&format!("Effects: status icons not read ({e})")),
+        }
     }
 
     /// Uploads the icons (all of them or none).
@@ -287,6 +293,39 @@ impl MapLayer {
     pub fn map_icon(&self, id: u16) -> Option<(TextureId, MapIcon)> {
         let icons = self.map_icons.as_ref()?;
         Some((icons.texture, *icons.cells.get(&id)?))
+    }
+}
+
+/// The status icons of the effects in one texture, a grid of `STATUS_CELL` pixel cells.
+struct StatusIcons {
+    texture: TextureId,
+    cells: HashMap<u32, MapIcon>,
+}
+
+/// The game's status icons are 40 px.
+const STATUS_CELL: u32 = 40;
+const STATUS_COLUMNS: u32 = 16;
+
+impl MapLayer {
+    fn upload_status_icons(&mut self, ctx: &mut dyn RenderContext, icons: &[(u32, Image)]) {
+        let items: Vec<(u32, &Image)> = icons.iter().map(|(id, image)| (*id, image)).collect();
+        let Some(grid) = pack_grid(&items, STATUS_CELL, STATUS_COLUMNS) else {
+            logger::warn("Effects: no status icons to upload");
+            return;
+        };
+        match ctx.load_texture(&grid.rgba, grid.width, grid.height) {
+            Ok(texture) => {
+                logger::log(&format!("Effects: {} status icon(s) uploaded", grid.cells.len()));
+                self.status_icons = Some(StatusIcons { texture, cells: grid.cells });
+            }
+            Err(e) => logger::warn(&format!("Effects: status icons could not be uploaded ({e:?})")),
+        }
+    }
+
+    /// The atlas texture and the cell of the status icon `id` (`SpEffectParam.iconId`).
+    pub fn status_icon(&self, id: i32) -> Option<(TextureId, MapIcon)> {
+        let icons = self.status_icons.as_ref()?;
+        Some((icons.texture, *icons.cells.get(&u32::try_from(id).ok()?)?))
     }
 }
 
@@ -362,18 +401,23 @@ struct Grid {
 }
 
 fn pack_goblins(icons: &[mfg::Icon]) -> Option<Grid> {
-    let fitting: Vec<&mfg::Icon> =
-        icons.iter().filter(|icon| icon.image.width <= GOBLIN_CELL && icon.image.height <= GOBLIN_CELL).collect();
+    let items: Vec<(u32, &Image)> = icons.iter().map(|icon| (icon.id, &icon.image)).collect();
+    pack_grid(&items, GOBLIN_CELL, GOBLIN_COLUMNS)
+}
+
+/// Lays the images that fit a `cell` pixel square out in a grid of `columns` columns, each in its
+/// own cell, by id.
+fn pack_grid(items: &[(u32, &Image)], cell: u32, columns: u32) -> Option<Grid> {
+    let fitting: Vec<&(u32, &Image)> = items.iter().filter(|(_, image)| image.width <= cell && image.height <= cell).collect();
     if fitting.is_empty() {
         return None;
     }
-    let width = GOBLIN_CELL * GOBLIN_COLUMNS;
-    let height = GOBLIN_CELL * (fitting.len() as u32).div_ceil(GOBLIN_COLUMNS);
+    let width = cell * columns;
+    let height = cell * (fitting.len() as u32).div_ceil(columns);
     let mut rgba = vec![0u8; (width * height * 4) as usize];
     let mut cells = HashMap::new();
-    for (i, icon) in fitting.iter().enumerate() {
-        let (x, y) = (i as u32 % GOBLIN_COLUMNS * GOBLIN_CELL, i as u32 / GOBLIN_COLUMNS * GOBLIN_CELL);
-        let image = &icon.image;
+    for (i, (id, image)) in fitting.iter().map(|item| (item.0, item.1)).enumerate() {
+        let (x, y) = (i as u32 % columns * cell, i as u32 / columns * cell);
         for row in 0..image.height {
             let from = (row * image.width * 4) as usize;
             let to = (((y + row) * width + x) * 4) as usize;
@@ -381,7 +425,7 @@ fn pack_goblins(icons: &[mfg::Icon]) -> Option<Grid> {
         }
         let uv = |px: u32, py: u32| [px as f32 / width as f32, py as f32 / height as f32];
         cells.insert(
-            icon.id,
+            id,
             MapIcon {
                 uv_min: uv(x, y),
                 uv_max: uv(x + image.width, y + image.height),
