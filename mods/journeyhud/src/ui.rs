@@ -3,6 +3,8 @@
 //! input or focus) from the snapshot [crate::target] keeps up to date.
 //! Details: `docs/design.md`.
 
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use hudhook::hooks::dx12::ImguiDx12Hooks;
 use hudhook::imgui::{Context, DrawListMut, Ui};
 use hudhook::{Hudhook, ImguiRenderLoop, RenderContext};
@@ -55,6 +57,17 @@ const FONT_SCALE: f32 = 1.3;
 
 /// Seconds the lost-health block stays before it drains, and how fast it
 /// drains afterwards (fraction of max health per second).
+/// How fast the target panel fades in and out with the game's menus, per second (as the minimap).
+const FADE_RATE: f32 = 12.0;
+
+/// Opacity of the target panel this frame, 0 to 1, as `f32` bits (set before it is drawn).
+static PANEL_ALPHA: AtomicU32 = AtomicU32::new(0x3F80_0000);
+
+/// `color` with the panel's opacity applied.
+fn fade([r, g, b, a]: [f32; 4]) -> [f32; 4] {
+    [r, g, b, a * f32::from_bits(PANEL_ALPHA.load(Ordering::Relaxed))]
+}
+
 const TRAIL_HOLD: f32 = 0.9;
 const TRAIL_DRAIN: f32 = 0.6;
 
@@ -68,8 +81,10 @@ const HP_CORE: [f32; 4] = [0.33, 0.04, 0.03, 1.0];
 const HP_EDGE: [f32; 4] = [0.44, 0.22, 0.17, 1.0];
 const TRAIL_COLOR: [f32; 4] = [0.56, 0.46, 0.09, 1.0];
 const DIVIDER: [f32; 4] = [0.89, 0.89, 0.75, 1.0];
-const POISE_CORE: [f32; 4] = [0.52, 0.41, 0.11, 1.0];
-const POISE_EDGE: [f32; 4] = [0.62, 0.52, 0.24, 1.0];
+// A darker gold than the block of lost value (the player's own yellow, `TRAIL_COLOR`), so that
+// block shows against the bar.
+const POISE_CORE: [f32; 4] = [0.38, 0.29, 0.08, 1.0];
+const POISE_EDGE: [f32; 4] = [0.47, 0.37, 0.14, 1.0];
 /// The bar texture is grayscale and about this bright on average; a color is
 /// divided by it so the tinted result lands on the sampled color.
 const TEXTURE_LEVEL: f32 = 0.86;
@@ -86,6 +101,10 @@ struct HudRenderLoop {
     /// Height of the area over 1080 x the `Scale` setting, set each frame.
     s: f32,
     trail: Trail,
+    /// The same for the posture bar.
+    poise_trail: Trail,
+    /// 0 to 1: follows whether the game is in normal play, so the panel goes with its menus.
+    panel_alpha: f32,
     radar: Radar,
     /// The world map under the minimap; `None` until the player is in the world (see
     /// `before_render`) and when the game folder is unknown.
@@ -94,13 +113,13 @@ struct HudRenderLoop {
     textures: Option<Textures>,
 }
 
-/// The health that was just lost, shown as a block between the current health
+/// What was just lost of a bar (health or posture), shown as a block between the current value
 /// and where it was, like the game's own bars.
 #[derive(Default)]
 struct Trail {
     id: usize,
-    hp: i32,
-    /// Where the block starts (health points), `<= hp` when there is none.
+    value: f32,
+    /// Where the block starts, `<= value` when there is none.
     from: f32,
     hold: f32,
 }
@@ -111,25 +130,26 @@ impl Trail {
         (self.hold / TRAIL_HOLD).clamp(0.0, 1.0)
     }
 
-    /// Advances to the current `target`; `dt` is the frame time in seconds.
-    fn update(&mut self, target: &Target, dt: f32) {
-        if self.id != target.id {
-            *self = Trail { id: target.id, hp: target.hp, from: target.hp as f32, hold: 0.0 };
+    /// Advances to the current `value` (of at most `max`) of the enemy `id`; `dt` is the frame
+    /// time in seconds.
+    fn update(&mut self, id: usize, value: f32, max: f32, dt: f32) {
+        if self.id != id {
+            *self = Trail { id, value, from: value, hold: 0.0 };
             return;
         }
-        if target.hp < self.hp {
-            self.from = self.from.max(self.hp as f32);
+        if value < self.value {
+            self.from = self.from.max(self.value);
             self.hold = TRAIL_HOLD;
-        } else if target.hp > self.hp {
-            self.from = target.hp as f32;
+        } else if value > self.value {
+            self.from = value;
         }
-        self.hp = target.hp;
+        self.value = value;
         if self.hold > 0.0 {
             self.hold -= dt;
         } else {
-            self.from -= TRAIL_DRAIN * target.max_hp as f32 * dt;
+            self.from -= TRAIL_DRAIN * max * dt;
         }
-        self.from = self.from.clamp(target.hp as f32, target.max_hp as f32);
+        self.from = self.from.clamp(value, max);
     }
 }
 
@@ -167,8 +187,8 @@ impl ImguiRenderLoop for HudRenderLoop {
 
     fn render(&mut self, ui: &mut Ui) {
         if settings::minimap_enabled() {
-            for (key, zoom_in) in [(settings::zoom_in_key(), true), (settings::zoom_out_key(), false)] {
-                if input::is_key_pressed(key) {
+            for (keys, zoom_in) in [(settings::zoom_in_keys(), true), (settings::zoom_out_keys(), false)] {
+                if keys.into_iter().any(|key| key != 0 && input::is_key_pressed(key)) {
                     settings::zoom(zoom_in);
                 }
             }
@@ -182,11 +202,20 @@ impl ImguiRenderLoop for HudRenderLoop {
             }
         }
         self.radar.draw(ui, snapshot.as_ref(), &Placement { area: self.area }, self.map.as_ref(), show_map);
+        let dt = ui.io().delta_time;
+        let wanted = if radar::in_control() { 1.0 } else { 0.0 };
+        self.panel_alpha += (wanted - self.panel_alpha) * (dt * FADE_RATE).min(1.0);
+        PANEL_ALPHA.store(self.panel_alpha.to_bits(), Ordering::Relaxed);
         let Some(target) = target::current() else {
             self.trail.id = 0;
+            self.poise_trail.id = 0;
             return;
         };
-        self.trail.update(&target, ui.io().delta_time);
+        self.trail.update(target.id, target.hp as f32, target.max_hp as f32, dt);
+        match target.poise {
+            Some((poise, max)) => self.poise_trail.update(target.id, poise, max, dt),
+            None => self.poise_trail.id = 0,
+        }
         let layout = Layout {
             area: self.area,
             offset: settings::offset(),
@@ -196,7 +225,9 @@ impl ImguiRenderLoop for HudRenderLoop {
             textures: self.textures.as_ref(),
             icons: self.map.as_ref(),
         };
-        draw_target(ui, &target, &self.trail, &layout);
+        if self.panel_alpha > 0.01 {
+            draw_target(ui, &target, [&self.trail, &self.poise_trail], &layout);
+        }
     }
 }
 
@@ -229,6 +260,9 @@ struct Bar<'a> {
     fraction: f32,
     /// Where the block of just-lost health ends, as a fraction.
     trail: Option<f32>,
+    /// The color of that block: tinted over the bar's texture, and flat when there is none.
+    trail_tint: [f32; 4],
+    trail_color: [f32; 4],
     /// 0 to 1: brightness of the glow at the end of the health.
     glow: f32,
     core: [f32; 4],
@@ -237,7 +271,7 @@ struct Bar<'a> {
     textures: Option<&'a Textures>,
 }
 
-fn draw_target(ui: &Ui, target: &Target, trail: &Trail, layout: &Layout) {
+fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layout: &Layout) {
     let s = layout.s;
     // The column's offsets follow the screen only; `s` also holds the player's
     // size setting, which resizes the bar, not where it sits.
@@ -258,6 +292,8 @@ fn draw_target(ui: &Ui, target: &Target, trail: &Trail, layout: &Layout) {
         to: [right, hp_bottom],
         fraction: target.hp as f32 / max_hp,
         trail: trail_fraction,
+        trail_tint: TRAIL_TINT,
+        trail_color: TRAIL_COLOR,
         glow: trail.glow(),
         core: HP_CORE,
         edge: HP_EDGE,
@@ -276,8 +312,10 @@ fn draw_target(ui: &Ui, target: &Target, trail: &Trail, layout: &Layout) {
             from: [left, hp_bottom],
             to: [right, bottom],
             fraction: poise / max,
-            trail: None,
-            glow: 0.0,
+            trail: (poise_trail.from > poise).then(|| poise_trail.from / max),
+            trail_tint: TRAIL_TINT,
+            trail_color: TRAIL_COLOR,
+            glow: poise_trail.glow(),
             core: POISE_CORE,
             edge: POISE_EDGE,
             s,
@@ -307,7 +345,9 @@ fn draw_buildup(draw: &DrawListMut<'_>, buildup: &Buildup, [left, top, right]: [
     if let Some(icon) = layout.icons.and_then(|map| Icon::buildup(buildup.kind).and_then(|icon| map.icon(icon))) {
         let height = BUILDUP_ICON * s;
         let width = height * icon.size[0] / icon.size[1];
-        draw.add_image(icon.texture, [left, middle - height / 2.0], [left + width, middle + height / 2.0]).build();
+        draw.add_image(icon.texture, [left, middle - height / 2.0], [left + width, middle + height / 2.0])
+            .col(fade([1.0, 1.0, 1.0, 1.0]))
+            .build();
         bar_left = left + width + BUILDUP_ICON_GAP * s;
     }
     let color = BUILDUP_COLORS[buildup.kind];
@@ -317,6 +357,8 @@ fn draw_buildup(draw: &DrawListMut<'_>, buildup: &Buildup, [left, top, right]: [
         to: [right, middle + half],
         fraction: buildup.built as f32 / buildup.max as f32,
         trail: None,
+        trail_tint: TRAIL_TINT,
+        trail_color: TRAIL_COLOR,
         glow: 0.0,
         core: color,
         edge: color,
@@ -331,11 +373,11 @@ fn draw_buildup(draw: &DrawListMut<'_>, buildup: &Buildup, [left, top, right]: [
 fn draw_bar_number(ui: &Ui, text: &str, [left, right, top, bottom]: [f32; 4], em: f32, s: f32) {
     let size = text::measure(ui, text, em);
     let pos = [((left + right - size[0]) / 2.0).round(), ((top + bottom - size[1]) / 2.0).round()];
-    text::add_shadowed(text, pos, em, TEXT, TEXT_SHADOW, s.max(1.0));
+    text::add_shadowed(text, pos, em, fade(TEXT), fade(TEXT_SHADOW), s.max(1.0));
 }
 
 fn draw_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>) {
-    draw.add_rect(bar.from, bar.to, TRACK).filled(true).build();
+    draw.add_rect(bar.from, bar.to, fade(TRACK)).filled(true).build();
     match bar.textures {
         Some(textures) => textured_bar(draw, bar, textures),
         None => flat_bar(draw, bar),
@@ -351,9 +393,9 @@ fn textured_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>, textures: &Textures) {
     // The textures have a transparent row above and below the visible bar.
     let unit = (to[1] - from[1]) / textures::BAR_ROWS;
     let (top, bottom) = (from[1] - unit, to[1] + unit);
-    let tint = |c: [f32; 4]| [(c[0] / TEXTURE_LEVEL).min(1.0), (c[1] / TEXTURE_LEVEL).min(1.0), (c[2] / TEXTURE_LEVEL).min(1.0), 1.0];
+    let tint = |c: [f32; 4]| fade([(c[0] / TEXTURE_LEVEL).min(1.0), (c[1] / TEXTURE_LEVEL).min(1.0), (c[2] / TEXTURE_LEVEL).min(1.0), 1.0]);
 
-    draw.add_image(textures.background, [from[0], top], [to[0], bottom]).col(BACKGROUND_TINT).build();
+    draw.add_image(textures.background, [from[0], top], [to[0], bottom]).col(fade(BACKGROUND_TINT)).build();
 
     let fraction = bar.fraction.clamp(0.0, 1.0);
     let end = from[0] + width * fraction;
@@ -362,7 +404,7 @@ fn textured_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>, textures: &Textures) {
         draw.add_image(textures.bar, [end, top], [from[0] + width * trail, bottom])
             .uv_min([fraction, 0.0])
             .uv_max([trail, 1.0])
-            .col(TRAIL_TINT)
+            .col(fade(bar.trail_tint))
             .build();
     }
     if fraction > 0.0 {
@@ -375,12 +417,13 @@ fn textured_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>, textures: &Textures) {
         let middle = (from[1] + to[1]) / 2.0;
         let [edge_w, edge_h] = textures::EDGE_SIZE.map(|v| v * unit);
         draw.add_image(textures.edge, [end - edge_w / 2.0, middle - edge_h / 2.0], [end + edge_w / 2.0, middle + edge_h / 2.0])
+            .col(fade([1.0, 1.0, 1.0, 1.0]))
             .build();
         if bar.glow > 0.0 {
             let [glow_w, glow_h] = textures::GLOW_SIZE.map(|v| v * unit);
             let right = end + textures::GLOW_TAIL * unit;
             draw.add_image(textures.glow, [right - glow_w, middle - glow_h / 2.0], [right, middle + glow_h / 2.0])
-                .col([1.0, 1.0, 1.0, bar.glow])
+                .col(fade([1.0, 1.0, 1.0, bar.glow]))
                 .build();
         }
     }
@@ -393,18 +436,19 @@ fn flat_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>) {
     let fraction = bar.fraction.clamp(0.0, 1.0);
     if let Some(trail) = bar.trail {
         let trail = trail.clamp(fraction, 1.0);
-        draw.add_rect([from[0] + width * fraction, from[1]], [from[0] + width * trail, to[1]], TRAIL_COLOR)
+        draw.add_rect([from[0] + width * fraction, from[1]], [from[0] + width * trail, to[1]], fade(bar.trail_color))
             .filled(true)
             .build();
     }
     if fraction > 0.0 {
         let end = from[0] + width * fraction;
         let fade = from[1] + (to[1] - from[1]) * 0.8;
-        draw.add_rect(from, [end, fade], bar.core).filled(true).build();
-        draw.add_rect_filled_multicolor([from[0], fade], [end, to[1]], bar.core, bar.core, bar.edge, bar.edge);
+        let (core, edge) = (self::fade(bar.core), self::fade(bar.edge));
+        draw.add_rect(from, [end, fade], core).filled(true).build();
+        draw.add_rect_filled_multicolor([from[0], fade], [end, to[1]], core, core, edge, edge);
         if bar.trail.is_some() {
             let line = bar.s.max(1.0);
-            draw.add_rect([end - line, from[1]], [end, to[1]], DIVIDER).filled(true).build();
+            draw.add_rect([end - line, from[1]], [end, to[1]], self::fade(DIVIDER)).filled(true).build();
         }
     }
 }
@@ -413,11 +457,12 @@ fn flat_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>) {
 fn frame(draw: &DrawListMut<'_>, left: f32, right: f32, top: f32, bottom: f32, s: f32) {
     let line = LINE * s.max(0.85);
     let under = bottom + line;
-    draw.add_rect([left, bottom], [right, under], LINE_COLOR).filled(true).build();
-    draw.add_triangle([left - 3.0 * s, under], [left + 2.0 * s, under], [left + 1.5 * s, top - 1.5 * s], LINE_COLOR)
+    let color = fade(LINE_COLOR);
+    draw.add_rect([left, bottom], [right, under], color).filled(true).build();
+    draw.add_triangle([left - 3.0 * s, under], [left + 2.0 * s, under], [left + 1.5 * s, top - 1.5 * s], color)
         .filled(true)
         .build();
-    draw.add_triangle([right - 2.0 * s, under], [right + 3.0 * s, under], [right + 0.5 * s, bottom - 3.0 * s], LINE_COLOR)
+    draw.add_triangle([right - 2.0 * s, under], [right + 3.0 * s, under], [right + 0.5 * s, bottom - 3.0 * s], color)
         .filled(true)
         .build();
 }
@@ -431,7 +476,7 @@ pub fn install() {
 
 #[cfg(test)]
 mod tests {
-    use super::{Target, Trail, game_area};
+    use super::{Trail, game_area};
 
     #[test]
     fn area_is_the_16_9_rect_centered_in_the_display() {
@@ -445,40 +490,41 @@ mod tests {
         assert!((a[2] - 1920.0).abs() < 0.01 && (a[0] - 320.0).abs() < 0.01);
     }
 
-    fn target(id: usize, hp: i32) -> Target {
-        Target { id, npc_param_id: 1, offset: [0.0, 0.0], hp, max_hp: 100, poise: None, buildup: Vec::new() }
+    /// One step of a trail over a bar of 100 with `value` in it.
+    fn step(trail: &mut Trail, id: usize, value: i32, dt: f32) {
+        trail.update(id, value as f32, 100.0, dt);
     }
 
     #[test]
     fn trail_holds_after_damage_then_drains_to_the_current_health() {
         let mut trail = Trail::default();
-        trail.update(&target(1, 100), 0.016);
+        step(&mut trail, 1, 100, 0.016);
         assert_eq!(trail.from, 100.0);
 
         // Lose 30: the block starts where health was and stays for the hold time.
-        trail.update(&target(1, 70), 0.016);
+        step(&mut trail, 1, 70, 0.016);
         assert_eq!(trail.from, 100.0);
-        trail.update(&target(1, 70), 0.5);
+        step(&mut trail, 1, 70, 0.5);
         assert_eq!(trail.from, 100.0);
 
         // Past the hold it drains, never below the current health.
-        trail.update(&target(1, 70), 0.5);
-        trail.update(&target(1, 70), 0.2);
+        step(&mut trail, 1, 70, 0.5);
+        step(&mut trail, 1, 70, 0.2);
         assert!(trail.from < 100.0 && trail.from >= 70.0);
-        trail.update(&target(1, 70), 2.0);
+        step(&mut trail, 1, 70, 2.0);
         assert_eq!(trail.from, 70.0);
     }
 
     #[test]
     fn trail_resets_on_another_enemy_and_follows_healing() {
         let mut trail = Trail::default();
-        trail.update(&target(1, 100), 0.016);
-        trail.update(&target(1, 50), 0.016);
+        step(&mut trail, 1, 100, 0.016);
+        step(&mut trail, 1, 50, 0.016);
         // A different enemy starts with no block.
-        trail.update(&target(2, 80), 0.016);
+        step(&mut trail, 2, 80, 0.016);
         assert_eq!(trail.from, 80.0);
         // Healing moves the start up with the health.
-        trail.update(&target(2, 90), 0.016);
+        step(&mut trail, 2, 90, 0.016);
         assert_eq!(trail.from, 90.0);
     }
 }

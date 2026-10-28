@@ -138,6 +138,7 @@ fn located(map: MapId, space: i32) -> Option<Vec<Located>> {
     let layer = match map {
         MapId::Overworld => 0,
         MapId::Underground => 1,
+        MapId::Shadow => 2,
     };
     let mut points = std::ptr::null();
     let mut count = 0;

@@ -34,6 +34,7 @@ struct Row {
     space: i32,
     on_overworld: bool,
     on_underground: bool,
+    on_shadow: bool,
     icon: u16,
     alt_icon: u16,
     open_flag: u32,
@@ -103,6 +104,7 @@ fn visible(map: MapId, space: i32) -> Option<Vec<Visible>> {
             .filter(|row| match map {
                 MapId::Overworld => row.on_overworld,
                 MapId::Underground => row.on_underground,
+                MapId::Shadow => row.on_shadow,
             })
             .filter(|row| row.space == space)
             .filter(|row| row.open_flag == 0 || on(row.open_flag))
@@ -171,6 +173,7 @@ fn rows() -> Option<&'static [Row]> {
                 space,
                 on_overworld: row.disp_mask00(),
                 on_underground: row.disp_mask01(),
+                on_shadow: row.disp_mask02(),
                 icon: row.icon_id(),
                 alt_icon: row.alt_icon_id(),
                 open_flag: row.event_flag_id(),

@@ -1,6 +1,6 @@
 # JourneyHUD: bản đồ thế giới dưới minimap
 
-**Status 2026-10-27: đọc archive và giải mã tile đã kiểm trên bản cài thật (2.7.2.0, ra ảnh Limgrave đúng); vẽ lên minimap chưa thử trong game. Chỉ overworld (area 60), hầm ngầm và dungeon qua bảng đổi toạ độ; chưa có bản đồ Shadow of the Erdtree (area 61).**
+**Status 2026-10-27: đọc archive và giải mã tile đã kiểm trên bản cài thật (2.7.2.0, ra ảnh Limgrave đúng); vẽ lên minimap chưa thử trong game. Chỉ overworld (area 60), hầm ngầm và dungeon qua bảng đổi toạ độ; đã nối bản đồ Land of Shadow (gốc toạ độ khớp) (area 61).**
 
 Bản đồ là chính các texture của game, đọc từ thư mục cài lúc chạy: DLL **không đóng gói** ảnh nào của game.
 
@@ -127,8 +127,18 @@ Lớp `Minimap.Layers.MapForGoblins`, code ở `src/map/mfg.rs`. Mod Map for Gob
 - **Tìm API:** `GetModuleHandleW("MapForGoblins.dll")` rồi `MfgGetMapAPI(1)`, kiểm cỡ struct. Chưa thấy thì hỏi lại mỗi 2 giây (thứ tự nạp DLL không cố định); không có DLL thì lớp không làm gì và không tốn gì.
 - **Marker:** `view_points(layer)` với layer 0 = overworld, 1 = hầm ngầm (layer DLC bỏ qua, chưa có bản đồ). Mỗi điểm có `raw_map_id` (area, grid X, grid Z) và `x, z` trong ô đó, đổi qua `world::locate` như hàng `WorldMapPointParam`. Danh sách dựng lại tối đa 3 lần mỗi giây; vòng highlight (bit 62 của id) bị bỏ, huy hiệu hoàn thành (bit 63) vẽ như icon thường. Danh sách đã gồm việc người chơi tắt loại trong menu của nó và vật phẩm đã nhặt, nên không phải kiểm cờ ở đây.
 - **Icon:** `get_icon` trả thân thẻ SWF DefineBitsLossless2 (định dạng 3 bảng màu hoặc 5 ARGB, nhân alpha sẵn); giải nén zlib rồi chia lại alpha. Giải mã trên luồng riêng khi API xuất hiện lần đầu, xếp lưới ô 96 px (16 cột) thành một texture; icon quá 96 px bị bỏ. Không đóng gói ảnh nào của mod đó.
-- **Vẽ:** icon 96 px vẽ khoảng 16 px ở 1080p, dưới grace và trên các địa điểm của game; ngoài tầm thì không vẽ (không ghim viền).
+- **Vẽ:** icon 96 px vẽ khoảng 29 px ở 1080p (hệ số 0,30, `GOBLIN_SCALE`; bản đầu 1/6 thì người dùng thấy nhỏ hơn icon của game), dưới grace và trên các địa điểm của game; ngoài tầm thì không vẽ (không ghim viền).
 - **Chưa thử trong game.** Bản Map for Goblins DLL cài trên máy là 2.1.6 (có API); mod này chưa nằm trong `external_dlls` của `config_eldenring.toml` ở thư mục game nên cần bật nó mới thấy marker.
+
+## Bản đồ Land of Shadow (DLC, 2026-10-27)
+
+Bản đồ DLC nằm trong cùng archive `/menu/71_maptile.tpfbhd`: `M10` (Land of Shadow, lưới 41x41 ô 256 px, cùng định dạng tile như `M00`) và `M11` (một vùng nhỏ 16x10 ô, bản đồ hầm ngầm của DLC, chưa dùng). Tile giải mã được bằng đúng bộ đọc hiện có (đã ghép thử cả 41x41 ô `M10` thành ảnh để xem: một đảo lớn ở nửa dưới, Scadutree ở phía trên, viền tối quanh).
+
+- **Cách nối vào:** `MapId::Shadow` (`M10`), `world::locate` trả `Some(Shadow)` cho block area 61 (và đích area 61 của bảng đổi toạ độ dungeon), điểm đánh dấu theo `disp_mask02` của `WorldMapPointParam`, beacon theo bản đồ 2 và marker Map for Goblins theo layer 2. Mảnh bản đồ của DLC chưa đọc: `Shadow` luôn hiện đủ (`FullMap` không áp dụng).
+- **`M11`:** DLC không có bản đồ hầm ngầm. Bảng tên mask trong exe (`menu:/71_MapTile.mtmskbnd`, 8 ô) chỉ liệt kê `M00`, `M01`, `M10`, `M03` đến `M07`; `M11` có trong archive (1521 ô, mọi mask bằng 0, không phải bản đồ theo mảnh) nhưng game không nạp. Người dùng nhớ DLC không có khu ngầm, khớp.
+- **Mảnh bản đồ DLC:** mask của `M10` dùng 5 bit (0 đến 4; `M00` 21 bit, `M01` 5 bit), tức 5 mảnh. Hàng `WorldMapPieceParam` của DLC tạm lấy là 200 đến 204 (sau 0 đến 20 của bản đồ cơ sở và 100 đến 104 của hầm ngầm); dòng log `Map: piece rows ...` in các dải hàng có cờ để kiểm lại. `FullMap = false` ở DLC dùng giá trị này.
+- **Gốc toạ độ:** ô (0, 0) của `M10` ứng với tile m61 (28, 24), cùng khung với bản đồ cơ sở (m60). Đây là giả định đầu tiên và người dùng thử trong game thấy minimap DLC khớp, nên không cần chỉnh (đảo trên ảnh chiếm ô x 12..31, z 10..33, tức tile m61 khoảng x 40..59, z 34..57).
+- **`M11`:** chưa dùng; cần biết khối nào của game chọn nó và toạ độ riêng của nó.
 
 ## Việc chưa làm
 

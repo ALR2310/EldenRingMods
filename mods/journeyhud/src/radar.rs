@@ -5,6 +5,7 @@
 //! used as offsets from the player (all in the same Havok space), so no map
 //! coordinate conversion is needed. Details: `docs/radar.md`.
 
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -76,6 +77,17 @@ pub struct Snapshot {
     pub target: Option<[f32; 2]>,
 }
 
+/// Whether the game is in normal play (no menu changing the HUD, no fade), and when that was
+/// read. The overlay's target panel follows it even when the minimap is off.
+static PLAY: Mutex<Option<(bool, Instant)>> = Mutex::new(None);
+
+/// True while the game is in normal play; false in a menu, on a loading screen or a fade, or when
+/// it was not read lately.
+pub fn in_control() -> bool {
+    let Ok(guard) = PLAY.lock() else { return false };
+    guard.is_some_and(|(play, at)| play && at.elapsed() < STALE_AFTER)
+}
+
 /// The latest snapshot and when it was read; [current] drops it once stale.
 static LATEST: Mutex<Option<(Snapshot, Instant)>> = Mutex::new(None);
 
@@ -89,10 +101,53 @@ pub fn current() -> Option<Snapshot> {
 
 /// Reads the world for this frame; `target` is the locked-on enemy's offset.
 pub fn update(target: Option<[f32; 2]>) {
+    log_piece_rows();
+    if let Ok(mut guard) = PLAY.lock() {
+        *guard = play_state().map(|play| (play, Instant::now()));
+    }
     let snapshot = if settings::minimap_enabled() { read(target) } else { None };
     if let Ok(mut guard) = LATEST.lock() {
         *guard = snapshot.map(|snapshot| (snapshot, Instant::now()));
     }
+}
+
+/// Logs once which rows of `WorldMapPieceParam` hold a map fragment (they come in runs: the
+/// overworld's, the underground's and the Land of Shadow's), so the base of each run in
+/// [map_fragments] can be checked. Tried each frame until the params are loaded, for a while.
+fn log_piece_rows() {
+    static DONE: AtomicBool = AtomicBool::new(false);
+    static TRIES: AtomicU32 = AtomicU32::new(0);
+    if DONE.load(Ordering::Relaxed) || TRIES.fetch_add(1, Ordering::Relaxed) > 1200 {
+        return;
+    }
+    let Ok(repo) = (unsafe { SoloParamRepository::instance() }) else { return };
+    if params::check::<WorldMapPieceParam>(repo).is_err() {
+        DONE.store(true, Ordering::Relaxed);
+        return;
+    }
+    let mut runs: Vec<(u32, u32)> = Vec::new();
+    for id in 0..400 {
+        if repo.get::<WorldMapPieceParam>(id).is_some_and(|row| row.open_event_flag_id() != 0) {
+            match runs.last_mut() {
+                Some((_, end)) if *end + 1 == id => *end = id,
+                _ => runs.push((id, id)),
+            }
+        }
+    }
+    if runs.is_empty() {
+        return;
+    }
+    DONE.store(true, Ordering::Relaxed);
+    let runs: Vec<String> = runs.iter().map(|(from, to)| format!("{from}-{to}")).collect();
+    logger::log(&format!("Map: piece rows {}", runs.join(", ")));
+}
+
+/// Whether the game is in normal play, `None` while its HUD and fade are not there to read.
+fn play_state() -> Option<bool> {
+    let fade = unsafe { CSFade::instance() }
+        .map_or(0.0, |fade| fade.fade_plates.iter().map(|plate| plate.current_color.a).fold(0.0, f32::max));
+    let hud = unsafe { CSFeManImp::instance() }.ok()?;
+    Some(hud.hud_state == CSFeManHudState::Default && fade < 0.05)
 }
 
 fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
@@ -188,12 +243,15 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
 
 /// The map fragments the player has, one bit per fragment of the map they are on, as the map
 /// tile masks number them: bit b is `WorldMapPieceParam` row `base + b`, base 0 for the
-/// overworld and 100 for the underground. Everything counts as found until the params and the
+/// overworld, 100 for the underground and 200 for the Land of Shadow. Everything counts as found until the params and the
 /// flags are loaded, or when the player is not on a map.
 fn map_fragments(map: Option<MapId>) -> u32 {
     let base = match map {
         Some(MapId::Overworld) => 0,
         Some(MapId::Underground) => 100,
+        // The Land of Shadow keeps its five fragments in the rows after the underground's (to be
+        // confirmed by the `Map: piece rows` log line).
+        Some(MapId::Shadow) => 200,
         None => return u32::MAX,
     };
     static READABLE: OnceLock<bool> = OnceLock::new();
