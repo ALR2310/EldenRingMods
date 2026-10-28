@@ -40,6 +40,14 @@ Mod đã tải về ở `C:\Users\Admin\Downloads\ERBuffTimer` (README, ini, tê
 3. **Vẽ** dưới các thanh buildup: icon, thời gian còn lại dạng `12.3s` (cỡ chữ 10 px như số trên thanh), tối dần khi sắp hết như ERBuffTimer; thêm khoá `Target.Effects`, mặc định cân nhắc.
 4. **Tên:** bỏ qua cho gọn (chỉ icon và thời gian); nếu cần sau này thì tra theo kiểu `game_names.txt` của ERBuffTimer.
 
+## Bố cục (người dùng chốt hướng, 2026-10-28)
+
+Bản vẽ: `tmp/scratchpad/hud_layout.png` (script `hud_layout.py`, không nằm trong git).
+
+- **Kẻ địch khoá:** dưới các hàng buildup trong cột bên phải, **căn phải**: icon 16 px nằm **sát trong mép phải** của cột (không nhô ra ngoài), thời gian còn lại ở bên trái icon (`24.3s`), mỗi hàng 17 px như hàng buildup.
+- **Người chơi:** cột bên trái, **căn trái**: icon sát mép trái, thời gian ở bên phải icon (`02:41`); đặt dưới hàng icon trạng thái có sẵn của game ở góc trên trái (vị trí chỉnh được trong `[Layout]`). Làm sau phần kẻ địch.
+- Hai khoá riêng: `Effects.Target` và `Effects.Player`.
+
 ## Đã kiểm (2026-10-28)
 
 - **Danh sách:** hàm huỷ `CS::SpecialEffect` giống nhau ở 2.6.2.0 (4F327E), 2.7.0.0 và 2.7.1.0 (4F404E), 2.7.2.0 (4F4110): đầu danh sách ở `a1[1]` (+0x08), mỗi entry nối tới entry kế bằng `*(entry + 48)` (+0x30). `ChrIns.special_effect` +0x178 đã dùng ở các mod phát hành (SpeedMultiplier, SpiritMultiplier đọc `entries()` của người chơi) và ở IDA (`sub_1404FA370(player+0x178, ...)`, `mods/spiritmultiplier/docs/summon_anywhere.md`).
