@@ -77,3 +77,4 @@ link sang `docs/`.
 | 2026-10-28 | Hợp nhất danh sách effect của người chơi: bỏ hàng icon của mod, chuyển hướng lệnh gọi `sub_1408D58F0` (`state_icons.rs`) để đọc khối 42 slot của hàng icon trạng thái của game (icon id ở byte +60 của slot 64 byte, gộp theo icon) và vẽ chữ thời gian dưới từng icon của game. Chưa test trong game. | [effects.md](docs/effects.md) |
 | 2026-10-28 | Thử game: chữ thời gian dưới icon của game dời xuống 4 px; chữ mờ cùng hàng icon khi game tự ẩn HUD (đọc cờ hiện/ẩn `model + 2730`, game phát `FadeIn`/`FadeOut` theo cờ này). Chưa test lại. | [effects.md](docs/effects.md) |
 | 2026-10-28 | Người dùng xác nhận chạy: chữ thời gian dưới icon của game đúng chỗ và mờ cùng hàng icon khi game tự ẩn HUD. | [effects.md](docs/effects.md) |
+| 2026-10-29 | Người dùng xác nhận chạy: hàng effect của kẻ địch (icon, giờ đếm ngược, effect nổ) hiện đúng. | [effects.md](docs/effects.md) |
