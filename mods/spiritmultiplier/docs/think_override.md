@@ -55,6 +55,18 @@ Ba key ini bật/tắt (hot reload bằng F5) nạp sẵn các field của Age o
 
 Mỗi mục có chế độ: `Max` chỉ nâng giá trị gốc lên, `Min` chỉ hạ xuống, `Set` luôn ghi, để không làm hỏng các mod đã chỉnh sẵn các field này (vd. Age of Spirit đặt giá trị riêng cho healer). Các bộ được ghi trước, `SpiritThinkParam.ini` / `SpiritParam.ini` ghi sau nên thắng. Không đưa vào bộ: `isBuddyAI`, `disableDark` (gốc đã là 1), `enableNaviFlg_Lava`, nhóm `goalAction_*` (người dùng quyết định bỏ), `fallDamageDump` (không có tác dụng).
 
+## Dòng dùng chung với kẻ địch (2026-10-28)
+
+**Status 2026-10-28: đã sửa trong code (3 bộ `Improve*` chỉ ghi dòng có `isBuddyAI = 1`), đã thử trong game cùng LoA_Ashmaker: kẻ địch không còn bị kéo về. Nguyên nhân đã tái hiện và xác nhận bằng cách tắt `ImproveFollow`.**
+
+Báo cáo Nexus (loltem154, 1.5.0): chạy cùng LoA_Ashmaker, kẻ địch và boss đuổi một đoạn rồi dịch chuyển về điểm spawn và không đuổi nữa (một số boss lún xuống đất, không đánh chết được). Tái hiện được khi bật cả hai mod; chỉ một trong hai thì bình thường; `ImproveFollow=false` thì hết.
+
+- Spirit không chỉ dùng dòng AI riêng: `BuddyParam.npcThinkParamId` có thể trỏ tới dòng của kẻ địch. Vanilla: 98 dòng, 7 dòng có `isBuddyAI=0` và tên kẻ địch (Demi-Human 1-5 `141000000`..., Land Squirt `144400000`, Miranda Sprout `144810000`); 91 dòng còn lại `isBuddyAI=1`. Trong toàn bộ `NpcThinkParam` vanilla, `isBuddyAI=1` còn có thêm 10 dòng không do `BuddyParam` tham chiếu (ID `100000000`, `1500000xx`, `199999999`, không tên).
+- LoA_Ashmaker (dữ liệu export `tmp/csv/LoA_Ashmaker/`): 640 dòng think do spirit dùng, 429 dòng `isBuddyAI=1`, **210 dòng `isBuddyAI=0`** dùng chung với kẻ địch. Dòng kẻ địch của LoA có `maxBackhomeDist` thường 85 (leash); `ImproveFollow` (`Min 30`) hạ xuống 30 nên kẻ địch bỏ đuổi sớm.
+- Cả `ImproveSenses` và `ImproveAggression` cũng ghi lên các dòng đó (tầm nhìn, `BattleStartDist`...), nên kẻ địch dùng chung đổi hành vi theo; vanilla đã bị từ trước ở 7 dòng kể trên.
+- Sửa: `apply` chỉ ghi các bộ lên dòng `isBuddyAI=1` (đọc từ bản chụp gốc); dòng khác bị bỏ qua và log `bundles skipped N shared row(s)`. File `SpiritThinkParam.ini` (global và `[Row ...]`) vẫn ghi mọi dòng của spirit vì người dùng tự chọn. Cái giá: 7 spirit vanilla kể trên (và spirit mượn dòng kẻ địch ở mod khác) không còn được cải thiện AI.
+- Đã test 2026-10-28 (loltem154 báo lỗi, người dùng tái hiện và xác nhận hết lỗi sau sửa).
+
 ## Ghi chú kỹ thuật chuyển từ code: `think_override.rs` (2026-10-22)
 
 Nội dung này trước đây là doc đầu file `.rs`; chuyển sang đây nguyên văn (tiếng Anh) để doc code chỉ còn vài dòng.

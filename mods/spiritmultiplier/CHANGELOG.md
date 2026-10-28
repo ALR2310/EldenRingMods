@@ -6,6 +6,8 @@ user-facing change, plain text. Add new items under `[Unreleased]`; the
 
 ## [Unreleased]
 
+- Fixed enemies being changed by the spirit AI options when another mod shares their AI with spirits.
+
 ## [1.5.0] - 2026-10-23
 
 - Added option for more spirit HP bars.
