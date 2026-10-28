@@ -17,6 +17,7 @@
 - 2026-10-27 [observed] Từ màn hình tiêu đề vào world: `press e` (phím bất kỳ, ra hộp thoại cảnh báo), `press e` (đóng hộp thoại, ra menu chính với Continue), `press e` (Continue).
 - 2026-10-27 [user] Tải nhân vật vào world mất khoảng 5 đến 10 giây sau khi chọn Continue.
 - 2026-10-27 [observed] Game phải do người dùng bật offline (không Easy Anti-Cheat), và `InputBridge.dll` phải có trong `external_dlls` của `config_eldenring.toml`. 2026-10-27 [user, observed] Agent tự bật được game: PowerShell `Start-Process "E:\SteamLibrary\steamapps\common\ELDEN RING\Game\modengine2_launcher.exe" -ArgumentList "-t","er","-c",".\config_eldenring.toml" -WorkingDirectory <thư mục Game>` (đợi khoảng 25 giây cho cửa sổ), rồi vào world như trên (khoảng 25 giây sau Continue). Bash `cmd start` không chạy được.
+- 2026-10-28 [observed] Tiến tới grace bằng WASD rất dễ lệch (di chuyển theo camera, 0.3 s khoảng 1 bước): chụp ảnh sau mỗi 0.3-0.5 s, grace phải ở ngay dưới chân nhân vật rồi mới bấm E. Mỗi screenshot trả cả ảnh lẫn base64 trong văn bản, nên dùng max_width nhỏ (320) để tiết kiệm. Bấm E gần grace lần đầu (2026-10-28) chưa mở được menu nghỉ, chưa rõ vì sao.
 
 ## Thời gian
 
