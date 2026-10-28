@@ -74,7 +74,7 @@ pub fn column_height(res: f32) -> f32 {
     if !settings::minimap_enabled() {
         return 0.0;
     }
-    let below = if settings::minimap_clock() { CLOCK_ROW + CLOCK_GAP } else { COLUMN_GAP };
+    let below = if settings::minimap_clock() || settings::minimap_deaths() { CLOCK_ROW + CLOCK_GAP } else { COLUMN_GAP };
     let open = 1.0 - f32::from_bits(COLLAPSED.load(Ordering::Relaxed));
     (2.0 * settings::minimap_size() * settings::minimap_scale() + below) * res * open
 }
@@ -216,9 +216,7 @@ impl Radar {
             view.draw_compass(ui, &draw);
         }
         view.draw_player(&draw);
-        if settings::minimap_clock() {
-            view.draw_clock(ui, snapshot, res);
-        }
+        view.draw_clock_row(ui, snapshot, res);
     }
 }
 
@@ -567,15 +565,22 @@ impl View<'_> {
         }
     }
 
-    /// The in-game time, centered in its row right under the minimap.
-    fn draw_clock(&self, ui: &Ui, snapshot: &Snapshot, res: f32) {
-        let Some([hours, minutes]) = snapshot.clock else { return };
-        let text = format!("{hours:02}:{minutes:02}");
+    /// The row right under the minimap: the in-game time centered, the death count at the right edge.
+    fn draw_clock_row(&self, ui: &Ui, snapshot: &Snapshot, res: f32) {
         let em = TEXT_EM * res;
-        let size = text::measure(ui, &text, em);
         let row_top = self.center[1] + self.radius;
-        let pos = [(self.center[0] - size[0] / 2.0).round(), (row_top + (CLOCK_ROW * res - size[1]) / 2.0).round()];
-        text::add_shadowed(&text, pos, em, self.color(COMPASS), self.color(OUTLINE), self.s.max(1.0));
+        let y_of = |size: [f32; 2]| (row_top + (CLOCK_ROW * res - size[1]) / 2.0).round();
+        let put = |text: &str, x_of: &dyn Fn(f32) -> f32| {
+            let size = text::measure(ui, text, em);
+            let pos = [x_of(size[0]).round(), y_of(size)];
+            text::add_shadowed(text, pos, em, self.color(COMPASS), self.color(OUTLINE), self.s.max(1.0));
+        };
+        if let (true, Some([hours, minutes])) = (settings::minimap_clock(), snapshot.clock) {
+            put(&format!("{hours:02}:{minutes:02}"), &|width| self.center[0] - width / 2.0);
+        }
+        if let (true, Some(deaths)) = (settings::minimap_deaths(), snapshot.deaths) {
+            put(&format!("Deaths {deaths}"), &|width| self.center[0] + self.radius - width);
+        }
     }
 
     /// The player's own arrow in the middle.

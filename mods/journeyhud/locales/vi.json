@@ -78,6 +78,10 @@
     "label": "Đồng hồ",
     "help": "Hiện giờ trong game dưới minimap."
   },
+  "minimap_deaths": {
+    "label": "Số lần chết",
+    "help": "Hiện số lần chết dưới minimap."
+  },
   "minimap_trail": {
     "label": "Đường đã đi",
     "help": "Vẽ đường bạn vừa đi trên minimap."

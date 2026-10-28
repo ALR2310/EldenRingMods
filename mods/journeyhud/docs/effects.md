@@ -42,11 +42,16 @@ Mod đã tải về ở `C:\Users\Admin\Downloads\ERBuffTimer` (README, ini, tê
 
 ## Bố cục (người dùng chốt hướng, 2026-10-28)
 
-Bản vẽ: `tmp/scratchpad/hud_layout.png` (script `hud_layout.py`, không nằm trong git).
+Bản vẽ: `tmp/scratchpad/hud_layout3.png` (script `hud_layout3.py`, không nằm trong git); bản vẽ đầu xếp dọc (`hud_layout.png`) bỏ vì tốn chỗ: 8 effect người chơi cao 240 px, trong khi HUD gốc đã chiếm góc trên trái.
 
-- **Kẻ địch khoá:** dưới các hàng buildup trong cột bên phải, **căn phải**: icon 16 px nằm **sát trong mép phải** của cột (không nhô ra ngoài), thời gian còn lại ở bên trái icon (`24.3s`), mỗi hàng 17 px như hàng buildup.
-- **Người chơi:** cột bên trái, **căn trái**: icon sát mép trái, thời gian ở bên phải icon (`02:41`); đặt dưới hàng icon trạng thái có sẵn của game ở góc trên trái (vị trí chỉnh được trong `[Layout]`). Làm sau phần kẻ địch.
+Kiểu xếp theo ERBuffTimer (người dùng, 2026-10-28): **mỗi effect là một ô xếp ngang, icon 16 px, thời gian ngay dưới icon** (chữ 10 px, ô cao khoảng 28 px, rộng khoảng 28 px). Tám effect chỉ chiếm một hàng thay vì 240 px.
+
+- **Kẻ địch khoá:** dưới các hàng buildup trong cột bên phải, **căn phải** (ô đầu sát mép phải).
+- **Người chơi:** ngay dưới hàng icon trạng thái có sẵn của game ở góc trên trái, **căn trái** (vị trí chỉnh được trong `[Layout]`). Làm sau phần kẻ địch.
+- **Giới hạn chung cho cả hai bên (người dùng, 2026-10-28): một hàng tối đa 6 ô, tối đa 2 hàng, tức tối đa 12 effect**; quá thì bỏ các effect còn nhiều thời gian nhất hoặc ít quan trọng nhất (chọn khi làm). 7 ô x 28 px = 196 px vẫn vừa cột 220 px nhưng khít, 6 ô chừa lề; cột phải rộng theo `Target.Width` và scale nên 6 ô là con số cố định, ô co theo scale.
+- Thời gian chỉ số nguyên, không thập phân (người dùng, 2026-10-28), để chữ dài nhất còn 4 ký tự: `24s`, `9s`, từ 60 giây trở lên `1:30`; hiệu ứng vĩnh viễn chỉ hiện icon.
 - Hai khoá riêng: `Effects.Target` và `Effects.Player`.
+- Chừa chỗ cho khối sát thương giữa người chơi (co-op) ở cột trái dưới hàng effect; vị trí khung đồng đội của game khi co-op chưa kiểm.
 
 ## Đã kiểm (2026-10-28)
 

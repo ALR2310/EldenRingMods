@@ -26,7 +26,27 @@ const _: () = {
     assert!(std::mem::offset_of!(CSFeManImp, boss_health_displays) == 0x5BF0);
     assert!(std::mem::size_of::<BossHealthDisplayEntry>() == 0x20);
     assert!(std::mem::offset_of!(WorldAreaTime, clock) == 0);
+    assert!(std::mem::offset_of!(eldenring::cs::GameDataMan, death_count) == 0x94);
 };
+
+/// The player's death count (`GameDataMan::death_count`). `GameDataMan::instance()` goes through the
+/// RVA table and panics on 2.7.2.0, so the global is found by an AOB that is unique on every exe
+/// version (`docs/offsets.md`). `None` until the manager exists.
+fn death_count() -> Option<u32> {
+    static GAME_DATA_MAN: common::memscan::CachedAddr = common::memscan::CachedAddr::new();
+    static SCANNED: AtomicBool = AtomicBool::new(false);
+
+    let address = GAME_DATA_MAN.get_or_resolve(|| {
+        if SCANNED.swap(true, Ordering::Relaxed) {
+            return None;
+        }
+        let hit = common::memscan::find_pattern_in_module("48 8B 05 ?? ?? ?? ?? 48 85 C0 74 05 48 8B 40 08 C3")? as usize;
+        let offset = common::memscan::read_safe::<i32>(hit + 3)?;
+        Some((hit + 7).wrapping_add_signed(offset as isize))
+    })?;
+    let manager = common::memscan::read_safe::<usize>(address).filter(|&manager| manager != 0)?;
+    common::memscan::read_safe::<u32>(manager + std::mem::offset_of!(eldenring::cs::GameDataMan, death_count))
+}
 
 /// Another character as the radar draws it.
 #[derive(Clone, Copy)]
@@ -71,6 +91,8 @@ pub struct Snapshot {
     pub fragments: u32,
     /// The in-game time of day: hours and minutes.
     pub clock: Option<[u8; 2]>,
+    /// The player's death count.
+    pub deaths: Option<u32>,
     pub partners: Vec<Dot>,
     pub spirits: Vec<Dot>,
     /// Offset of the locked-on enemy.
@@ -200,6 +222,7 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
         common::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| spirits.extend(dot(chr)));
     }
     let clock = unsafe { WorldAreaTime::instance() }.ok().map(|time| [time.clock.hours(), time.clock.minutes()]);
+    let deaths = if settings::minimap_deaths() { death_count() } else { None };
     let fragments = if settings::minimap_full_map() { u32::MAX } else { map_fragments(map) };
 
     Some(Snapshot {
@@ -235,6 +258,7 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
         in_cave,
         fragments,
         clock,
+        deaths,
         partners,
         spirits,
         target,

@@ -64,6 +64,7 @@ pub struct Minimap {
     pub compass: bool,
     pub trail: bool,
     pub clock: bool,
+    pub deaths: bool,
     pub full_map: bool,
     #[serde(deserialize_with = "key_list")]
     pub zoom_in_key: Vec<String>,
