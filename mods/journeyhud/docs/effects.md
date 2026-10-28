@@ -122,3 +122,30 @@ Black Blade Kindred (`NpcParam 47701242`) chỉ có các effect "NPC: Disable Po
 
 - Chữ giờ và `Deaths` cách vành minimap 4 px (`TEXT_GAP`); thanh máu bên dưới dịch xuống theo.
 - Icon effect của **kẻ địch nhỏ lại 30%** (hệ số 0,7: icon 27 px, ô 30 px, chữ 10 px, 6 ô một hàng vì cột 220 px chứa được 7); hàng của người chơi giữ 38 px, đúng cỡ icon của game.
+
+## Hàng icon trạng thái của game (nghiên cứu để hợp nhất với hàng của mod, 2026-10-28, 2.7.2.0)
+
+Ý người dùng: thay vì vẽ hàng thứ hai (icon lặp), chèn thời gian vào chính hàng icon trạng thái của game. Đã tìm được:
+
+- **Movie:** `menu/01_000_fe.gfx` (1,6 MB; trích bằng test `#[ignore] hud_movie_from_the_installed_game` trong `map/sprites.rs`, ghi ra `ER_GFX_OUT`; công cụ dựng cây clip `tmp/scratchpad/swf_tree.py`). Hàng icon là `PlayerHUD/Gauge/Equip/Fade/Item_0_0 .. Item_0_41`: **42 ô xếp một hàng ngang, không xuống dòng**, ô i ở x = 10 + 42 x i, y = 15 (đơn vị 1080p, cách nhau đúng 42 px như đo trên ảnh). Mỗi ô chỉ có clip `Icon` (một hình, ảnh gắn lúc chạy); **không có ô chữ**.
+- **Lớp của game:** `CS::PlayerStateIconViewParts` (vtable RVA 0x2AEFD18, 2.7.2.0). Constructor `sub_1408D5470` gom các ô `Fade/Item_0_%d` (tìm tới khi thiếu) vào một vector (đầu `+112`, cuối `+120`, ô 304 byte, clip `Icon` ở `+120` của ô). Hàm cập nhật mỗi frame **`sub_1408D58F0(view, a2, model)`** (gọi từ `sub_1408CA1C0` với `view = hud + 126608` và `model = *(hud + 96) + 14344`).
+- **Khối dữ liệu (`model`, 2736 byte):** 42 slot x 64 byte tại `model + 64 x i` (mô tả ảnh: gắn vào clip `Icon` bằng `sub_1407361C0`), cờ **`Flicker`** từng slot tại `model + 2688 + i` (icon nhấp nháy, nhiều khả năng khi sắp hết hạn), cờ chung tại `model + 2730`. Hàm điền khối này từ SpEffect của người chơi chưa tìm ra.
+- **Quan sát:** Golden Vow (`1660000`, `1660001`, `1660002`) cộng Pickled Liver (`20501140`, icon 20408 trùng `1660002`) là 4 effect có icon nhưng game hiện **3 icon**: có vẻ game gộp theo icon.
+
+Còn thiếu (đã làm xong ở mục "Giải mã khối dữ liệu" bên dưới): đọc được `model` (hook `sub_1408D58F0` bằng inline hook để giữ con trỏ, hoặc tìm đường từ singleton), giải mã mô tả 64 byte ra icon id, và cách chọn thời gian khi nhiều effect chung một icon. Hướng làm gọn nhất: giữ nguyên hàng của game, vẽ chữ thời gian bằng ImGui ngay dưới từng icon (x = gốc + 42 x slot) theo mô tả của slot; không cần thêm ô chữ vào movie.
+
+## Giải mã khối dữ liệu của hàng icon (log thử game 2026-10-28)
+
+`state_icons.rs` chuyển hướng lệnh gọi `sub_1408D58F0` (AOB duy nhất trên 2.6.2.0 đến 2.7.2.0, như `HubHpBars`) để giữ con trỏ `model`. Log `Icons:` khi dùng Golden Vow và Pickled Liver:
+
+- **Icon id nằm ở từ cuối (byte +60) của slot 64 byte:** `4FB6` = 20406, `4FB7` = 20407, `4FB8` = 20408. Slot trống có `FFFFFFFF` ở đó (từ thứ 15 là `FFF1E702` khi có icon, `FF6F8F00` khi trống).
+- **Slot điền liền từ 0, không khoảng trống,** theo thứ tự danh sách SpEffect; khi một effect hết hạn các slot sau dồn lên (`[0]=20407,[1]=20408` rồi `[0]=20408`).
+- **Gộp theo icon:** Pickled Liver (`3910`, icon 20408) và hàng phụ Golden Vow `1660002` (icon 20408) chỉ chiếm một slot. Hàng phụ "Cycled" (`1660001`, 20407; `1660002`, 20408) vẫn có slot, game hiện chúng như icon thường.
+
+## Cách làm hiện tại cho người chơi (một danh sách duy nhất)
+
+Mod **không vẽ hàng icon của người chơi nữa**; `ui::draw_icon_times` vẽ chữ thời gian ngay dưới từng icon của game: slot k ở tâm x = 155,5 + 42 x k, chữ ngay dưới mép dưới của hình thoi (y 142, đơn vị 1080p trong khung hình của game; số đo từ ảnh chụp). Với icon của slot, lấy effect có icon đó còn **nhiều thời gian nhất** (hàng phụ 0,1 giây đã lọc nên các icon chỉ có hàng phụ không có chữ); effect vĩnh viễn không có chữ. Khoá `Effects.Player` bật tắt các chữ này. Giới hạn: vị trí tính theo bố cục HUD mặc định (nếu người chơi đổi cỡ HUD trong tuỳ chọn game thì chữ lệch); chưa thử.
+
+## Ẩn cùng hàng icon của game
+
+Game ẩn hàng icon (và thanh HP/FP) khi không đánh nhau; ảnh chụp cho thấy chữ thời gian vẫn hiện trong khi icon đã mờ. Hàm cập nhật `sub_1408D58F0` truyền cờ ở `model + 2730` (byte ngay sau 42 cờ nhấp nháy) vào `sub_14076B850(view + 136, cờ, ...)`, hàm này phát hoạt ảnh `FadeIn` khi cờ khác 0 và `FadeOut` khi bằng 0 (đọc từ IDA, 2.7.2.0). `state_icons::shown()` đọc cờ đó; `ui.rs` giữ `icons_alpha` (cùng tốc độ mờ `FADE_RATE` của panel) và nhân vào chữ. Đã thử trong game (2026-10-28): chữ mờ cùng hàng icon khi game tự ẩn HUD.

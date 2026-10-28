@@ -40,24 +40,29 @@ const BUILDUP_ICON: f32 = 16.0;
 const BUILDUP_ICON_GAP: f32 = 0.0;
 const BUILDUP_BAR: f32 = 12.0;
 const BUILDUP_GAP: f32 = 4.0;
-/// The effects, a cell each: the icon with the time left under it, six to a row. The target's sit
-/// under its buildup bars, filling from the right edge; the player's from the left, under the
-/// game's own status icons (`PLAYER_EFFECTS_AT`, 1080p pixels in the game's picture, measured in
-/// a screenshot: those icons are 38 px, 42 apart, from x 137, y 105 to 138).
+/// The target's effects, a cell each: the icon with the time left under it, filling from the right
+/// edge under its buildup bars. The player's effects have no icons of the mod: the game's own row
+/// of status icons shows them, and the times go under those (`draw_icon_times`).
 const EFFECT_CELL: f32 = 42.0;
 const EFFECT_ICON: f32 = 38.0;
-const EFFECT_TIME: f32 = 11.0;
-/// The target's cells are this much of the player's size (the player's match the game's own icons);
-/// its time text keeps a size that reads, `EFFECT_TIME_TARGET`.
+/// The target's cells are this much of the size of the game's own status icons (38 px); the time
+/// text keeps a size that reads, `EFFECT_TIME_TARGET`.
 const TARGET_EFFECTS_SCALE: f32 = 0.77;
 const EFFECT_TIME_TARGET: f32 = 10.0;
 const EFFECT_ROW: f32 = 54.0;
 /// Rows of cells at most.
 const EFFECT_ROWS: usize = 2;
-/// Cells in a row of the player's effects (the target's depend on the width of its bars).
+/// Most cells in a row of the target's effects (fewer when the width of its bars is short).
 const PLAYER_EFFECTS_PER_ROW: usize = 6;
+/// Font size of the times under the game's own icons, at 1080p.
+const GAME_ICON_TIME: f32 = 12.0;
 const EFFECTS_GAP: f32 = 4.0;
-const PLAYER_EFFECTS_AT: [f32; 2] = [140.0, 146.0];
+/// The game's row of status icons, in 1080p pixels of its picture (measured on screenshots, the
+/// slots from `state_icons`): the first icon is centered at x 155.5 and the slots are 42 apart,
+/// the diamonds end at y 141, the times start a little lower.
+const GAME_ICONS_CENTER_X: f32 = 155.5;
+const GAME_ICONS_PITCH: f32 = 42.0;
+const GAME_ICONS_BOTTOM: f32 = 146.0;
 /// The icon fades over its last seconds.
 const EFFECT_FADE_SECONDS: f32 = 5.0;
 /// One color per status, in the order of `target::BUILDUP`.
@@ -84,6 +89,11 @@ const FADE_RATE: f32 = 12.0;
 static PANEL_ALPHA: AtomicU32 = AtomicU32::new(0x3F80_0000);
 
 /// `color` with the panel's opacity applied.
+/// `color` with its alpha times `alpha`.
+fn fade_by([r, g, b, a]: [f32; 4], alpha: f32) -> [f32; 4] {
+    [r, g, b, a * alpha]
+}
+
 fn fade([r, g, b, a]: [f32; 4]) -> [f32; 4] {
     [r, g, b, a * f32::from_bits(PANEL_ALPHA.load(Ordering::Relaxed))]
 }
@@ -125,6 +135,8 @@ struct HudRenderLoop {
     poise_trail: Trail,
     /// 0 to 1: follows whether the game is in normal play, so the panel goes with its menus.
     panel_alpha: f32,
+    /// 0 to 1: follows whether the game shows its row of status icons, for the times under it.
+    icons_alpha: f32,
     radar: Radar,
     /// The world map under the minimap; `None` until the player is in the world (see
     /// `before_render`) and when the game folder is unknown.
@@ -226,6 +238,8 @@ impl ImguiRenderLoop for HudRenderLoop {
         let wanted = if radar::in_control() { 1.0 } else { 0.0 };
         self.panel_alpha += (wanted - self.panel_alpha) * (dt * FADE_RATE).min(1.0);
         PANEL_ALPHA.store(self.panel_alpha.to_bits(), Ordering::Relaxed);
+        let icons_wanted = if crate::state_icons::shown() { 1.0 } else { 0.0 };
+        self.icons_alpha += (icons_wanted - self.icons_alpha) * (dt * FADE_RATE).min(1.0);
         let layout = Layout {
             area: self.area,
             offset: settings::offset(),
@@ -235,11 +249,8 @@ impl ImguiRenderLoop for HudRenderLoop {
             textures: self.textures.as_ref(),
             icons: self.map.as_ref(),
         };
-        if self.panel_alpha > 0.01 && settings::effects_player() {
-            let effects = target::own_effects_now();
-            let res = layout.area[3] / BASE_HEIGHT;
-            let origin = [layout.area[0] + PLAYER_EFFECTS_AT[0] * res, layout.area[1] + PLAYER_EFFECTS_AT[1] * res];
-            draw_effects(ui, &ui.get_foreground_draw_list(), &effects, Cells { origin, right_aligned: false, s: res, text: EFFECT_TIME * res, per_row: PLAYER_EFFECTS_PER_ROW }, &layout);
+        if self.panel_alpha > 0.01 && self.icons_alpha > 0.01 && settings::effects_player() {
+            draw_icon_times(ui, &target::own_effects_now(), self.icons_alpha, &layout);
         }
         let Some(target) = target::current() else {
             self.trail.id = 0;
@@ -379,6 +390,27 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
 fn effect_time(left: f32) -> String {
     let seconds = left.max(0.0).ceil() as u32;
     if seconds >= 60 { format!("{}:{:02}", seconds / 60, seconds % 60) } else { format!("{seconds}s") }
+}
+
+/// The time left under each icon of the game's own row (the effects of the player, one icon per
+/// slot): for a slot's icon, the effect with that icon that lasts longest (the "Cycled" helper rows
+/// of a buff have a tenth of a second and are left out of the list); an effect without an end
+/// shows nothing.
+fn draw_icon_times(ui: &Ui, effects: &[Effect], alpha: f32, layout: &Layout) {
+    let res = layout.area[3] / BASE_HEIGHT;
+    for slot in 0..crate::state_icons::SLOTS {
+        let Some(icon) = crate::state_icons::icon(slot) else { break };
+        let left = effects.iter().filter(|e| e.icon == icon && !e.permanent).map(|e| e.left).fold(f32::NEG_INFINITY, f32::max);
+        if left <= 0.0 {
+            continue;
+        }
+        let label = effect_time(left);
+        let em = GAME_ICON_TIME * res;
+        let size = text::measure(ui, &label, em);
+        let center = layout.area[0] + (GAME_ICONS_CENTER_X + slot as f32 * GAME_ICONS_PITCH) * res;
+        let pos = [(center - size[0] / 2.0).round(), (layout.area[1] + GAME_ICONS_BOTTOM * res).round()];
+        text::add_shadowed(&label, pos, em, fade(fade_by(TEXT, alpha)), fade(fade_by(TEXT_SHADOW, alpha)), res.max(1.0));
+    }
 }
 
 /// Where the cells of a row of effects start and how big they are.
