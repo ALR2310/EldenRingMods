@@ -15,28 +15,30 @@ Mod đã tải về ở `C:\Users\Admin\Downloads\ERBuffTimer` (README, ini, tê
 
 ## Dữ liệu ta có sẵn cho kẻ địch
 
-`fromsoftware-rs` (rev của workspace) đã gõ kiểu cho danh sách này (`cs/sp_effect.rs`), nên không cần offset thô như phần resist:
+`fromsoftware-rs` (rev của workspace) đã gõ kiểu cho danh sách này (`cs/sp_effect.rs`), nên không cần offset thô như phần resist. Offset lấy bằng `offset_of!`, đối chiếu IDA ở mục "Đã kiểm":
 
-| Trường | Offset (từ `offset_of!`) | Ý nghĩa |
+| Trường | Offset | Ý nghĩa |
 |---|---|---|
 | `ChrIns.special_effect` | +0x178 | con trỏ tới `SpecialEffect` |
-| `SpecialEffect.head` | +0x08 | đầu danh sách liên kết đôi (`entries()` duyệt) |
+| `SpecialEffect.head` | +0x08 | đầu danh sách liên kết (`entries()` duyệt) |
 | `SpecialEffectEntry.param_data` / `param_id` | +0x00 / +0x08 | dòng `SpEffectParam` và id của hiệu ứng |
-| `removal_timer` | +0x40 | **thời gian còn lại** (giây) |
+| entry kế (`next`) | +0x30 | nối danh sách |
+| bộ đếm tick trước (`removal_timer` trong crate) | +0x40 | giá trị của tick trước |
+| **thời gian còn lại thật** (`unk_removal_timer` trong crate) | **+0x44** | giây còn lại, trừ mỗi frame |
 | `duration` | +0x48 | tổng thời gian |
 | `interval_timer` | +0x4C | bộ đếm chu kỳ (độc, chảy máu theo nhịp) |
 | cỡ một entry | 0x78 | |
 
-Cùng cách đọc như `target.rs` đã làm với kẻ địch khoá: `chr_by_handle` rồi `chr.special_effect.entries()`.
+Đọc cùng cách như `target.rs` đã làm với kẻ địch khoá: `chr_by_handle` rồi `chr.special_effect.entries()`; vì crate đặt tên +0x44 là `unk_removal_timer` (trường private), cần đọc thô trường này (`const` assert như các chỗ khác) hoặc dùng `removal_timer` (+0x40, lệch một frame).
 
-`SpEffectParam` có các cột (tên ở `tmp/csv/base/SpEffectParam.csv`) để lọc: `iconId` (icon trạng thái; 0 là không hiện icon), `effectEndurance` (thời gian hiệu lực), `enableLifeTime`, `stateInfo` (loại trạng thái: độc, chảy máu, buff...) và `dispIconNonactive`.
+`SpEffectParam` có các cột (tên ở `tmp/csv/base/SpEffectParam.csv`) để lọc: `iconId` (icon trạng thái; 0 là không hiện icon), `effectEndurance` (thời gian hiệu lực, -1 là vĩnh viễn), `enableLifeTime`, `stateInfo` và `dispIconNonactive`.
 
 ## Hướng làm (khi làm)
 
-1. **Đọc** mỗi frame trong task `Target`, cho kẻ địch khoá: các entry có `param_data.icon_id != 0` và `removal_timer > 0`, bỏ loại đã có thanh buildup (độc, thối đỏ, chảy máu, tử khí, đóng băng, ngủ, điên loạn qua `stateInfo` hoặc id), giữ tối đa vài cái, sắp theo thời gian còn lại.
-2. **Icon:** `iconId` của `SpEffectParam` ứng với sprite trạng thái trong menu atlas (`SB_Condition` đã dùng cho buildup, các sheet icon trạng thái khác); đọc bằng `map/sprites.rs` như các icon hiện có. Cần tìm bảng ánh xạ `iconId` sang tên sprite (`MENU_..`).
+1. **Đọc** mỗi frame trong task `Target`, cho kẻ địch khoá: các entry có `param_data.icon_id != 0` và thời gian còn lại (+0x44) > 0, bỏ loại đã có thanh buildup, giữ tối đa vài cái, sắp theo thời gian còn lại. Bản đầu chỉ ghi log (`Effects: <param id> icon <iconId> <còn lại>s` khi tập hiệu ứng đổi) để xem kẻ địch có hiệu ứng nào đáng hiện.
+2. **Icon:** sprite `MENU_StatusIcon_<iconId>` của `SB_Status_00`, nạp một lần cùng các sprite khác (thêm dải sprite theo `iconId` hoặc đọc theo yêu cầu qua `sprites.rs`).
 3. **Vẽ** dưới các thanh buildup: icon, thời gian còn lại dạng `12.3s` (cỡ chữ 10 px như số trên thanh), tối dần khi sắp hết như ERBuffTimer; thêm khoá `Target.Effects`, mặc định cân nhắc.
-4. **Tên** (nếu cần) tra theo `game_names.txt`-kiểu hoặc bỏ qua: panel chỉ hiện icon và thời gian cho gọn.
+4. **Tên:** bỏ qua cho gọn (chỉ icon và thời gian); nếu cần sau này thì tra theo kiểu `game_names.txt` của ERBuffTimer.
 
 ## Đã kiểm (2026-10-28)
 
