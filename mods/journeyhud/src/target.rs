@@ -14,7 +14,7 @@ use fromsoftware_shared::FromStatic;
 
 use common::logger;
 
-use crate::{radar, settings};
+use crate::{radar, settings, state_icons};
 
 // The layout the fields are read at, checked against eldenring.exe 2.6.2.0 to
 // 2.7.2.0 (`docs/offsets.md`). A `fromsoftware-rs` update that moves one stops
@@ -122,6 +122,8 @@ pub fn run() {
     let mut last_kinds: Vec<usize> = Vec::new();
     let mut last_effects: Vec<i32> = Vec::new();
     let mut last_own: Vec<i32> = Vec::new();
+    let mut last_gauges = String::new();
+    let mut gauges_logged = Instant::now();
     common::task::run_recurring_safe(cs_task, "Target", CSTaskGroupIndex::FrameBegin, move |_data: &FD4TaskData| {
         let read = if settings::enabled() { read() } else { None };
         radar::update(read.as_ref().map(|t| t.offset));
@@ -156,6 +158,15 @@ pub fn run() {
         if ids != last_own {
             logger::log(&format!("Effects: player {}", describe(&own)));
             last_own = ids;
+        }
+        let afflicted = own.iter().filter(|e| !e.permanent && e.left > 0.0).filter_map(|e| e.kind).fold(0u32, |mask, kind| mask | 1 << kind);
+        state_icons::set_afflicted(afflicted);
+        // Research: the player's gauges that are shown, for `docs/effects.md`.
+        let gauges = state_icons::describe_gauges();
+        if gauges != last_gauges && gauges_logged.elapsed() > Duration::from_secs(1) {
+            logger::log(&format!("Gauge: {gauges}"));
+            last_gauges = gauges;
+            gauges_logged = Instant::now();
         }
         if let Ok(mut guard) = OWN.lock() {
             *guard = Some((shown_effects(own, MAX_EFFECTS), Instant::now()));
@@ -197,14 +208,15 @@ fn describe(effects: &[Effect]) -> String {
     shown.join(", ")
 }
 
-/// The effects of the player, `[]` when out of the world. The procs of the status buildups are
-/// left out: the game has its own icons for them on the player.
+/// The effects of the player, `[]` when out of the world: the ones with an icon (the game's row
+/// shows them, the times go under it) and the procs of the status buildups (which have no icon of
+/// the game's: the mod draws them after its row, `ui::draw_icon_times`).
 fn own_effects() -> Vec<Effect> {
     let Ok(world_chr_man) = (unsafe { WorldChrMan::instance() }) else { return Vec::new() };
     world_chr_man
         .main_player
         .as_ref()
-        .map_or_else(Vec::new, |player| read_effects(&player.chr_ins).into_iter().filter(|e| e.kind.is_none()).collect())
+        .map_or_else(Vec::new, |player| read_effects(&player.chr_ins))
 }
 
 fn read() -> Option<Target> {
@@ -233,15 +245,20 @@ fn read() -> Option<Target> {
     })
 }
 
-/// The status a buildup proc effect belongs to, by its `SpEffectParam` row. The rows are named
-/// `<status> - Type N - Special M` and come in runs per status (`docs/effects.md`); the ones whose
-/// effect is instant (blood loss, madness, death blight) have no time to show and are left out.
-fn proc_kind(param_id: i32) -> Option<usize> {
-    match param_id {
-        6500..=6515 => Some(0),
-        6600..=6605 => Some(1),
-        6700..=6705 => Some(4),
-        6450..=6460 => Some(5),
+/// The status a buildup proc effect belongs to, by the `stateInfo` of its `SpEffectParam` row
+/// (an index into [BUILDUP]): the game sets it on every effect that afflicts a status, whatever
+/// the row (an enemy's hit, a swamp, an item), where a run of row ids would miss most of them.
+/// The effects that cure a status have other values and no time. Statuses whose effect is instant
+/// (blood loss, madness, death blight) only show when a row lasts longer than a second.
+fn proc_kind(state_info: u16) -> Option<usize> {
+    match state_info {
+        2 => Some(0),
+        5 => Some(1),
+        6 => Some(2),
+        116 => Some(3),
+        260 => Some(4),
+        436 => Some(5),
+        437 => Some(6),
         _ => None,
     }
 }
@@ -258,11 +275,13 @@ fn read_effects(chr: &ChrIns) -> Vec<Effect> {
         .filter_map(|entry| {
             // SAFETY: `param_data` is the live param row of the entry, `SpEffectParam`'s `iconId` is
             // its first field.
-            let icon = unsafe { entry.param_data?.as_ref() }.icon_id();
+            let row = unsafe { entry.param_data?.as_ref() };
+            let (icon, state_info) = (row.icon_id(), row.state_info());
             // SAFETY: the entry is 0x78 bytes (asserted above); +0x44 is the time left.
             let left = unsafe { std::ptr::read_unaligned((entry as *const SpecialEffectEntry as *const u8).add(0x44) as *const f32) };
             let permanent = entry.duration < 0.0;
-            let kind = proc_kind(entry.param_id);
+            // An effect with an icon is drawn with it; the proc of a status has none.
+            let kind = if icon > 0 { None } else { proc_kind(state_info) };
             ((icon > 0 || kind.is_some()) && (permanent || entry.duration > 1.0)).then_some(Effect {
                 param_id: entry.param_id,
                 icon: icon as i32,
@@ -328,13 +347,11 @@ mod tests {
     }
 
     #[test]
-    fn proc_rows_belong_to_their_status() {
-        assert_eq!(proc_kind(6511), Some(0));
-        assert_eq!(proc_kind(6600), Some(1));
-        assert_eq!(proc_kind(6702), Some(4));
-        assert_eq!(proc_kind(6455), Some(5));
-        // Blood loss, madness and death blight are instant; 505 is the game's own marker.
-        assert_eq!((proc_kind(6405), proc_kind(6752), proc_kind(6801), proc_kind(505)), (None, None, None, None));
+    fn state_info_tells_which_status_an_effect_afflicts() {
+        assert_eq!((proc_kind(2), proc_kind(5), proc_kind(6), proc_kind(116)), (Some(0), Some(1), Some(2), Some(3)));
+        assert_eq!((proc_kind(260), proc_kind(436), proc_kind(437)), (Some(4), Some(5), Some(6)));
+        // The cures (10, 11, 12...) and the game's own marker (275) are not afflictions.
+        assert_eq!((proc_kind(0), proc_kind(10), proc_kind(11), proc_kind(275)), (None, None, None, None));
     }
 
     #[test]
