@@ -20,7 +20,7 @@ OffsetY = 47            # distance from the top edge
 [Target]
 # The locked-on enemy's health and posture bars.
 Enabled = true
-Width = 220             # Bar length in pixels (100 - 1600).
+Width = 250             # Bar length in pixels (100 - 1600).
 Scale = 1.0             # Panel size multiplier (0.5 - 3.0).
 Buildup = true          # Status buildup bars (poison, rot, bleed...).
 ShowNumbers = true      # Show health, posture and buildup numbers.
@@ -36,7 +36,7 @@ Player = true
 [Minimap]
 # Round minimap: other players, your spirits, the locked-on enemy.
 Enabled = true
-Size = 110              # radius in pixels at 1080p (40 - 200)
+Size = 125              # radius in pixels at 1080p (40 - 200)
 Scale = 1.0             # size multiplier (0.5 - 3.0)
 Range = 100             # meters from center to rim (20 - 200)
 Rotate = false          # turn with the camera; false keeps north at the top

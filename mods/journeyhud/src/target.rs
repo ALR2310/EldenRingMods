@@ -14,7 +14,7 @@ use fromsoftware_shared::FromStatic;
 
 use common::logger;
 
-use crate::{radar, settings, state_icons};
+use crate::{radar, settings};
 
 // The layout the fields are read at, checked against eldenring.exe 2.6.2.0 to
 // 2.7.2.0 (`docs/offsets.md`). A `fromsoftware-rs` update that moves one stops
@@ -122,8 +122,6 @@ pub fn run() {
     let mut last_kinds: Vec<usize> = Vec::new();
     let mut last_effects: Vec<i32> = Vec::new();
     let mut last_own: Vec<i32> = Vec::new();
-    let mut last_gauges = String::new();
-    let mut gauges_logged = Instant::now();
     common::task::run_recurring_safe(cs_task, "Target", CSTaskGroupIndex::FrameBegin, move |_data: &FD4TaskData| {
         let read = if settings::enabled() { read() } else { None };
         radar::update(read.as_ref().map(|t| t.offset));
@@ -158,15 +156,6 @@ pub fn run() {
         if ids != last_own {
             logger::log(&format!("Effects: player {}", describe(&own)));
             last_own = ids;
-        }
-        let afflicted = own.iter().filter(|e| !e.permanent && e.left > 0.0).filter_map(|e| e.kind).fold(0u32, |mask, kind| mask | 1 << kind);
-        state_icons::set_afflicted(afflicted);
-        // Research: the player's gauges that are shown, for `docs/effects.md`.
-        let gauges = state_icons::describe_gauges();
-        if gauges != last_gauges && gauges_logged.elapsed() > Duration::from_secs(1) {
-            logger::log(&format!("Gauge: {gauges}"));
-            last_gauges = gauges;
-            gauges_logged = Instant::now();
         }
         if let Ok(mut guard) = OWN.lock() {
             *guard = Some((shown_effects(own, MAX_EFFECTS), Instant::now()));
