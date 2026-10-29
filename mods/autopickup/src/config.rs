@@ -59,6 +59,7 @@ pub struct Group {
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct Logging {
     pub log_file: bool,
+    pub pickup_probe: bool,
 }
 
 static CONFIG: OnceLock<TomlConfig<Config>> = OnceLock::new();
@@ -128,6 +129,7 @@ mod tests {
         // Chests stay shut by default: a mimic opens the same way.
         assert!(!config.chests.enabled);
         assert!(config.logging.log_file);
+        assert!(!config.logging.pickup_probe);
     }
 
     #[test]

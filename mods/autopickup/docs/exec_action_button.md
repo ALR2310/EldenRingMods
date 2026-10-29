@@ -31,6 +31,10 @@ Tầm: nhân `radius`, `height`, `baseHeightOffset` của các dòng nhóm bật
 
 Hook thay 16 byte đầu hàm bằng một lệnh nhảy. Nếu mod khác đã làm vậy trước (nạp trước), mẫu đầy đủ không còn khớp. `hook.rs::scan` khi đó tìm phần đuôi của mẫu (luôn cách đầu hàm đúng 0x10 byte, duy nhất ở cả 4 bản exe) và hỏi `common::conflict::foreign_hook_at` ở địa chỉ đầu hàm; có lệnh nhảy ra ngoài exe thì ghi log, hiện hộp thoại và tắt hook (cùng cách `weightmultiplier` làm, xem `shared/docs/conflict.md`). Chưa thử với mod xung đột thật: chỉ có test của `common` cho việc nhận dạng lệnh nhảy. Mod khác hook ở hàm bọc `A673D0`/`A674B0` (như bản Erd-Tools gốc) thì không xung đột, vì chúng gọi hàm lõi và hook ở đây vẫn chạy.
 
+## Probe (`Logging.PickupProbe`)
+
+Tùy chọn log mặc định tắt (`src/probe.rs`): hook chỉ đẩy `(id, đã xử lý)` vào một vòng đệm atomic cố định (không cấp phát, không khoá, không ghi file), task mỗi frame đọc ra và ghi `Probe: picked <id> <nhóm> xN` (tối đa 1 lần/giây mỗi ID), `Probe: skipped <id> <nhóm>` (ID của nhóm đang tắt hoặc đang dừng vì chiến đấu, 1 lần) và `Probe: other <id>` (tương tác ngoài mọi nhóm, 1 lần mỗi ID; dùng để tìm ID của một vật phẩm mà mod không nhặt, ví dụ cử chỉ ở Stormhill). Khi `NoPickupAnimation` được áp dụng, probe còn ghi `Probe: animation ...` với giá trị đang có trong param sau khi ghi (chỉ cho biết param đã đổi, không cho biết game có bỏ animation).
+
 ## Giấy phép và ghi công
 
 Erd-Tools-CPP (Nordgaren) dùng GPLv3; README của nó cho phép dùng trong mod khác với điều kiện dẫn link về repo, và nói tác giả không cho đăng lại **mod của họ** lên Nexus. Mod này là mã Rust viết mới: lấy từ nguồn đó ý tưởng (hook hàm tương tác), danh sách ID ActionButtonParam (dữ liệu của game, đã đối chiếu và chỉnh) và offset của `CSSound`. Trang Nexus ghi công Erd-Tools-CPP và Elden_Ring_game_tools (ankerlcg1996) kèm link. Nếu tác giả phản đối thì gỡ trang, không đổi ghi công.

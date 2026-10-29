@@ -13,7 +13,7 @@ use common::logger;
 
 use crate::config::{self, Config};
 use crate::groups::Group;
-use crate::{animation, combat, hook, range};
+use crate::{animation, combat, hook, probe, range};
 
 fn group_config(config: &Config, group: Group) -> config::Group {
     match group {
@@ -52,6 +52,10 @@ fn apply_ranges(repo: &mut SoloParamRepository, config: &Config, suffix: &str) {
 fn apply_animation(repo: &mut SoloParamRepository, config: &Config) {
     if let Err(reason) = animation::apply(repo, config.general.no_pickup_animation) {
         logger::warn(&format!("Animation: failed ({reason})"));
+    } else if config.logging.pickup_probe
+        && let Some(ids) = animation::current(repo)
+    {
+        logger::log(&format!("Probe: animation {ids}"));
     }
 }
 
@@ -69,6 +73,7 @@ pub fn run() {
 
     let mut waiting_logged = false;
     let mut ranges_pending = false;
+    let mut probe_drainer = probe::Drainer::default();
     let cs_task = common::task::wait_for_cs_task();
     common::task::run_recurring_safe(
         cs_task,
@@ -101,6 +106,8 @@ pub fn run() {
             }
 
             hook::set_paused(config.general.pause_in_combat && combat::in_combat().unwrap_or(false));
+            probe::set_enabled(config.logging.pickup_probe);
+            probe_drainer.tick();
         },
     );
 
