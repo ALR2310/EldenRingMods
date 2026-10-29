@@ -149,3 +149,24 @@ Mod **không vẽ hàng icon của người chơi nữa**; `ui::draw_icon_times`
 ## Ẩn cùng hàng icon của game
 
 Game ẩn hàng icon (và thanh HP/FP) khi không đánh nhau; ảnh chụp cho thấy chữ thời gian vẫn hiện trong khi icon đã mờ. Hàm cập nhật `sub_1408D58F0` truyền cờ ở `model + 2730` (byte ngay sau 42 cờ nhấp nháy) vào `sub_14076B850(view + 136, cờ, ...)`, hàm này phát hoạt ảnh `FadeIn` khi cờ khác 0 và `FadeOut` khi bằng 0 (đọc từ IDA, 2.7.2.0). `state_icons::shown()` đọc cờ đó; `ui.rs` giữ `icons_alpha` (cùng tốc độ mờ `FADE_RATE` của panel) và nhân vào chữ. Đã thử trong game (2026-10-28): chữ mờ cùng hàng icon khi game tự ẩn HUD.
+
+## Thanh buildup của người chơi (2026-10-29)
+
+Thanh có icon ở giữa phía dưới màn hình là `ConditionGaugeList/Item_*` của movie HUD, một clip cho mỗi trong 7 trạng thái (cùng thứ tự `BUILDUP`). Nó vừa hiện phần tích luỹ vừa hiện phần còn lại của trạng thái sau khi nổ.
+
+- **Cỡ (đo trên ảnh chụp, cửa sổ 1600x900, quy về 1080p):** icon khung vuông khoảng **42 px**, thanh dài khoảng **292 px**, cao khoảng **14 px**. So sánh: icon trạng thái hình thoi của game 38 px, ô effect của người chơi do mod vẽ 38 px, icon effect của kẻ địch khoảng 29 px (hệ số 0,77 của 38).
+- **Cập nhật:** `sub_1408D2AE0(view, index, model)` gọi cho từng trạng thái trong `sub_1408CA1C0` (view `hud + 80848 + 1144 x i`, `model = *(hud + 96) + 9888 + 104 x i`). Hàm đặt `FadeIn`/`FadeOut` theo byte `model[65]` (cùng `sub_14076B850` như hàng icon), phần còn lại dùng cho độ đầy. AOB của lệnh gọi duy nhất trên 2.6.2.0 đến 2.7.2.0.
+- **Cách ẩn:** `state_icons::install_gauge` chuyển hướng lệnh gọi đó; khi `Effects.Player` bật **và người chơi đang dính trạng thái đó** (có effect nổ tương ứng, `AFFLICTED` do `target.rs` cập nhật mỗi frame, bit k ứng với `BUILDUP[k]`), bản sao 104 byte của `model` với `model[65] = 0` được đưa vào hàm gốc, nên thanh mờ đi. Trong lúc mới tích luỹ thanh vẫn hiện; tắt `Effects.Player` thì thanh luôn như cũ. Thứ tự 7 clip của thanh khớp `BUILDUP` là giả định (chưa kiểm).
+- **Hiện trong danh sách effect:** effect nổ của người chơi (độc 6500-6515, thối rữa 6600-6605, đóng băng 6700-6705, ngủ 6450-6460) không có icon trong hàng của game, nên `ui::draw_icon_times` vẽ chúng sau các slot của game, mỗi trạng thái một ô (icon `MENU_RE_*` 38 px, giờ đếm ngược ở dưới, lấy effect còn nhiều thời gian nhất). Phần tích luỹ trước khi nổ vẫn hiện bằng thanh của game.
+
+## Nhận diện effect nổ theo `stateInfo` (2026-10-29)
+
+Thử game: thanh buildup của người chơi vẫn đếm thời gian sau khi nổ và không có ô effect, vì log `Effects: player` không có effect nổ nào. Nguyên nhân: effect thối rữa người chơi nhận ở đầm (Caelid, Lake of Rot) là hàng `4051`, `4053`, `4055` ("Scarlet Rot Swamp", 180 giây), còn đòn của kẻ địch dùng `21000-21102` ("NPC: Scarlet Rot", 180 giây) và `107000-107275` (90 giây); dải `6500-6705` chỉ là những hàng của vũ khí và vài nguồn khác. Dải id không bao hết được.
+
+Cột `stateInfo` của `SpEffectParam` cho đúng loại trạng thái bất kể hàng nào (đếm hàng trong vanilla): **2 độc** (309 hàng), **5 thối rữa** (227), **6 chảy máu** (284), **116 tử khí** (210), **260 đóng băng** (276), **436 ngủ** (224), **437 phát điên** (65). Các hàng chữa trạng thái có giá trị khác (10, 11, 12, 13, 118, 276...) và 275 là dấu nội bộ của game (`505`). `target::proc_kind` nay đổi `stateInfo` ra chỉ số `BUILDUP`, chỉ cho effect không có icon và có thời gian (`duration > 1`, vĩnh viễn thì bỏ); bảng dải id ở mục trước chỉ còn là ví dụ.
+
+## Thanh buildup: clip theo trạng thái đang hoạt động, không theo loại (2026-10-29)
+
+Thử game: thanh độc ẩn đúng, thanh thối rữa không. Log `Gauge:` (độc, từ thứ 17 của model giảm dần theo giờ còn lại của effect nổ) chỉ có clip `[0]`, với từ đầu của model bằng 1, `model[64] = 1` (đã nổ, đang đếm giờ) và `model[65] = 1` (hiện). Từ đầu là **khung hình của clip `Icon`** (7 hình trong movie, theo thứ tự `BUILDUP`: 1 độc, 2 thối rữa...). Game phát các clip cho những trạng thái đang hoạt động theo lượt, như hàng icon, nên chỉ số clip không nói lên trạng thái: thối rữa đứng đầu cũng ở clip 0 chứ không phải clip 1 (giả định trước đó sai, trùng đúng với độc vì độc ở vị trí 0).
+
+`gauge_update` nay lấy `kind = model[0] - 1` và chỉ ẩn thanh khi người chơi đang dính trạng thái `kind` (`AFFLICTED`). Log `Gauge:` giờ ghi `frame`, `state`, `shown` của từng thanh đang hiện. Chưa thử với thối rữa.

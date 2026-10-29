@@ -63,6 +63,11 @@ const EFFECTS_GAP: f32 = 4.0;
 const GAME_ICONS_CENTER_X: f32 = 155.5;
 const GAME_ICONS_PITCH: f32 = 42.0;
 const GAME_ICONS_BOTTOM: f32 = 146.0;
+/// The icons of the statuses the mod draws after the game's row are smaller than the diamonds'
+/// box (38 px): their art fills the whole square, where the diamonds' art does not. Centered on the
+/// diamonds' row (center y 122).
+const PROC_ICON_SIZE: f32 = 32.0;
+const GAME_ICONS_CENTER_Y: f32 = 122.0;
 /// The icon fades over its last seconds.
 const EFFECT_FADE_SECONDS: f32 = 5.0;
 /// One color per status, in the order of `target::BUILDUP`.
@@ -249,7 +254,7 @@ impl ImguiRenderLoop for HudRenderLoop {
             textures: self.textures.as_ref(),
             icons: self.map.as_ref(),
         };
-        if self.panel_alpha > 0.01 && self.icons_alpha > 0.01 && settings::effects_player() {
+        if self.panel_alpha > 0.01 && settings::effects_player() {
             draw_icon_times(ui, &target::own_effects_now(), self.icons_alpha, &layout);
         }
         let Some(target) = target::current() else {
@@ -398,18 +403,50 @@ fn effect_time(left: f32) -> String {
 /// shows nothing.
 fn draw_icon_times(ui: &Ui, effects: &[Effect], alpha: f32, layout: &Layout) {
     let res = layout.area[3] / BASE_HEIGHT;
+    let em = GAME_ICON_TIME * res;
+    let centered = |slot: usize| layout.area[0] + (GAME_ICONS_CENTER_X + slot as f32 * GAME_ICONS_PITCH) * res;
+    let time_below = |label: &str, center: f32, alpha: f32| {
+        let size = text::measure(ui, label, em);
+        let pos = [(center - size[0] / 2.0).round(), (layout.area[1] + GAME_ICONS_BOTTOM * res).round()];
+        text::add_shadowed(label, pos, em, fade(fade_by(TEXT, alpha)), fade(fade_by(TEXT_SHADOW, alpha)), res.max(1.0));
+    };
+    // The game's own slots.
+    let mut used = 0;
     for slot in 0..crate::state_icons::SLOTS {
         let Some(icon) = crate::state_icons::icon(slot) else { break };
-        let left = effects.iter().filter(|e| e.icon == icon && !e.permanent).map(|e| e.left).fold(f32::NEG_INFINITY, f32::max);
-        if left <= 0.0 {
-            continue;
+        used += 1;
+        let left = effects
+            .iter()
+            .filter(|e| e.kind.is_none() && e.icon == icon && !e.permanent)
+            .map(|e| e.left)
+            .fold(f32::NEG_INFINITY, f32::max);
+        if left > 0.0 && alpha > 0.01 {
+            time_below(&effect_time(left), centered(slot), alpha);
         }
-        let label = effect_time(left);
-        let em = GAME_ICON_TIME * res;
-        let size = text::measure(ui, &label, em);
-        let center = layout.area[0] + (GAME_ICONS_CENTER_X + slot as f32 * GAME_ICONS_PITCH) * res;
-        let pos = [(center - size[0] / 2.0).round(), (layout.area[1] + GAME_ICONS_BOTTOM * res).round()];
-        text::add_shadowed(&label, pos, em, fade(fade_by(TEXT, alpha)), fade(fade_by(TEXT_SHADOW, alpha)), res.max(1.0));
+    }
+    // The procs of the statuses (poison, rot...): no icon in the game's row, and the game's gauge of
+    // them is hidden, so each takes a slot after the game's, one per status, the longest left.
+    let mut procs: Vec<(usize, f32)> = Vec::new();
+    for effect in effects.iter().filter(|e| !e.permanent && e.left > 0.0) {
+        let Some(kind) = effect.kind else { continue };
+        match procs.iter_mut().find(|(known, _)| *known == kind) {
+            Some((_, left)) => *left = left.max(effect.left),
+            None => procs.push((kind, effect.left)),
+        }
+    }
+    procs.sort_by_key(|(kind, _)| *kind);
+    for (k, (kind, left)) in procs.into_iter().enumerate() {
+        let center = centered(used + k);
+        if let Some(icon) = Icon::buildup(kind).and_then(|icon| layout.icons.and_then(|map| map.icon(icon))) {
+            let height = PROC_ICON_SIZE * res;
+            let width = (height * icon.size[0] / icon.size[1]).min(GAME_ICONS_PITCH * res);
+            let top = layout.area[1] + (GAME_ICONS_CENTER_Y - PROC_ICON_SIZE / 2.0) * res;
+            let draw = ui.get_foreground_draw_list();
+            draw.add_image(icon.texture, [center - width / 2.0, top], [center + width / 2.0, top + height])
+                .col(fade([1.0, 1.0, 1.0, 1.0]))
+                .build();
+        }
+        time_below(&effect_time(left), center, 1.0);
     }
 }
 

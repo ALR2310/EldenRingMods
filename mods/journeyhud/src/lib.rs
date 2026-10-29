@@ -51,6 +51,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
             )
         });
         state_icons::install();
+        state_icons::install_gauge();
         ui::install();
         common::diag::log_environment_when_game_ready();
         target::run();
