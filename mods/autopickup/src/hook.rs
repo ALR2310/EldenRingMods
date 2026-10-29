@@ -15,6 +15,7 @@ use std::time::Duration;
 use common::{codepatch, conflict, logger, memscan};
 
 use crate::groups::classify;
+use crate::probe;
 
 /// The function's first 61 bytes. Unique in 2.6.2.0, 2.7.0.0, 2.7.1.0 and
 /// 2.7.2.0 (`scripts/ida/run.ps1 aob -Version all`).
@@ -148,7 +149,12 @@ fn decide(enabled: u8, paused: bool, id: u32) -> i32 {
 /// Called by `pickup_trampoline` with the function's own first two arguments.
 #[unsafe(no_mangle)]
 extern "C" fn pickup_filter(_this: *mut c_void, id: u32) -> i32 {
-    std::panic::catch_unwind(|| decide(ENABLED.load(Ordering::Relaxed), PAUSED.load(Ordering::Relaxed), id)).unwrap_or(0)
+    std::panic::catch_unwind(|| {
+        let answer = decide(ENABLED.load(Ordering::Relaxed), PAUSED.load(Ordering::Relaxed), id);
+        probe::record(id, answer == 1);
+        answer
+    })
+    .unwrap_or(0)
 }
 
 /// What a scan of the game code found.

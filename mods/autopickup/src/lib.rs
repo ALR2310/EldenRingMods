@@ -7,6 +7,7 @@ mod groups;
 mod hook;
 mod menu;
 mod pickup;
+mod probe;
 mod range;
 
 use common::{dll_dir, logger};
