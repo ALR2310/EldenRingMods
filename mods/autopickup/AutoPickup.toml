@@ -50,3 +50,6 @@ Range = 2.0
 [Logging]
 # Write a log file next to the DLL, for troubleshooting.
 LogFile = true
+
+# Log the interactions the mod picks up, and each other one once.
+PickupProbe = false
