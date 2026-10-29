@@ -35,8 +35,8 @@ const POISE_HEIGHT: f32 = 12.0;
 const BAR_NUMBER: f32 = 10.0;
 /// The buildup bars under the tan line: a row each, with the icon, the bar and the gap to the
 /// bars above (and the posture numbers, which need a row of their own when shown).
-const BUILDUP_ROW: f32 = 17.0;
-const BUILDUP_ICON: f32 = 16.0;
+const BUILDUP_ROW: f32 = 25.0;
+const BUILDUP_ICON: f32 = 24.0;
 const BUILDUP_ICON_GAP: f32 = 0.0;
 const BUILDUP_BAR: f32 = 12.0;
 const BUILDUP_GAP: f32 = 4.0;
@@ -63,11 +63,6 @@ const EFFECTS_GAP: f32 = 4.0;
 const GAME_ICONS_CENTER_X: f32 = 155.5;
 const GAME_ICONS_PITCH: f32 = 42.0;
 const GAME_ICONS_BOTTOM: f32 = 146.0;
-/// The icons of the statuses the mod draws after the game's row are smaller than the diamonds'
-/// box (38 px): their art fills the whole square, where the diamonds' art does not. Centered on the
-/// diamonds' row (center y 122).
-const PROC_ICON_SIZE: f32 = 32.0;
-const GAME_ICONS_CENTER_Y: f32 = 122.0;
 /// The icon fades over its last seconds.
 const EFFECT_FADE_SECONDS: f32 = 5.0;
 /// One color per status, in the order of `target::BUILDUP`.
@@ -260,6 +255,10 @@ impl ImguiRenderLoop for HudRenderLoop {
         let Some(target) = target::current() else {
             self.trail.id = 0;
             self.poise_trail.id = 0;
+            let res = layout.area[3] / BASE_HEIGHT;
+            let right = layout.area[0] + layout.area[2] - layout.offset[0] * res;
+            let top = layout.area[1] + layout.offset[1] * res + radar_ui::column_height(res);
+            anchor_gauges(&layout, right, top);
             return;
         };
         self.trail.update(target.id, target.hp as f32, target.max_hp as f32, dt);
@@ -377,6 +376,7 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
         draw_buildup(ui, &draw, buildup, [left, row_top, right], layout);
         row_top += BUILDUP_ROW * s;
     }
+    let mut gauge_top = row_top + 6.0 * s;
     if settings::effects_target() && !target.effects.is_empty() {
         let size = s * TARGET_EFFECTS_SCALE;
         let per_row = (((right - left) / (EFFECT_CELL * size)).floor() as usize).clamp(1, PLAYER_EFFECTS_PER_ROW);
@@ -388,7 +388,20 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
             per_row,
         };
         draw_effects(ui, &draw, &target.effects, cells, layout);
+        let rows = target.effects.len().min(per_row * EFFECT_ROWS).div_ceil(per_row);
+        gauge_top = row_top + (EFFECTS_GAP + 6.0) * s + rows as f32 * EFFECT_ROW * size;
     }
+    anchor_gauges(layout, right, gauge_top);
+}
+
+/// Tells the game's buildup gauge of the player where it goes: under the panel, right aligned with
+/// the column and as wide as it. `right` and `top` are screen pixels.
+fn anchor_gauges(layout: &Layout, right: f32, top: f32) {
+    let res = layout.area[3] / BASE_HEIGHT;
+    // As wide as the column (the icon and the bar are 334 px at full size); `s` holds the size
+    // setting times the resolution factor, the column is `width` of the setting.
+    let scale = layout.width * (layout.s / res) / crate::state_icons::GAUGE_WIDTH;
+    crate::state_icons::place_gauges((right - layout.area[0]) / res, (top - layout.area[1]) / res, scale);
 }
 
 /// The time left as `24s`, or `1:30` from a minute on.
@@ -410,11 +423,8 @@ fn draw_icon_times(ui: &Ui, effects: &[Effect], alpha: f32, layout: &Layout) {
         let pos = [(center - size[0] / 2.0).round(), (layout.area[1] + GAME_ICONS_BOTTOM * res).round()];
         text::add_shadowed(label, pos, em, fade(fade_by(TEXT, alpha)), fade(fade_by(TEXT_SHADOW, alpha)), res.max(1.0));
     };
-    // The game's own slots.
-    let mut used = 0;
     for slot in 0..crate::state_icons::SLOTS {
         let Some(icon) = crate::state_icons::icon(slot) else { break };
-        used += 1;
         let left = effects
             .iter()
             .filter(|e| e.kind.is_none() && e.icon == icon && !e.permanent)
@@ -423,30 +433,6 @@ fn draw_icon_times(ui: &Ui, effects: &[Effect], alpha: f32, layout: &Layout) {
         if left > 0.0 && alpha > 0.01 {
             time_below(&effect_time(left), centered(slot), alpha);
         }
-    }
-    // The procs of the statuses (poison, rot...): no icon in the game's row, and the game's gauge of
-    // them is hidden, so each takes a slot after the game's, one per status, the longest left.
-    let mut procs: Vec<(usize, f32)> = Vec::new();
-    for effect in effects.iter().filter(|e| !e.permanent && e.left > 0.0) {
-        let Some(kind) = effect.kind else { continue };
-        match procs.iter_mut().find(|(known, _)| *known == kind) {
-            Some((_, left)) => *left = left.max(effect.left),
-            None => procs.push((kind, effect.left)),
-        }
-    }
-    procs.sort_by_key(|(kind, _)| *kind);
-    for (k, (kind, left)) in procs.into_iter().enumerate() {
-        let center = centered(used + k);
-        if let Some(icon) = Icon::buildup(kind).and_then(|icon| layout.icons.and_then(|map| map.icon(icon))) {
-            let height = PROC_ICON_SIZE * res;
-            let width = (height * icon.size[0] / icon.size[1]).min(GAME_ICONS_PITCH * res);
-            let top = layout.area[1] + (GAME_ICONS_CENTER_Y - PROC_ICON_SIZE / 2.0) * res;
-            let draw = ui.get_foreground_draw_list();
-            draw.add_image(icon.texture, [center - width / 2.0, top], [center + width / 2.0, top + height])
-                .col(fade([1.0, 1.0, 1.0, 1.0]))
-                .build();
-        }
-        time_below(&effect_time(left), center, 1.0);
     }
 }
 

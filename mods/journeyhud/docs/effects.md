@@ -170,3 +170,19 @@ Cột `stateInfo` của `SpEffectParam` cho đúng loại trạng thái bất k�
 Thử game: thanh độc ẩn đúng, thanh thối rữa không. Log `Gauge:` (độc, từ thứ 17 của model giảm dần theo giờ còn lại của effect nổ) chỉ có clip `[0]`, với từ đầu của model bằng 1, `model[64] = 1` (đã nổ, đang đếm giờ) và `model[65] = 1` (hiện). Từ đầu là **khung hình của clip `Icon`** (7 hình trong movie, theo thứ tự `BUILDUP`: 1 độc, 2 thối rữa...). Game phát các clip cho những trạng thái đang hoạt động theo lượt, như hàng icon, nên chỉ số clip không nói lên trạng thái: thối rữa đứng đầu cũng ở clip 0 chứ không phải clip 1 (giả định trước đó sai, trùng đúng với độc vì độc ở vị trí 0).
 
 `gauge_update` nay lấy `kind = model[0] - 1` và chỉ ẩn thanh khi người chơi đang dính trạng thái `kind` (`AFFLICTED`). Log `Gauge:` giờ ghi `frame`, `state`, `shown` của từng thanh đang hiện. Chưa thử với thối rữa.
+
+## Đổi hướng: dời thanh buildup của người chơi, không ẩn nữa (2026-10-29)
+
+Ô trạng thái do mod vẽ ở hàng icon của game nằm lơ lửng khi game ẩn hàng đó (ngoài chiến đấu), nên bỏ cả hướng ẩn thanh buildup lẫn ô trạng thái. Thay vào đó **thanh buildup gốc của game được dời sang cột phải, ngay dưới hàng effect của kẻ địch** (khi không có mục tiêu thì trượt lên ngay dưới giờ), giữ nguyên kích thước gốc (icon 42 px, thanh 292 x 14 px, tổng khoảng 334 px, căn phải với cột nên tràn sang trái). Bản vẽ: `tmp/scratchpad/hud_layout4a.png` (có mục tiêu), `hud_layout4b.png` (không có).
+
+- **Vị trí gốc (đọc từ movie):** `ConditionGaugeList` ở (960, 520) của khung 1080p; mục k ở (-150, 197,25 - 48,85 x k) so với nó (xếp từ dưới lên); icon rộng 42 px, lệch trái gốc 26 px, thanh kết thúc cách gốc 308 px phải (khớp ảnh chụp).
+- **Cách dời:** `state_icons::gauge_update` (lệnh gọi `sub_1408D2AE0`, như trước) gọi hàm gốc rồi đặt `_x/_y` của clip gốc của thanh (`sub_140D872C0`, AOB giống `HubHpBars`; clip lấy từ vtable khe 1 của thành phần ở `view + 1032`). Vị trí mỗi clip k: gốc đã báo + 48,85 x k (xếp từ trên xuống). Chỉ đặt khi vị trí đổi hoặc game dựng lại view; tắt `Effects.Player` thì đặt lại vị trí cũ của game.
+- **Neo:** `ui.rs` báo mỗi frame (`anchor_gauges`) mép phải của cột và đỉnh của thanh đầu: dưới hàng effect của kẻ địch khi có mục tiêu, dưới giờ khi không. Đơn vị là điểm ảnh của khung 1080p, nên hợp mọi độ phân giải.
+- Hàng effect bên trái chỉ còn chữ giờ dưới icon của game; ô trạng thái do mod vẽ đã bỏ. `kind` (nhận diện effect nổ theo `stateInfo`) vẫn dùng cho kẻ địch.
+- Chưa thử trong game: vị trí gốc của clip trong `ConditionGaugeList` (-150, 197,25) và độ lệch icon/thanh là số đo từ ảnh; `view + 1032` là suy ra từ IDA.
+
+## Thanh buildup đã dời: đo và thu nhỏ (2026-10-29)
+
+Thử game: dời được thanh sang cột phải (dưới giờ khi không có mục tiêu, dưới hàng effect khi có), đúng như bản vẽ. Kích cỡ gốc lạc quẻ so với HUD của mod. Đo trên ảnh chụp (2560x1440, 1 px 1080p = 1,333 px ảnh): icon khoảng **40 đến 42 px**, thanh khoảng **290 x 14 px**, tổng khoảng 334 px; so với thanh máu của mod 220 x 12 px và hàng buildup của kẻ địch (icon 16 px, thanh 12 px), thanh này rộng gấp 1,5 lần và icon to gấp 2,6 lần.
+
+Nay thu nhỏ bằng `sub_140D87530(value, [x, y])` (đặt `_xscale`/`_yscale` bằng x, y nhân 100%; AOB duy nhất trên 2.6.2.0 đến 2.7.2.0): tỉ lệ = bề rộng cột / 334, tức **cùng bề rộng với thanh máu của mod** (mặc định 220 px: tỉ lệ 0,66, icon khoảng 28 px, thanh khoảng 192 x 9 px), theo `Target.Width` và `Target.Scale`. Gốc của clip nằm ở tâm icon, nên mép phải của thanh nằm 308 x tỉ lệ bên phải gốc và bước giữa các thanh là 48,85 x tỉ lệ. Chưa thử trong game.

@@ -22,7 +22,7 @@ static SHOW_NUMBERS: AtomicBool = AtomicBool::new(true);
 static BUILDUP: AtomicBool = AtomicBool::new(true);
 static EFFECTS_TARGET: AtomicBool = AtomicBool::new(true);
 static EFFECTS_PLAYER: AtomicBool = AtomicBool::new(true);
-static WIDTH: AtomicI32 = AtomicI32::new(220);
+static WIDTH: AtomicI32 = AtomicI32::new(250);
 static OFFSET_X: AtomicI32 = AtomicI32::new(48);
 static OFFSET_Y: AtomicI32 = AtomicI32::new(47);
 /// `f32` bits.
@@ -49,7 +49,7 @@ static MINIMAP_RANGE: AtomicI32 = AtomicI32::new(100);
 /// Virtual-key codes of the zoom keys.
 static ZOOM_IN_KEYS: [AtomicI32; ZOOM_KEYS] = [AtomicI32::new(VK_OEM_PLUS), AtomicI32::new(0), AtomicI32::new(0), AtomicI32::new(0)];
 static ZOOM_OUT_KEYS: [AtomicI32; ZOOM_KEYS] = [AtomicI32::new(VK_OEM_MINUS), AtomicI32::new(0), AtomicI32::new(0), AtomicI32::new(0)];
-static MINIMAP_SIZE: AtomicI32 = AtomicI32::new(110);
+static MINIMAP_SIZE: AtomicI32 = AtomicI32::new(125);
 
 /// Takes every setting from the loaded config.
 pub fn load(config: &Config) {
