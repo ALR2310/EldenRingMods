@@ -37,7 +37,8 @@ pub fn locate(block: BlockId, local: [f32; 2]) -> ([f32; 2], i32, Option<MapId>)
         // Overworld blocks are mAA_XX_ZZ_LL grid tiles of (256 << LL) meters with positions
         // relative to the tile center. Larger tiles are centered on their 2x2 or 4x4 group of
         // small tiles, hence the extra half-tile offsets.
-        let tile = (256u32 << (block.index() & 0x3)) as f32;
+        // Only the units digit is the grid scale; the tens digit is an event variant.
+        let tile = (256u32 << (block.index() % 10).min(2)) as f32;
         let center = (tile - 256.0) / 2.0;
         let position = [
             local[0] + f32::from(block.block()) * tile + center,
@@ -78,7 +79,9 @@ fn legacy_conversion(block: BlockId, local: [f32; 2]) -> Option<([f32; 2], u8)> 
             conversions
                 .iter()
                 .filter(|c| c.src == src && WORLD_AREAS.contains(&c.dst.0) == to_world)
-                .min_by(|a, b| distance_squared(a.src_pos, at).total_cmp(&distance_squared(b.src_pos, at)))
+                .min_by(|a, b| {
+                    distance_squared(a.src_pos, at).total_cmp(&distance_squared(b.src_pos, at))
+                })
         };
         if let Some(c) = nearest(true) {
             let position = [
@@ -88,7 +91,10 @@ fn legacy_conversion(block: BlockId, local: [f32; 2]) -> Option<([f32; 2], u8)> 
             return Some((position, c.dst.0));
         }
         let c = nearest(false)?;
-        at = [at[0] - c.src_pos[0] + c.dst_pos[0], at[1] - c.src_pos[1] + c.dst_pos[1]];
+        at = [
+            at[0] - c.src_pos[0] + c.dst_pos[0],
+            at[1] - c.src_pos[1] + c.dst_pos[1],
+        ];
         src = c.dst;
     }
     None
@@ -112,7 +118,9 @@ fn conversions() -> Option<&'static [Conversion]> {
     let repo = unsafe { SoloParamRepository::instance() }.ok()?;
     // fromsoftware-rs hardcodes the slot of each param; make sure it holds this one.
     if let Err(reason) = params::check::<WorldMapLegacyConvParam>(repo) {
-        logger::warn(&format!("Map: legacy conversion params unavailable ({reason})"));
+        logger::warn(&format!(
+            "Map: legacy conversion params unavailable ({reason})"
+        ));
         return None;
     }
     let conversions: Vec<Conversion> = (0..)
@@ -127,7 +135,10 @@ fn conversions() -> Option<&'static [Conversion]> {
     if conversions.is_empty() {
         return None;
     }
-    logger::log(&format!("Map: {} legacy conversion row(s)", conversions.len()));
+    logger::log(&format!(
+        "Map: {} legacy conversion row(s)",
+        conversions.len()
+    ));
     Some(CONVERSIONS.get_or_init(|| conversions))
 }
 
@@ -150,5 +161,27 @@ mod tests {
         let block = BlockId::from_parts(60, 10, 10, 1);
         let (position, ..) = locate(block, [0.0, 0.0]);
         assert_eq!(position, [10.0 * 512.0 + 128.0, 10.0 * 512.0 + 128.0]);
+    }
+
+    #[test]
+    fn event_variants_keep_the_units_digit_grid_scale() {
+        for (area, map) in [(60, MapId::Overworld), (61, MapId::Shadow)] {
+            for lod in 0..=2 {
+                let tile = (256u32 << lod) as f32;
+                let expected = [
+                    12.0 + 18.0 * tile + (tile - 256.0) / 2.0,
+                    -9.0 + 16.0 * tile + (tile - 256.0) / 2.0,
+                ];
+                for variant in [0, 10] {
+                    assert_eq!(
+                        locate(
+                            BlockId::from_parts(area, 18, 16, variant + lod),
+                            [12.0, -9.0]
+                        ),
+                        (expected, i32::from(area), Some(map)),
+                    );
+                }
+            }
+        }
     }
 }

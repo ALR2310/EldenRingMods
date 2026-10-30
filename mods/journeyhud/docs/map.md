@@ -77,7 +77,7 @@ Kiểm ngoại tuyến: test bỏ qua `map_icons_from_the_installed_game` ghi c�
 ```text
 CSMenuMan -> +0x80 -> +0x250 (view bản đồ thế giới) -> +0x338 (danh sách marker ở view +0x300, con trỏ dữ liệu ở +0x38 của nó)
   -> +0x08 mảng slot (mỗi slot 16 byte), +0x10 số slot
-slot: id i32 (âm = trống), x f32, y f32 (toạ độ màn hình bản đồ của game, Y xuống, 41 ô 256 px), map u8 (0 overworld, 1 hầm ngầm), icon u8
+slot: id i32 (âm = trống), x f32, y f32 (toạ độ màn hình bản đồ của game, Y xuống, 41 ô 256 px), map u8 (0 overworld, 1 hầm ngầm, 10 Land of Shadow), icon u8
 ```
 
 **Kiểm trong IDA:** hàm thêm marker (chuỗi `CSMenuMarkersSaveData.cpp`) ghi đúng các trường này và nơi gọi nó giữ danh sách ở view +0x300 trên **cả bốn bản exe**
@@ -85,11 +85,11 @@ slot: id i32 (âm = trống), x f32, y f32 (toạ độ màn hình bản đồ c
 (`a1[7]`), danh sách ở `a1 + 768`. **Chưa kiểm riêng** phần đầu chuỗi (`CSMenuMan +0x80 +0x250`): nó lấy từ minimap gốc, tác giả đã thử trong game trên 2.7.2.0.
 
 **An toàn:** mọi con trỏ đọc bằng `ReadProcessMemory` (lỗi thì trả `None` thay vì crash), và kết quả bị bỏ hết nếu có slot nào không giống beacon (số slot 0 hoặc quá 10, id quá lớn, map
-khác 0 và 1, vị trí ngoài bản đồ hoặc không hữu hạn). Bản exe nào chuỗi sai thì chỉ không có beacon.
+khác 0, 1 và 10, vị trí ngoài bản đồ hoặc không hữu hạn). Bản exe nào chuỗi sai thì chỉ không có beacon.
 
 Chuyển toạ độ: `from_game_map` đổi (x, y) của màn hình bản đồ sang mét trên lưới overworld, ô (i, j) của bản đồ ứng với `m60_{i+28}_{j+24}`. Số slot (1 đến 5...) là số game hiển thị cạnh beacon;
 chưa vẽ số. Icon là `MENU_MAP_Marker` (64x324, tia sáng xanh nhạt, đầu mũi tên ở dưới là vị trí): vẽ cao 36 px, mũi dưới đặt đúng chỗ; beacon ngoài tầm ghim vào viền như người chơi khác.
-Khoá `MinimapBeacons`. **Chưa thử trong game.**
+Khoá `MinimapBeacons`. **Đã xác nhận chạy trong game (cả Overworld và DLC).**
 
 ## Thứ tự lớp và cỡ icon
 
@@ -134,7 +134,7 @@ Lớp `Minimap.Layers.MapForGoblins`, code ở `src/map/mfg.rs`. Mod Map for Gob
 
 Bản đồ DLC nằm trong cùng archive `/menu/71_maptile.tpfbhd`: `M10` (Land of Shadow, lưới 41x41 ô 256 px, cùng định dạng tile như `M00`) và `M11` (một vùng nhỏ 16x10 ô, bản đồ hầm ngầm của DLC, chưa dùng). Tile giải mã được bằng đúng bộ đọc hiện có (đã ghép thử cả 41x41 ô `M10` thành ảnh để xem: một đảo lớn ở nửa dưới, Scadutree ở phía trên, viền tối quanh).
 
-- **Cách nối vào:** `MapId::Shadow` (`M10`), `world::locate` trả `Some(Shadow)` cho block area 61 (và đích area 61 của bảng đổi toạ độ dungeon), điểm đánh dấu theo `disp_mask02` của `WorldMapPointParam`, beacon theo bản đồ 2 và marker Map for Goblins theo layer 2. Mảnh bản đồ của DLC chưa đọc: `Shadow` luôn hiện đủ (`FullMap` không áp dụng).
+- **Cách nối vào:** `MapId::Shadow` (`M10`), `world::locate` trả `Some(Shadow)` cho block area 61 (và đích area 61 của bảng đổi toạ độ dungeon; bậc lưới overworld lấy chữ số hàng đơn vị `(block.index() % 10).min(2)` để bỏ qua chữ số hàng chục của biến thể sự kiện), điểm đánh dấu theo `disp_mask02` của `WorldMapPointParam`, beacon theo bản đồ 10 (`M10`) và marker Map for Goblins theo layer 2.
 - **`M11`:** DLC không có bản đồ hầm ngầm. Bảng tên mask trong exe (`menu:/71_MapTile.mtmskbnd`, 8 ô) chỉ liệt kê `M00`, `M01`, `M10`, `M03` đến `M07`; `M11` có trong archive (1521 ô, mọi mask bằng 0, không phải bản đồ theo mảnh) nhưng game không nạp. Người dùng nhớ DLC không có khu ngầm, khớp.
 - **Mảnh bản đồ DLC:** mask của `M10` dùng 5 bit (0 đến 4; `M00` 21 bit, `M01` 5 bit), tức 5 mảnh. Dòng log `Map: piece rows 0-20, 70-70, 100-105, 1000-1004, 1070-1070` (2026-10-28, 2.7.2.0) cho thấy hàng của DLC là **1000 đến 1004** (5 hàng, khớp 5 bit), không phải 200 đến 204 như đoán lúc đầu (khi đó `FullMap = false` ở DLC tối cả vùng đã nhặt mảnh). Hàng 70 và 1070 chưa rõ (không thuộc 5 bit). `FullMap = false` ở DLC dùng gốc 1000.
 - **Gốc toạ độ:** ô (0, 0) của `M10` ứng với tile m61 (28, 24), cùng khung với bản đồ cơ sở (m60). Đây là giả định đầu tiên và người dùng thử trong game thấy minimap DLC khớp, nên không cần chỉnh (đảo trên ảnh chiếm ô x 12..31, z 10..33, tức tile m61 khoảng x 40..59, z 34..57).
