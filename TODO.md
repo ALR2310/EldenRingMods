@@ -2,7 +2,7 @@
 
 Chỉ liệt kê việc **còn mở**, mỗi việc 1 dòng. Việc xong xoá đi (lịch sử ở
 `mods/<mod>/HISTORY.md`); lý do / chi tiết kỹ thuật ở `mods/<mod>/docs/`.
-Quy ước đầy đủ: `CLAUDE.md`, mục "Viết `TODO.md` gọn".
+Quy ước đầy đủ: `docs/rules/style.md`.
 
 ## Menu trong game (ERNativeUI)
 
@@ -58,3 +58,15 @@ Chi tiết từng mục: `docs/cleanup_verify.md`. Chỉ build và unit test, ch
 ## Chung
 
 - [ ] Gắn `common::conflict` (cảnh báo hook trùng mod khác) vào các mod hook byte còn lại: autoregen, runemultiplier; xem `shared/docs/conflict.md`. AOB đầu hàm hỏng khi bị hook trước nên cần pattern đuôi
+
+## JourneyHUD
+
+Chi tiết: `mods/journeyhud/docs/design.md`
+
+- [ ] [bug] JourneyHUD: game crash hỏng heap (0xC0000374, 2026-10-27 20:51, game đang giải phóng `MicrosoftDiskFileOperator`), chưa rõ mod nào; thử chỉ JourneyHUD, bấm F5 ít thôi
+- [ ] [research] JourneyHUD: buildup trong co-op Seamless (2026-10-28, chưa có dịp thử): hai máy cùng đánh một kẻ địch, so dòng log `Buildup:`; máy chủ thấy tổng, máy khách chỉ thấy phần mình? (`docs/buildup.md`)
+- [ ] [verify] JourneyHUD: chữ giờ dưới icon trạng thái của game khi đổi cỡ HUD trong tuỳ chọn game (`mods/journeyhud/docs/effects.md`); còn làm: khối sát thương giữa người chơi (co-op)
+- [ ] [research] JourneyHUD: kẻ địch xung quanh trên minimap, đầu chuỗi beacon trên 2.6.2.0 đến 2.7.1.0 (`docs/map.md`)
+
+## NoFallDamage
+- [chờ phản hồi] Code và `docs/fall_damage.md` (2026-10-26) chỉ nằm trong `git stash` (`!!GitHub_Desktop<mod/nofalldamage>`), nhánh `mod/nofalldamage` chưa có file mod; khôi phục vào nhánh rồi thử KillGuard trong game, đừng xoá stash.

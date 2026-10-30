@@ -63,4 +63,4 @@ Lần thử đầu crash 3 giây sau khi vào thế giới: `illegal instruction
 ## Rủi ro chưa kiểm
 
 - Trả 1 bỏ qua cả điều kiện của hàm gốc (`a4` hoặc `sub_140A656D0(a1)` trả 0 sớm). Mọi mod tham khảo làm vậy; nếu thấy nhặt khi đang mở menu, cutscene hay đang ngồi ngựa thì thêm điều kiện ở đây.
-- Chưa thử cùng `Solid_Uncapper`/`ErdTools.dll`: tắt `Auto Pickup` ở các DLL đó khi thử (xem quy tắc "tin kết quả thử có điều kiện" ở `CLAUDE.md`).
+- Chưa thử cùng `Solid_Uncapper`/`ErdTools.dll`: tắt `Auto Pickup` ở các DLL đó khi thử (xem quy tắc "tin kết quả thử có điều kiện" ở `AGENTS.md`).

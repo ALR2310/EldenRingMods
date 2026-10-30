@@ -36,7 +36,7 @@ Log được người dùng đăng công khai, xem `shared/docs/diag.md` về qu
 
 ## Văn phong log: mod nào đã áp
 
-Quy ước (CLAUDE.md gốc, mục "Văn phong: log"): ngắn, kỹ thuật, dạng `<Thành phần>: <trạng thái>`,
+Quy ước (`docs/rules/style.md`, mục "Log"): ngắn, kỹ thuật, dạng `<Thành phần>: <trạng thái>`,
 không địa chỉ hay dump ở lần chạy thường, lỗi kèm lý do. Đợt dọn 2026-10-16 chỉ gồm 6 mod
 và bỏ sót phần còn lại, nên danh sách này để lần sau không quên:
 
