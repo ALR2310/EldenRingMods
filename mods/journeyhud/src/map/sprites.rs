@@ -358,4 +358,40 @@ mod extract {
         }
         panic!("no HUD movie found");
     }
+
+    /// Research: writes the HUD bar sprites (`MENU_HP_Base*`, `MENU_FL_*Bar*`...) as PNG files into
+    /// `ER_SPRITE_OUT`, one per sprite named `<sheet>__<name>.png`, with their `[x, y, w, h]` printed.
+    /// `cargo test -p journeyhud --release -- --ignored hud_bar_sprites --nocapture`.
+    #[test]
+    #[ignore]
+    fn hud_bar_sprites_from_the_installed_game() {
+        let dir = std::path::PathBuf::from(
+            std::env::var("ER_GAME_DIR").unwrap_or_else(|_| r"E:\SteamLibrary\steamapps\common\ELDEN RING\Game".to_string()),
+        );
+        let out = std::path::PathBuf::from(std::env::var("ER_SPRITE_OUT").expect("set ER_SPRITE_OUT"));
+        std::fs::create_dir_all(&out).unwrap();
+        let mut menu = Menu::open(&dir).unwrap();
+        let text = String::from_utf8_lossy(&menu.layouts).into_owned();
+        let sheets: Vec<String> = text
+            .split("<TextureAtlas imagePath=\"")
+            .skip(1)
+            .filter_map(|part| part.split(".png\"").next().map(str::to_owned))
+            .collect();
+        let wanted = ["HP_Base", "FL_BarDeco", "FL_HP", "FL_BarEdge", "HP_Bar", "Bar_Loss", "Bar_Regain", "Condition", "CO_", "Gauge", "Waku", "Ruler", "Frame", "_FL_"];
+        for sheet in sheets {
+            for (name, rect) in sheet_sprites(&menu.layouts, &sheet) {
+                if !wanted.iter().any(|w| name.contains(w)) {
+                    continue;
+                }
+                println!("{sheet}/{name}: {rect:?}");
+                if let Ok(image) = menu.crop(&sheet, rect) {
+                    let file = std::fs::File::create(out.join(format!("{sheet}__{name}.png"))).unwrap();
+                    let mut encoder = png::Encoder::new(file, image.width, image.height);
+                    encoder.set_color(png::ColorType::Rgba);
+                    encoder.set_depth(png::BitDepth::Eight);
+                    encoder.write_header().unwrap().write_image_data(&image.rgba).unwrap();
+                }
+            }
+        }
+    }
 }

@@ -24,7 +24,11 @@
   },
   "effects_player": {
     "label": "Hiệu ứng của bạn",
-    "help": "Hiện các hiệu ứng của bạn cùng thời gian còn lại, dưới hàng icon trạng thái của game."
+    "help": "Hiện các hiệu ứng của bạn cùng thời gian còn lại dưới hàng icon trạng thái của game, và dời thanh tích tụ của bạn tới cạnh đó."
+  },
+  "player_scale": {
+    "label": "Cỡ thanh tích tụ của bạn",
+    "help": "Kích thước thanh tích tụ của bản thân (độc, thối đỏ...) ở góc trái trên. 1 = đúng cỡ của game."
   },
   "buildup": {
     "label": "Tích tụ trạng thái",

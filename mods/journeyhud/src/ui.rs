@@ -25,11 +25,13 @@ use crate::textures::{self, Textures};
 const ASPECT: f32 = 16.0 / 9.0;
 const BASE_HEIGHT: f32 = 1080.0;
 
-/// The thickness matches the player's own health bar (about 12 at 1080p); the
-/// length is a setting.
-const HP_HEIGHT: f32 = 12.0;
-/// Flush under the HP bar, no gap.
+/// The thickness of the health bar at 1080p (the player's own is about 12); the length is a
+/// setting.
+const HP_HEIGHT: f32 = 13.0;
 const POISE_HEIGHT: f32 = 12.0;
+/// Space between the health bar and the posture bar. The frames' lines (2.4 px, centered on the edges of
+/// the bars) take 1.2 px of it on each side, so a gap shows only from about 3 px.
+const BAR_GAP: f32 = 4.0;
 /// Font size of the numbers inside the health and the posture bar, at 1080p: small enough that
 /// the digits stay inside bars 12 px thick.
 const BAR_NUMBER: f32 = 10.0;
@@ -63,6 +65,8 @@ const EFFECTS_GAP: f32 = 4.0;
 const GAME_ICONS_CENTER_X: f32 = 155.5;
 const GAME_ICONS_PITCH: f32 = 42.0;
 const GAME_ICONS_BOTTOM: f32 = 146.0;
+/// Space between the times under the game's icons and the player's buildup gauge.
+const GAUGE_UNDER_ICONS_GAP: f32 = 6.0;
 /// The icon fades over its last seconds.
 const EFFECT_FADE_SECONDS: f32 = 5.0;
 /// One color per status, in the order of `target::BUILDUP`.
@@ -77,6 +81,9 @@ const BUILDUP_COLORS: [[f32; 4]; 7] = [
 ];
 /// Thickness of the tan line under the bars.
 const LINE: f32 = 2.0;
+/// Thickness of one texel row of the game's frame lines, per unit of size: 6 rows make the 2.4 px
+/// the game's lines measure.
+const WAKU_LINE_TEXEL: f32 = 0.4;
 /// ImGui's default font is 13px; this makes the text about 17px at 1080p.
 const FONT_SCALE: f32 = 1.3;
 
@@ -255,10 +262,7 @@ impl ImguiRenderLoop for HudRenderLoop {
         let Some(target) = target::current() else {
             self.trail.id = 0;
             self.poise_trail.id = 0;
-            let res = layout.area[3] / BASE_HEIGHT;
-            let right = layout.area[0] + layout.area[2] - layout.offset[0] * res;
-            let top = layout.area[1] + layout.offset[1] * res + radar_ui::column_height(res);
-            anchor_gauges(&layout, right, top);
+            anchor_gauges();
             return;
         };
         self.trail.update(target.id, target.hp as f32, target.max_hp as f32, dt);
@@ -347,10 +351,13 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
     }
 
     let mut bottom = hp_bottom;
+    let mut poise_top = None;
     if let Some((poise, max)) = target.poise {
-        bottom += POISE_HEIGHT * s;
+        let poise_from = hp_bottom + BAR_GAP * s;
+        poise_top = Some(poise_from);
+        bottom = poise_from + POISE_HEIGHT * s;
         let poise_bar = Bar {
-            from: [left, hp_bottom],
+            from: [left, poise_from],
             to: [right, bottom],
             fraction: poise / max,
             trail: (poise_trail.from > poise).then(|| poise_trail.from / max),
@@ -365,10 +372,14 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
         draw_bar(&draw, &poise_bar);
         if layout.show_numbers {
             let label = format!("{poise:.0} / {max:.0}");
-            draw_bar_number(ui, &label, [left, right, hp_bottom, bottom], BAR_NUMBER * s, s);
+            draw_bar_number(ui, &label, [left, right, poise_from, bottom], BAR_NUMBER * s, s);
         }
     }
-    frame(&draw, left, right, top, bottom, s);
+    // A frame for each bar, drawn over both so one bar's does not hide the other's.
+    frame(&draw, left, right, top, hp_bottom, s, layout.textures);
+    if let Some(poise_from) = poise_top {
+        frame(&draw, left, right, poise_from, bottom, s, layout.textures);
+    }
 
     // Under the tan line.
     let mut row_top = bottom + (LINE + BUILDUP_GAP) * s;
@@ -376,7 +387,6 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
         draw_buildup(ui, &draw, buildup, [left, row_top, right], layout);
         row_top += BUILDUP_ROW * s;
     }
-    let mut gauge_top = row_top + 6.0 * s;
     if settings::effects_target() && !target.effects.is_empty() {
         let size = s * TARGET_EFFECTS_SCALE;
         let per_row = (((right - left) / (EFFECT_CELL * size)).floor() as usize).clamp(1, PLAYER_EFFECTS_PER_ROW);
@@ -388,20 +398,20 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
             per_row,
         };
         draw_effects(ui, &draw, &target.effects, cells, layout);
-        let rows = target.effects.len().min(per_row * EFFECT_ROWS).div_ceil(per_row);
-        gauge_top = row_top + (EFFECTS_GAP + 6.0) * s + rows as f32 * EFFECT_ROW * size;
     }
-    anchor_gauges(layout, right, gauge_top);
+    anchor_gauges();
 }
 
-/// Tells the game's buildup gauge of the player where it goes: under the panel, right aligned with
-/// the column and as wide as it. `right` and `top` are screen pixels.
-fn anchor_gauges(layout: &Layout, right: f32, top: f32) {
-    let res = layout.area[3] / BASE_HEIGHT;
-    // As wide as the column (the icon and the bar are 334 px at full size); `s` holds the size
-    // setting times the resolution factor, the column is `width` of the setting.
-    let scale = layout.width * (layout.s / res) / crate::state_icons::GAUGE_WIDTH;
-    crate::state_icons::place_gauges((right - layout.area[0]) / res, (top - layout.area[1]) / res, scale);
+/// Tells the game's buildup gauge of the player where it goes: at the left, under the game's row of
+/// status icons and their times, at the game's own size. Far from the target's panel, so
+/// the player's buildup is not taken for the enemy's.
+fn anchor_gauges() {
+    // The gauge has its own size setting, not the target panel's, as a fraction of the game's own
+    // (the game scales it with the resolution itself).
+    let scale = crate::settings::player_scale();
+    let left = GAME_ICONS_CENTER_X - GAME_ICONS_PITCH / 2.0;
+    let top = GAME_ICONS_BOTTOM + GAME_ICON_TIME * 1.5 + GAUGE_UNDER_ICONS_GAP;
+    crate::state_icons::place_gauges(left + crate::state_icons::GAUGE_WIDTH * scale, top, scale);
 }
 
 /// The time left as `24s`, or `1:30` from a minute on.
@@ -611,8 +621,14 @@ fn flat_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>) {
     }
 }
 
-/// The tan line under the bars and a small ornament at each end.
-fn frame(draw: &DrawListMut<'_>, left: f32, right: f32, top: f32, bottom: f32, s: f32) {
+/// The frame around the bars: the game's box for its buildup gauge (a thin line above and below,
+/// a cap at each end) from its own textures, or drawn shapes (the tan line under the bars and a
+/// small ornament at each end) when they could not be loaded.
+fn frame(draw: &DrawListMut<'_>, left: f32, right: f32, top: f32, bottom: f32, s: f32, textures: Option<&Textures>) {
+    if let Some(textures) = textures {
+        textured_frame(draw, [left, right, top, bottom], s, textures);
+        return;
+    }
     let line = LINE * s.max(0.85);
     let under = bottom + line;
     let color = fade(LINE_COLOR);
@@ -622,6 +638,38 @@ fn frame(draw: &DrawListMut<'_>, left: f32, right: f32, top: f32, bottom: f32, s
         .build();
     draw.add_triangle([right - 2.0 * s, under], [right + 3.0 * s, under], [right + 0.5 * s, bottom - 3.0 * s], color)
         .filled(true)
+        .build();
+}
+
+/// `frame` from the game's box. Its lines are `LINE_TEXEL` thick per texel of the texture and sit
+/// on the top and the bottom of the bars; the caps are stretched so they span from one line to the
+/// other. The texture's texels are `s / 2` wide, as the bars' are.
+fn textured_frame(draw: &DrawListMut<'_>, [left, right, top, bottom]: [f32; 4], s: f32, textures: &Textures) {
+    let white = fade([1.0, 1.0, 1.0, 1.0]);
+    let [width, height] = textures::WAKU_SIZE;
+    let kx = 0.5 * s;
+    let thick = WAKU_LINE_TEXEL * s;
+    for ([from, to, center], y) in [(textures::WAKU_TOP_LINE, top), (textures::WAKU_BOTTOM_LINE, bottom)] {
+        draw.add_image(textures.waku, [left, y - (center - from) * thick], [right, y + (to - center) * thick])
+            .uv_min([0.1, from / height])
+            .uv_max([0.1 + (right - left) / kx / width, to / height])
+            .col(white)
+            .build();
+    }
+    // Caps: the art spans the lines, 28.5 texels of the texture apart.
+    let between = textures::WAKU_BOTTOM_LINE[2] - textures::WAKU_TOP_LINE[2];
+    let ky = (bottom - top) / between;
+    let y0 = top - textures::WAKU_TOP_LINE[2] * ky;
+    let y1 = y0 + height * ky;
+    let [left_w, _] = textures::WAKU_LEFT_SIZE;
+    let x1 = left + 1.0 * s;
+    draw.add_image(textures.waku_left, [x1 - left_w * kx, y0], [x1, y1]).col(white).build();
+    let from = textures::WAKU_CAP_FROM;
+    let x0 = right + 1.0 * s - (textures::WAKU_CAP_ART_END - from) * kx;
+    draw.add_image(textures.waku, [x0, y0], [x0 + (width - from) * kx, y1])
+        .uv_min([from / width, 0.0])
+        .uv_max([1.0, 1.0])
+        .col(white)
         .build();
 }
 

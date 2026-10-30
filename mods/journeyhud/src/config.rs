@@ -8,20 +8,31 @@ use std::sync::{Arc, OnceLock};
 use serde::{Deserialize, Serialize};
 
 use common::toml_config::{LoadReport, Migration, Step, TomlConfig};
+use toml_edit::DocumentMut;
 
 /// Embedded verbatim at compile time - single source of truth for the default file.
 pub const TEMPLATE: &str = include_str!("../JourneyHUD.toml");
 
 /// Format migration steps for `General.ConfigVersion`: `STEPS[i]` takes a file from
 /// version `i + 1` to `i + 2`. Append only - a released step must never change.
-const STEPS: &[Step] = &[];
+const STEPS: &[Step] = &[v1_to_v2];
+
+/// `Effects.Target`, `Effects.Player` and `Target.ShowNumbers` became `Target.Effects`, `Player.Effects` and `Target.Numbers`.
+fn v1_to_v2(doc: &mut DocumentMut, template: &DocumentMut) {
+    common::toml_config::rename_key(doc, template, "Effects.Target", "Target.Effects");
+    common::toml_config::rename_key(doc, template, "Effects.Player", "Player.Effects");
+    common::toml_config::rename_key(doc, template, "Target.ShowNumbers", "Target.Numbers");
+    if doc.get("Effects").and_then(|e| e.as_table()).is_some_and(|t| t.is_empty()) {
+        doc.remove("Effects");
+    }
+}
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct Config {
     pub general: General,
     pub target: Target,
-    pub effects: Effects,
+    pub player: Player,
     pub layout: Layout,
     pub minimap: Minimap,
     pub logging: Logging,
@@ -43,15 +54,16 @@ pub struct Target {
     pub enabled: bool,
     pub width: i32,
     pub scale: f64,
-    pub show_numbers: bool,
+    pub numbers: bool,
     pub buildup: bool,
+    pub effects: bool,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
-pub struct Effects {
-    pub target: bool,
-    pub player: bool,
+pub struct Player {
+    pub effects: bool,
+    pub scale: f64,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
@@ -181,6 +193,25 @@ mod tests {
     fn template_sets_every_field() {
         let missing = common::toml_config::template_missing_keys::<Config>(TEMPLATE, &[]);
         assert!(missing.is_empty(), "template lacks {missing:?}");
+    }
+
+    #[test]
+    fn v1_effects_keys_move_to_target_and_player() {
+        let template: DocumentMut = TEMPLATE.parse().unwrap();
+        let mut doc: DocumentMut = "[Target]
+Width = 300
+ShowNumbers = false
+
+[Effects]
+Target = false
+Player = false
+".parse().unwrap();
+        v1_to_v2(&mut doc, &template);
+        assert_eq!(doc["Target"]["Effects"].as_bool(), Some(false));
+        assert_eq!(doc["Player"]["Effects"].as_bool(), Some(false));
+        assert_eq!(doc["Target"]["Width"].as_integer(), Some(300));
+        assert_eq!(doc["Target"]["Numbers"].as_bool(), Some(false));
+        assert!(doc.get("Effects").is_none());
     }
 
     #[test]

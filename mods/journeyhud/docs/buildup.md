@@ -36,7 +36,7 @@ Menu sprite sheet của game đã có sẵn, đọc được bằng cách `map/s
 3. Vẽ: dưới thanh posture, mỗi thanh một hàng nhỏ (icon + thanh theo màu loại + số), dùng sprite `SB_Condition` và `Condition_Bar`; sprite nạp một lần cùng các sprite khác trong `ICON_SPRITES`.
 4. Khoá cấu hình `Target.Buildup` (mặc định bật, cũng trong menu game). Log ghi một dòng `Buildup: <loại> <đã tích>/<tối đa>` mỗi khi tập loại đang tích tụ đổi, để xem giá trị thật cư xử thế nào.
 
-Bố cục vẽ (`ShowNumbers` bật thì mỗi thanh có `đã tích / tối đa` ở giữa, cùng cỡ chữ 10 px như số máu): mỗi loại một hàng 25 px (1080p) dưới đường be: icon `SB_Condition` cao 24 px (16 px lúc đầu, người dùng thấy nhỏ, 2026-10-29) (đã cắt lề trong suốt của sprite, chỉ còn phần hình; sprite gốc 126x108 có lề nên trước khi cắt icon trông nhỏ hơn và cách thanh vài px), thanh dày 12 px (bằng thanh máu) tô màu theo loại nối liền ngay sau icon (không cách), hai icon trên dưới cách nhau 1 px (thanh 12 px nằm giữa hàng); thanh posture dày 12 px như thanh máu; không số.
+Bố cục vẽ (`Target.Numbers` bật thì mỗi thanh có `đã tích / tối đa` ở giữa, cùng cỡ chữ 10 px như số máu): mỗi loại một hàng 25 px (1080p) dưới đường be: icon `SB_Condition` cao 24 px (16 px lúc đầu, người dùng thấy nhỏ, 2026-10-29) (đã cắt lề trong suốt của sprite, chỉ còn phần hình; sprite gốc 126x108 có lề nên trước khi cắt icon trông nhỏ hơn và cách thanh vài px), thanh dày 12 px (bằng thanh máu) tô màu theo loại nối liền ngay sau icon (không cách), hai icon trên dưới cách nhau 1 px (thanh 12 px nằm giữa hàng); thanh posture dày 12 px như thanh máu; không số.
 
 ## Cần thử trong game trước khi tin
 
