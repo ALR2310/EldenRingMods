@@ -22,7 +22,7 @@ Giống `vanilla_pickup_animations` của ErdTools (`tmp/repos/Erd-Tools-CPP/Erd
 - `animeID_DropItemPick = 60070` ở game vanilla 2.7.2.0, ghi thành 999999 mà animation nhặt vật phẩm trên đất vẫn phát: trường này không điều khiển nó.
 - Nghi ngờ đúng chỗ là `ObjActParam` (hành động của đối tượng trên bản đồ): mỗi dòng có `player_anim_id` (animation của nhân vật), `action_button_param_id` (nối tới `ActionButtonParam`, tức ID trong nhóm Items) và `event_kick_timing` (thời điểm trao vật phẩm trong animation). Nguyên liệu và đồ trên xác không có animation, nên so dòng `ObjActParam` của chúng với dòng của vật phẩm trên đất sẽ cho biết giá trị "không animation". Cần export `ObjActParam` (vanilla, Convergence) để so trước khi ghi gì vào game.
 - Rủi ro: nếu vật phẩm chỉ được trao ở `event_kick_timing` bên trong animation thì bỏ animation có thể làm vật phẩm không vào túi.
-- `elden_ring_item_randomiser.dll` đang bật cùng lúc khi thử lần này; nên tắt nó khi thử nhặt đồ (theo quy tắc "tin kết quả thử có điều kiện" trong `CLAUDE.md`).
+- `elden_ring_item_randomiser.dll` đang bật cùng lúc khi thử lần này; nên tắt nó khi thử nhặt đồ (theo quy tắc "tin kết quả thử có điều kiện" trong `AGENTS.md`).
 
 ## Mặc định
 

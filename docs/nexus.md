@@ -1,6 +1,6 @@
 # Nexus Mods: viết trang mod, changelog, gọi API, logo
 
-**Status 2026-10-26: quy tắc gom từ phản hồi của người dùng trong các phiên 2026-09-10 đến 2026-10-13 (trước đó nằm ở memory của Claude, nay nằm ở đây). Quy trình phát hành từng bước nằm ở skill `deploy-nexus-mod` (`.claude/skills/deploy-nexus-mod/SKILL.md`); danh sách mod ID và cách đối chiếu changelog nằm ở `CLAUDE.md`.**
+**Status 2026-10-26: quy tắc gom từ phản hồi của người dùng trong các phiên 2026-09-10 đến 2026-10-13 (trước đó nằm ở memory của Claude, nay nằm ở đây). Quy trình phát hành từng bước nằm ở skill `deploy-nexus-mod` (`.claude/skills/deploy-nexus-mod/SKILL.md`); danh sách mod ID và cách đối chiếu changelog nằm ở `docs/rules/release.md`.**
 
 ## Trang mod (`nexus_page.bbcode`)
 
@@ -23,7 +23,7 @@ Khung mẫu cho mod mới: `docs/nexus_page.bbcode`. Trang được dán tay lê
 
 - Sửa lỗi do chính mod gây ra (vd. "kẻ địch không còn biến mất khi có nhiều spirit", vốn chỉ xảy ra vì mod thêm spirit) không phải tính năng, bỏ khỏi Features.
 - Giới hạn an toàn (vd. MaxSpirits 60) không phải một bullet Features; nói một lần ở dòng riêng, giọng nhẹ.
-- Dùng từ thường ("ghost color", không phải "blue ghosts"); mỗi bullet một ý, một câu ngắn (xem mục "Văn phong" trong `CLAUDE.md`).
+- Dùng từ thường ("ghost color", không phải "blue ghosts"); mỗi bullet một ý, một câu ngắn (xem `docs/rules/style.md`).
 
 **Mục "Why this mod?"** (tuỳ chọn, người dùng rất thích ở SoulsTeleport 2026-09-25): ngay sau dòng giới thiệu, in nghiêng, ngôi thứ nhất, góc nhìn người chơi, tiếng Anh, không chi tiết kỹ thuật. Dạng mặc định gồm **2 đoạn**: một câu hỏi gần gũi về điều phiền mà mod giải quyết, rồi "So I made this mod: ...". Không thêm đoạn "Yeah, me too" + đùa (người dùng bỏ nó ở SpeedMultiplier 2026-09-29). Không phải mod nào cũng cần: SpiritMultiplier bị bỏ hẳn mục này, nên **đề nghị chứ đừng mặc định**.
 

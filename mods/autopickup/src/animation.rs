@@ -69,6 +69,18 @@ pub fn apply(repo: &mut SoloParamRepository, disable: bool) -> Result<(), String
     Ok(())
 }
 
+/// The four IDs as they are in the param now, for the probe log.
+pub fn current(repo: &mut SoloParamRepository) -> Option<String> {
+    let drop_item_pick = repo.get_row_by_index_mut::<PlayerCommonParam>(0)?.anime_id_drop_item_pick();
+    let system = repo.get_row_by_index_mut::<GameSystemCommonParam>(0)?;
+    Some(format!(
+        "drop item pick {drop_item_pick}, shine {}, corpse {}, chest {}",
+        system.msb_event_geom_treasure_info_item_get_anim_id_shine(),
+        system.msb_event_geom_treasure_info_item_get_anim_id_corpse(),
+        system.msb_event_geom_treasure_info_item_get_anim_id_box()
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
