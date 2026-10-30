@@ -1,9 +1,5 @@
 # SpiritMultiplier - Changelog
 
-Release notes shown to users on the Nexus changelog tab: one short bullet per
-user-facing change, plain text. Add new items under `[Unreleased]`; the
-`deploy-nexus-mod` skill turns that section into a version when publishing.
-
 ## [Unreleased]
 
 - Fixed enemies being changed by the spirit AI options when another mod shares their AI with spirits.
