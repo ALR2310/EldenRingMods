@@ -59,9 +59,9 @@ không đăng, dùng nội bộ) **không có trên Nexus** nên không có entr
 
 `game_domain` luôn là `eldenring`. API key ở biến `NEXUS_API_KEY` trong `.env`
 (đã gitignore, chỉ dùng nội bộ). Nếu `manifest.json` có vẻ lỗi thời (VD version không khớp
-`CLAUDE.md` ở gốc repo, mục "Đối chiếu changelog thật trên Nexus Mods...")
+`docs/rules/release.md`, mục "Đối chiếu changelog thật trên Nexus Mods...")
 - ưu tiên đọc lại `manifest.json` làm chuẩn vì nó được chính skill này cập
-nhật liên tục, còn `CLAUDE.md` chỉ là bảng tham khảo tĩnh.
+nhật liên tục, còn `docs/rules/release.md` chỉ là bảng tham khảo tĩnh.
 
 ## Bước 1 - Hỏi mod cần deploy
 
@@ -162,7 +162,7 @@ không suy đoán từ `name`.
    `CHANGELOG.md`: đổi tiêu đề thành `## [<version>] - <YYYY-MM-DD hôm
    nay>`, thêm lại 1 mục `## [Unreleased]` trống ngay phía trên, và đổi
    `version` trong `mods/<crate>/Cargo.toml` thành `<version>` (rule trong
-   `CLAUDE.md`, build ở bước 3 sẽ cập nhật `Cargo.lock`).
+   `docs/rules/release.md`, build ở bước 3 sẽ cập nhật `Cargo.lock`).
 
 ## Bước 3 - Tự build + đóng gói
 
@@ -345,7 +345,7 @@ sửa code để "cho qua".
   `CHANGELOG.md`, không suy đoán. **Không** lấy version từ
   `Cargo.toml` của crate làm nguồn - nhiều crate cũ chưa đồng bộ (VD
   `autoregen` Cargo.toml đang `2.0.0` trong khi Nexus đã lên 2.6.x). Từ
-  2026-09-29, rule trong `CLAUDE.md` yêu cầu bump `Cargo.toml` cùng lúc với
+  2026-09-29, rule trong `docs/rules/release.md` yêu cầu bump `Cargo.toml` cùng lúc với
   mục changelog mới - nên ở Bước 3, nếu `version` trong `Cargo.toml` khác
   version đã chốt, báo cho người dùng (có thể quên bump) thay vì build
   luôn.

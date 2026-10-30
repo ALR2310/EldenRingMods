@@ -126,7 +126,7 @@ pwsh scripts/build-mod.ps1 -Mod AutoRegen -Zip   # kèm file .zip để phát h�
 | `mods/<mod>/docs/`                             | Phân tích kỹ thuật: hook, RVA, nguyên nhân gốc của lỗi, hướng đã thử và bỏ |
 | `shared/docs/`                                 | Cách các module của `common` hoạt động: AOB, hook, lý do thiết kế          |
 | [scripts/ida/README.md](scripts/ida/README.md) | Bộ script IDAPython cho dịch ngược                                         |
-| [CLAUDE.md](CLAUDE.md)                         | Quy ước làm việc và viết tài liệu trong repo                               |
+| [AGENTS.md](AGENTS.md)                         | Quy ước làm việc và viết tài liệu trong repo                               |
 | [TODO.md](TODO.md)                             | Việc còn mở theo từng mod                                                  |
 
 ## Công nghệ
