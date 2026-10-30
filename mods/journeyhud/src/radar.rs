@@ -5,7 +5,7 @@
 //! used as offsets from the player (all in the same Havok space), so no map
 //! coordinate conversion is needed. Details: `docs/radar.md`.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -123,7 +123,6 @@ pub fn current() -> Option<Snapshot> {
 
 /// Reads the world for this frame; `target` is the locked-on enemy's offset.
 pub fn update(target: Option<[f32; 2]>) {
-    log_piece_rows();
     if let Ok(mut guard) = PLAY.lock() {
         *guard = play_state().map(|play| (play, Instant::now()));
     }
@@ -131,37 +130,6 @@ pub fn update(target: Option<[f32; 2]>) {
     if let Ok(mut guard) = LATEST.lock() {
         *guard = snapshot.map(|snapshot| (snapshot, Instant::now()));
     }
-}
-
-/// Logs once which rows of `WorldMapPieceParam` hold a map fragment (they come in runs: the
-/// overworld's, the underground's and the Land of Shadow's), so the base of each run in
-/// [map_fragments] can be checked. Tried each frame until the params are loaded, for a while.
-fn log_piece_rows() {
-    static DONE: AtomicBool = AtomicBool::new(false);
-    static TRIES: AtomicU32 = AtomicU32::new(0);
-    if DONE.load(Ordering::Relaxed) {
-        return;
-    }
-    let Ok(repo) = (unsafe { SoloParamRepository::instance() }) else { return };
-    if params::check::<WorldMapPieceParam>(repo).is_err() {
-        // The table is not loaded yet at the title screen: look again for a while.
-        if TRIES.fetch_add(1, Ordering::Relaxed) > 6000 {
-            DONE.store(true, Ordering::Relaxed);
-        }
-        return;
-    }
-    let mut runs: Vec<(u32, u32)> = Vec::new();
-    for id in 0..30000 {
-        if repo.get::<WorldMapPieceParam>(id).is_some_and(|row| row.open_event_flag_id() != 0) {
-            match runs.last_mut() {
-                Some((_, end)) if *end + 1 == id => *end = id,
-                _ => runs.push((id, id)),
-            }
-        }
-    }
-    DONE.store(true, Ordering::Relaxed);
-    let runs: Vec<String> = runs.iter().map(|(from, to)| format!("{from}-{to}")).collect();
-    logger::log(&format!("Map: piece rows {}", if runs.is_empty() { "none".to_string() } else { runs.join(", ") }));
 }
 
 /// Whether the game is in normal play, `None` while its HUD and fade are not there to read.
@@ -267,7 +235,7 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
 
 /// The map fragments the player has, one bit per fragment of the map they are on, as the map
 /// tile masks number them: bit b is `WorldMapPieceParam` row `base + b`, base 0 for the
-/// overworld, 100 for the underground and 200 for the Land of Shadow. Everything counts as found until the params and the
+/// overworld, 100 for the underground and 1000 for the Land of Shadow. Everything counts as found until the params and the
 /// flags are loaded, or when the player is not on a map.
 fn map_fragments(map: Option<MapId>) -> u32 {
     let base = match map {
