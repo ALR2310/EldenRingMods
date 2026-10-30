@@ -112,7 +112,7 @@ Khung hình game là vùng 16:9 (2560x1440), nên 1 px 1080p = 1,333 px ảnh.
 
 ## Hàng effect của người chơi
 
-`target::own_effects_now` (snapshot riêng `OWN`, đọc mỗi frame) và `ui::draw_effects` với `Cells { right_aligned: false }`; không có effect nổ của buildup (game có icon riêng cho người chơi), nên chỉ hiện effect có `iconId` (cả vĩnh viễn, không có số). Khoá `Effects.Player` (mặc định bật), cùng giới hạn 6 ô một hàng, 12 ô.
+`target::own_effects_now` (snapshot riêng `OWN`, đọc mỗi frame) và `ui::draw_effects` với `Cells { right_aligned: false }`; không có effect nổ của buildup (game có icon riêng cho người chơi), nên chỉ hiện effect có `iconId` (cả vĩnh viễn, không có số). Khoá `Player.Effects` (mặc định bật; trước là `Effects.Player`), cùng giới hạn 6 ô một hàng, 12 ô.
 
 ## Kẻ địch không có effect có icon
 
@@ -186,3 +186,14 @@ Thử game: thanh độc ẩn đúng, thanh thối rữa không. Log `Gauge:` (�
 Thử game: dời được thanh sang cột phải (dưới giờ khi không có mục tiêu, dưới hàng effect khi có), đúng như bản vẽ. Kích cỡ gốc lạc quẻ so với HUD của mod. Đo trên ảnh chụp (2560x1440, 1 px 1080p = 1,333 px ảnh): icon khoảng **40 đến 42 px**, thanh khoảng **290 x 14 px**, tổng khoảng 334 px; so với thanh máu của mod 220 x 12 px và hàng buildup của kẻ địch (icon 16 px, thanh 12 px), thanh này rộng gấp 1,5 lần và icon to gấp 2,6 lần.
 
 Nay thu nhỏ bằng `sub_140D87530(value, [x, y])` (đặt `_xscale`/`_yscale` bằng x, y nhân 100%; AOB duy nhất trên 2.6.2.0 đến 2.7.2.0): tỉ lệ = bề rộng cột / 334, tức **cùng bề rộng với thanh máu của mod** (mặc định 220 px: tỉ lệ 0,66, icon khoảng 28 px, thanh khoảng 192 x 9 px), theo `Target.Width` và `Target.Scale`. Gốc của clip nằm ở tâm icon, nên mép phải của thanh nằm 308 x tỉ lệ bên phải gốc và bước giữa các thanh là 48,85 x tỉ lệ. Chưa thử trong game.
+
+## Thanh buildup của người chơi: layout theo movie, vị trí góc trái trên (2026-10-30)
+
+**Status 2026-10-30: người dùng xác nhận chạy ở game gốc và Convergence.**
+
+- **Convergence:** pack này thay `01_000_fe.gfx` đặt `ConditionGaugeList` ở (557,5; 222,45) và các mục ở x = 1260,15, y = -96,05 + 34,5 x k với scale (-1, -1) (thực chất là xoay 180 độ: game báo rotation 180 và scale +100), lật thanh ra góc phải trên; clip `Item` (char 509) giống bản gốc, chỉ clip con `Icon` khác (vị trí (-14,65; -0,2), scale -0,4375 thay vì (-20, 0) và 0,625, nên icon nhỏ 0,7 lần).
+- **Cách làm:** mod không đọc root. Lần đầu thấy mỗi view, `state_icons::place_gauge` đọc vị trí của clip bằng `GetDisplayInfo` (vtable +216 của object interface, struct: x, y, rotation, xscale, yscale ở +0, +8, +0x10, +0x18, +0x20 kiểu `f64`; cờ ở +0xD4) và đối chiếu x với `LAYOUTS`: -150 là bản gốc, root (960, 520); 1260,15 là Convergence, root (557,5; 222,45). Vị trí đích = đích trên khung 1080p trừ root. Sau đó đặt `_x/_y`, scale và rotation 0 (đặt rotation bằng slot +224 với cờ 0x04, đọc cấu trúc bằng chính `GetDisplayInfo` trước). Layout lạ thì log `Gauge: unknown layout` và để nguyên.
+- **Tắt `Player.Effects`:** mod không ghi gì, chỉ trả clip về vị trí, rotation, scale đã lưu (`CLIP_BEFORE`) nếu trước đó đã dời; không đụng vị trí của game hay của pack khác.
+- **Vị trí:** góc trái trên, mép trái trùng mép trái hàng icon trạng thái (`GAME_ICONS_CENTER_X - GAME_ICONS_PITCH / 2`), đỉnh dưới thời gian hiệu ứng (`GAME_ICONS_BOTTOM + cỡ chữ x 1,5 + 6`). Tách khỏi panel mục tiêu vì thanh buildup của người chơi cạnh thanh buildup của kẻ địch dễ nhìn nhầm (người dùng, 2026-10-30). Cỡ `Player.Scale` (1 = cỡ của game, 334 px rộng ở 1080p).
+- **Đo so với bản gốc:** thanh dài 291 px ở bản gốc và 296 px ở Convergence, cao 16 px cả hai; icon 42 px và 29 px. Chênh dài do file giao diện của Convergence, icon do clip `Icon`.
+- **Việc chưa làm:** đặt riêng clip con `Icon` (cần `GetMember` hoặc component icon ở `view + 0`) để icon Convergence về 42 px.

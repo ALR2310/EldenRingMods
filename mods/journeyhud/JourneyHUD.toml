@@ -1,6 +1,6 @@
 [General]
 # file format version, managed by the mod - don't change
-ConfigVersion = 1
+ConfigVersion = 2
 
 # Key that reloads this file in-game, no restart needed.
 # https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
@@ -23,14 +23,15 @@ Enabled = true
 Width = 250             # Bar length in pixels (100 - 1600).
 Scale = 1.0             # Panel size multiplier (0.5 - 3.0).
 Buildup = true          # Status buildup bars (poison, rot, bleed...).
-ShowNumbers = true      # Show health, posture and buildup numbers.
+Effects = true          # The enemy's effects with the time left, as icons under its bars.
+Numbers = true      # Show health, posture and buildup numbers.
 
 
-[Effects]
-# The effects with the time left, as icons: the locked-on enemy's under its
-# bars (poison, rot, frost, sleep...), yours under the game's status icons.
-Target = true
-Player = true
+[Player]
+# Your own status: the effects with the time left under the game's status icons, and the
+# game's buildup gauge (poison, rot...) moved next to them, away from the target panel.
+Effects = true
+Scale = 1.0             # Size of the buildup gauge, 1 = the game's own (0.5 - 3.0).
 
 
 [Minimap]

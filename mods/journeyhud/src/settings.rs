@@ -22,6 +22,8 @@ static SHOW_NUMBERS: AtomicBool = AtomicBool::new(true);
 static BUILDUP: AtomicBool = AtomicBool::new(true);
 static EFFECTS_TARGET: AtomicBool = AtomicBool::new(true);
 static EFFECTS_PLAYER: AtomicBool = AtomicBool::new(true);
+/// `f32` bits.
+static PLAYER_SCALE: AtomicU32 = AtomicU32::new(0x3F80_0000);
 static WIDTH: AtomicI32 = AtomicI32::new(250);
 static OFFSET_X: AtomicI32 = AtomicI32::new(48);
 static OFFSET_Y: AtomicI32 = AtomicI32::new(47);
@@ -55,10 +57,11 @@ static MINIMAP_SIZE: AtomicI32 = AtomicI32::new(125);
 pub fn load(config: &Config) {
     let (target, minimap) = (&config.target, &config.minimap);
     set_enabled(target.enabled as u8);
-    set_show_numbers(target.show_numbers as u8);
+    set_show_numbers(target.numbers as u8);
     set_buildup(target.buildup as u8);
-    set_effects_target(config.effects.target as u8);
-    set_effects_player(config.effects.player as u8);
+    set_effects_target(target.effects as u8);
+    set_effects_player(config.player.effects as u8);
+    set_player_scale(config.player.scale);
     set_width(f64::from(target.width));
     set_offset_x(f64::from(config.layout.offset_x));
     set_offset_y(f64::from(config.layout.offset_y));
@@ -98,6 +101,11 @@ pub fn effects_target() -> bool {
 /// Whether the effects of the player are shown.
 pub fn effects_player() -> bool {
     EFFECTS_PLAYER.load(Ordering::Relaxed)
+}
+
+/// Size of the player's buildup gauge, as a fraction of the game's own.
+pub fn player_scale() -> f32 {
+    f32::from_bits(PLAYER_SCALE.load(Ordering::Relaxed))
 }
 
 /// Whether the status buildup bars of the target are shown.
@@ -260,6 +268,10 @@ pub fn set_effects_target(value: u8) {
 
 pub fn set_effects_player(value: u8) {
     EFFECTS_PLAYER.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_player_scale(value: f64) {
+    PLAYER_SCALE.store((value as f32).clamp(0.5, 3.0).to_bits(), Ordering::Relaxed);
 }
 
 pub fn set_buildup(value: u8) {

@@ -4,7 +4,7 @@
 //! flicker flag per slot. A second redirect moves the game's buildup gauge of the player.
 //! Details: `docs/effects.md`.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use common::{codepatch, logger, memscan};
@@ -99,8 +99,12 @@ const SET_SCALE_AOB: &str = "48 89 5C 24 10 48 89 7C 24 18 55 48 8D 6C 24 F0 48 
 /// Where the game puts the gauges: the root of `ConditionGaugeList` is at (960, 520) of the 1080p
 /// picture, the first gauge at (-150, 197.25) of it and the next ones 48.85 px higher; the icon is
 /// 42 px, and the bar ends 294.5 px right of the origin (measured on screenshots). The mod shrinks them and lines them up downwards instead, from a corner it is told.
-const LIST_AT: [f32; 2] = [960.0, 520.0];
-const ORIGINAL_AT: [f32; 2] = [-150.0, 197.25];
+///
+/// The mod does not read the list's root. It reads the gauge clip's own place before moving it, and
+/// from that it knows the layout the movie has (the root of a layout is fixed in the movie):
+/// `(x of the clip, root)`. Vanilla, and the Convergence pack (`01_000_fe.gfx` puts the list at the
+/// top right and mirrors the gauges with scale -1; the gauge clip itself is the same).
+const LAYOUTS: [(f32, [f32; 2]); 2] = [(-150.0, [960.0, 520.0]), (1260.15, [557.5, 222.45])];
 const STEP: f32 = 48.85;
 /// The bar ends this far right of the origin (294.5; the first measure, 308, left the gauge 10 px
 /// short of the panel's edge once scaled).
@@ -113,16 +117,30 @@ type GaugeFn = unsafe extern "system" fn(*mut u8, i64, *const u8);
 type ValueOfFn = unsafe extern "system" fn(*mut u8) -> *mut u8;
 type SetPosFn = unsafe extern "system" fn(*mut u8, f32, f32);
 type SetScaleFn = unsafe extern "system" fn(*mut u8, *const f32);
+/// `value.object_interface->get_display_info(value.data, out)`: vtable offset 216, as in
+/// `sub_140D872C0`; `out` is the game's display info (doubles: x, y at 0 and 8, scales in percent
+/// at 0x18 and 0x20; flags at 0xD4).
+type DisplayInfoFn = unsafe extern "system" fn(*mut u8, *mut u8, *mut u64);
+const DISPLAY_INFO_SLOT: usize = 27;
 
 static GAUGE_ORIGINAL: AtomicUsize = AtomicUsize::new(0);
 static SET_POS: AtomicUsize = AtomicUsize::new(0);
 static SET_SCALE: AtomicUsize = AtomicUsize::new(0);
-/// The first gauge's origin in the list, as `f32` bits (x, y), once the panel has told it.
+/// The first gauge's origin on the picture, as `f32` bits (x, y), once the panel has told it.
 static ANCHOR_X: AtomicU32 = AtomicU32::new(0);
 static ANCHOR_Y: AtomicU32 = AtomicU32::new(0);
 /// The size of the gauges as a fraction of their full size, as `f32` bits.
 static ANCHOR_SCALE: AtomicU32 = AtomicU32::new(0);
 static ANCHORED: AtomicBool = AtomicBool::new(false);
+/// The root of the list in the layout the movie has, as `f32` bits (x, y), once a gauge's own place
+/// told it.
+static ROOT_X: AtomicU32 = AtomicU32::new(0);
+static ROOT_Y: AtomicU32 = AtomicU32::new(0);
+static ROOT_KNOWN: AtomicBool = AtomicBool::new(false);
+static ROOT_UNKNOWN_LOGGED: AtomicBool = AtomicBool::new(false);
+/// What each gauge clip had before the mod moved it (x, y, scales in percent), as `f64` bits, to put
+/// it back when the player's effects go off.
+static CLIP_BEFORE: [[AtomicU64; 5]; GAUGES] = [const { [const { AtomicU64::new(0) }; 5] }; GAUGES];
 /// What was last set on each gauge: the view and the position bits, so a clip is only set when it
 /// changes (or when the game rebuilt the view).
 static APPLIED_VIEW: [AtomicUsize; GAUGES] = [const { AtomicUsize::new(0) }; GAUGES];
@@ -138,8 +156,8 @@ const REFRESH_EVERY: u32 = 300;
 /// Tells where the gauges go: the right edge and the top of the first one, in pixels of the 1080p
 /// picture (not of the screen), and their size as a fraction of the full one.
 pub fn place_gauges(right: f32, top: f32, scale: f32) {
-    ANCHOR_X.store((right - GAUGE_RIGHT * scale - LIST_AT[0]).to_bits(), Ordering::Relaxed);
-    ANCHOR_Y.store((top + GAUGE_HALF_HEIGHT * scale - LIST_AT[1]).to_bits(), Ordering::Relaxed);
+    ANCHOR_X.store((right - GAUGE_RIGHT * scale).to_bits(), Ordering::Relaxed);
+    ANCHOR_Y.store((top + GAUGE_HALF_HEIGHT * scale).to_bits(), Ordering::Relaxed);
     ANCHOR_SCALE.store(scale.to_bits(), Ordering::Relaxed);
     ANCHORED.store(true, Ordering::Release);
 }
@@ -156,6 +174,71 @@ unsafe extern "system" fn gauge_update(view: *mut u8, index: i64, model: *const 
     }
 }
 
+/// Reads the clip's place: `[x, y, rotation, xscale, yscale]` (degrees, scales in percent).
+///
+/// # Safety
+/// `value` must be a live clip value of the game.
+unsafe fn display_of(value: *mut u8) -> Option<[f64; 5]> {
+    // SAFETY: the value holds its object interface at 24 and the data at 40, as `sub_140D872C0` reads.
+    unsafe {
+        let interface = *(value.add(24) as *const *mut u8);
+        let data = *(value.add(40) as *const *mut u8);
+        if interface.is_null() || data.is_null() {
+            return None;
+        }
+        let vtable = *(interface as *const *const usize);
+        let get: DisplayInfoFn = std::mem::transmute(*vtable.add(DISPLAY_INFO_SLOT));
+        let mut out = [0u64; 32];
+        get(interface, data, out.as_mut_ptr());
+        let at = |i: usize| f64::from_bits(out[i]);
+        Some([at(0), at(1), at(2), at(3), at(4)])
+    }
+}
+
+/// Sets the clip's rotation (degrees): the display info slot 224 with the rotation flag only. Convergence
+/// turns the gauges by 180 degrees (scale -1, -1) to mirror them.
+///
+/// # Safety
+/// `value` must be a live clip value of the game.
+unsafe fn set_rotation(value: *mut u8, degrees: f64) {
+    // SAFETY: as in `display_of`; the struct is filled by the game first.
+    unsafe {
+        let interface = *(value.add(24) as *const *mut u8);
+        let data = *(value.add(40) as *const *mut u8);
+        if interface.is_null() || data.is_null() {
+            return;
+        }
+        let vtable = *(interface as *const *const usize);
+        let get: DisplayInfoFn = std::mem::transmute(*vtable.add(DISPLAY_INFO_SLOT));
+        let set: DisplayInfoFn = std::mem::transmute(*vtable.add(DISPLAY_INFO_SLOT + 1));
+        let mut out = [0u64; 32];
+        get(interface, data, out.as_mut_ptr());
+        out[2] = degrees.to_bits();
+        *((out.as_mut_ptr() as *mut u8).add(0xD4) as *mut u16) = 4;
+        set(interface, data, out.as_mut_ptr());
+    }
+}
+
+/// The gauge clip of the view.
+///
+/// # Safety
+/// `view` must be the game's gauge view.
+unsafe fn clip_of(view: *mut u8) -> *mut u8 {
+    // SAFETY: the component sits at a fixed offset of the view; its vtable's second entry returns the clip's value.
+    unsafe {
+        let component = view.add(GAUGE_ROOT);
+        let value_of: ValueOfFn = std::mem::transmute(*(*(component as *const *const usize)).add(1));
+        value_of(component)
+    }
+}
+
+/// The place of gauge `index` in its list, from the root the layout has.
+fn target(index: usize, scale: f32) -> (f32, f32) {
+    let x = f32::from_bits(ANCHOR_X.load(Ordering::Relaxed)) - f32::from_bits(ROOT_X.load(Ordering::Relaxed));
+    let y = f32::from_bits(ANCHOR_Y.load(Ordering::Relaxed)) - f32::from_bits(ROOT_Y.load(Ordering::Relaxed)) + STEP * scale * index as f32;
+    (x, y)
+}
+
 /// # Safety
 /// `view` must be the game's gauge view number `index`.
 unsafe fn place_gauge(view: *mut u8, index: usize) {
@@ -163,44 +246,98 @@ unsafe fn place_gauge(view: *mut u8, index: usize) {
     if set_pos == 0 {
         return;
     }
-    let (x, y, scale) = if crate::settings::effects_player() {
-        let scale = f32::from_bits(ANCHOR_SCALE.load(Ordering::Relaxed));
-        (
-            f32::from_bits(ANCHOR_X.load(Ordering::Relaxed)),
-            f32::from_bits(ANCHOR_Y.load(Ordering::Relaxed)) + STEP * scale * index as f32,
-            scale,
-        )
-    } else {
-        (ORIGINAL_AT[0], ORIGINAL_AT[1] - STEP * index as f32, 1.0)
-    };
-    let refresh = CALLS[index].fetch_add(1, Ordering::Relaxed) % REFRESH_EVERY == 0;
-    if !refresh
-        && APPLIED_VIEW[index].load(Ordering::Relaxed) == view as usize
-        && APPLIED_X[index].load(Ordering::Relaxed) == x.to_bits()
-        && APPLIED_Y[index].load(Ordering::Relaxed) == y.to_bits()
-        && APPLIED_SCALE[index].load(Ordering::Relaxed) == scale.to_bits()
-    {
+    let fresh = APPLIED_VIEW[index].load(Ordering::Relaxed) != view as usize;
+    if !crate::settings::effects_player() {
+        // Off: the position is left to the game and to other mods (Convergence moves this list
+        // itself); only what the mod moved goes back.
+        if !fresh {
+            // SAFETY: the view is the one the mod moved.
+            unsafe { restore_gauge(view, index, set_pos) };
+        }
         return;
     }
-    // SAFETY: the component sits at a fixed offset of the view; its vtable's second entry returns the clip's value.
+    let scale = f32::from_bits(ANCHOR_SCALE.load(Ordering::Relaxed));
+    let refresh = CALLS[index].fetch_add(1, Ordering::Relaxed) % REFRESH_EVERY == 0;
+    if !fresh && !refresh && ROOT_KNOWN.load(Ordering::Acquire) {
+        let (x, y) = target(index, scale);
+        if APPLIED_SCALE[index].load(Ordering::Relaxed) == scale.to_bits()
+            && APPLIED_X[index].load(Ordering::Relaxed) == x.to_bits()
+            && APPLIED_Y[index].load(Ordering::Relaxed) == y.to_bits()
+        {
+            return;
+        }
+    }
+    // SAFETY: the clip comes from the view's component; its place is read before the first move of this view.
     unsafe {
-        let component = view.add(GAUGE_ROOT);
-        let value_of: ValueOfFn = std::mem::transmute(*(*(component as *const *const usize)).add(1));
-        let value = value_of(component);
+        let value = clip_of(view);
         if value.is_null() {
             return;
         }
+        if fresh {
+            let Some(shown) = display_of(value) else {
+                return;
+            };
+            for (slot, v) in CLIP_BEFORE[index].iter().zip(shown) {
+                slot.store(v.to_bits(), Ordering::Relaxed);
+            }
+            if !ROOT_KNOWN.load(Ordering::Relaxed) {
+                let Some((_, root)) = LAYOUTS.iter().find(|(x, _)| (shown[0] as f32 - x).abs() < 1.0) else {
+                    if !ROOT_UNKNOWN_LOGGED.swap(true, Ordering::Relaxed) {
+                        logger::warn(&format!("Gauge: unknown layout (clip at {:.2}, {:.2}), left to the game", shown[0], shown[1]));
+                    }
+                    return;
+                };
+                ROOT_X.store(root[0].to_bits(), Ordering::Relaxed);
+                ROOT_Y.store(root[1].to_bits(), Ordering::Relaxed);
+                ROOT_KNOWN.store(true, Ordering::Release);
+                logger::log(&format!(
+                    "Gauge: layout root ({}, {}), clip was at ({:.2}, {:.2}) scale {:.0}",
+                    root[0], root[1], shown[0], shown[1], shown[2]
+                ));
+            }
+        }
+        if !ROOT_KNOWN.load(Ordering::Acquire) {
+            return;
+        }
+        let (x, y) = target(index, scale);
         std::mem::transmute::<usize, SetPosFn>(set_pos)(value, x, y);
+        if fresh && f64::from_bits(CLIP_BEFORE[index][2].load(Ordering::Relaxed)).abs() > 0.01 {
+            set_rotation(value, 0.0);
+        }
         let set_scale = SET_SCALE.load(Ordering::Acquire);
         if set_scale != 0 && scale.is_finite() && scale > 0.0 {
             let factors = [scale, scale];
             std::mem::transmute::<usize, SetScaleFn>(set_scale)(value, factors.as_ptr());
         }
+        APPLIED_SCALE[index].store(scale.to_bits(), Ordering::Relaxed);
+        APPLIED_VIEW[index].store(view as usize, Ordering::Relaxed);
+        APPLIED_X[index].store(x.to_bits(), Ordering::Relaxed);
+        APPLIED_Y[index].store(y.to_bits(), Ordering::Relaxed);
     }
-    APPLIED_SCALE[index].store(scale.to_bits(), Ordering::Relaxed);
-    APPLIED_VIEW[index].store(view as usize, Ordering::Relaxed);
-    APPLIED_X[index].store(x.to_bits(), Ordering::Relaxed);
-    APPLIED_Y[index].store(y.to_bits(), Ordering::Relaxed);
+}
+
+/// Puts the clip back where it was before the mod moved it, once.
+///
+/// # Safety
+/// `view` must be the game's gauge view number `index`, the one the mod moved.
+unsafe fn restore_gauge(view: *mut u8, index: usize, set_pos: usize) {
+    // SAFETY: as in `place_gauge`.
+    unsafe {
+        let value = clip_of(view);
+        if !value.is_null() {
+            let [x, y, rot, sx, sy] = CLIP_BEFORE[index].each_ref().map(|v| f64::from_bits(v.load(Ordering::Relaxed)));
+            std::mem::transmute::<usize, SetPosFn>(set_pos)(value, x as f32, y as f32);
+            if rot.abs() > 0.01 {
+                set_rotation(value, rot);
+            }
+            let set_scale = SET_SCALE.load(Ordering::Acquire);
+            if set_scale != 0 {
+                let factors = [(sx / 100.0) as f32, (sy / 100.0) as f32];
+                std::mem::transmute::<usize, SetScaleFn>(set_scale)(value, factors.as_ptr());
+            }
+        }
+    }
+    APPLIED_VIEW[index].store(0, Ordering::Relaxed);
 }
 
 /// Redirects the gauge update call, on a thread of its own.

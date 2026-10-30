@@ -23,7 +23,7 @@ Vì souls_vision là GPL-3.0 nên phần panel mục tiêu phải viết độc 
 ## Bố cục và màu
 
 - **Khu vực vẽ:** game vẽ HUD trong khung 16:9 vừa khít cửa sổ (dải đen ở trục còn lại; màn 2560x1600 có dải đen 80 px trên và dưới). Overlay neo vào khung đó, không vào cả màn hình, và co giãn theo độ cao của nó (thử game 2026-10-26: tính theo cả màn hình làm panel to và đè dải đen). Siêu rộng (21:9) coi như viền đen hai bên; bản mod mở rộng HUD sẽ khác.
-- **Cỡ:** thanh HP của người chơi đo từ ảnh 2560x1440: dài khoảng 949 px (khoảng 712 ở 1080p, đổi theo máu tối đa của nhân vật), dày khoảng 16 px (12 ở 1080p), mép trên cách đỉnh khung 63 px (47 ở 1080p). Thanh mục tiêu dày 12 (posture 12 từ 2026-10-27, trước là 6 rồi 8), cùng độ dày với thanh người chơi, nhưng ngắn (mặc định 250 từ 2026-10-29, trước là 220; khoá `Width`): thử game cho thấy dài bằng thanh người chơi (700) quá to, người dùng chọn cắt ngắn.
+- **Cỡ:** thanh HP của người chơi đo từ ảnh 2560x1440: dài khoảng 949 px (khoảng 712 ở 1080p, đổi theo máu tối đa của nhân vật), dày khoảng 16 px (thanh máu 13 px từ 2026-10-30, posture 12 px, khe 4 px), mép trên cách đỉnh khung 63 px (47 ở 1080p). Thanh mục tiêu dày 12 (posture 12 từ 2026-10-27, trước là 6 rồi 8), cùng độ dày với thanh người chơi, nhưng ngắn (mặc định 250 từ 2026-10-29, trước là 220; khoá `Width`): thử game cho thấy dài bằng thanh người chơi (700) quá to, người dùng chọn cắt ngắn.
 - **Kiểu thanh:** đo từ ảnh game 2560x1440: lõi đỏ sậm phẳng (khoảng RGB 92,23,20) cao khoảng 8 px, mép dưới ngả hồng nhạt (110,67,55), viền be mảnh (135,128,95) có nắp hai đầu, nền gần đen. Thanh boss (cùng ngày): lõi đỏ phẳng (76,0,0), khối vàng (143,117,23) cho máu vừa mất kèm vạch kem (226,228,191) ở chỗ ngăn, chỉ một đường be (150,143,114) dưới đáy và nắp nhỏ hai đầu, không có viền quanh. Không hộp nền và không số (game không có). Thử game 2026-10-26: bản đầu vẽ hộp, đỏ tươi và chữ trong thanh nên bị chê lạc quẻ.
 
 ## Texture của game
@@ -34,7 +34,7 @@ Vì souls_vision là GPL-3.0 nên phần panel mục tiêu phải viết độc 
 - `BarBG.png`: nền trong mờ, tô tối, đặt trên nền đen.
 - `BarEdge.png` (6x36): vạch ngăn ở đầu máu khi có khối vàng.
 - `BarEdge2.png` (98x40): vệt sáng ở đầu máu, mờ dần trong lúc giữ khối vàng.
-- Đường be dưới đáy và hai nắp vẫn tự vẽ (game không có texture riêng trong bộ này).
+- **Khung (2026-10-30):** `BarWaku.png` (840x48, `MENU_FL_ConditionWaku` của sheet `SB_FE`) và `BarWakuL.png` (12x48, `MENU_FL_ConditionWaku_L`) là cái hộp mà game vẽ quanh thanh buildup của người chơi: đường mảnh ở hàng 6 đến 12 (tâm 9,2) và hàng 35 đến 41 (tâm 37,7), cap phải ở cột 820 đến 840, cap trái là ảnh riêng. `ui::textured_frame` vẽ mỗi thanh một khung: hai đường dày `0,4 x s` mỗi hàng texel (2,4 px, bằng đường của game) tâm ngay mép trên và dưới của thanh, hai cap kéo dọc để nối hai đường, texel rộng `s / 2` như thanh. Khung máu và posture vẽ sau cả hai thanh. Khe giữa hai thanh là 4 px vì mỗi đường lấn 1,2 px vào khe. `BarDeco` (`MENU_FL_BarDeco`, `_L`) là đường be dưới thanh máu của người chơi, thử rồi bỏ vì người dùng muốn khung của thanh buildup. Hai sprite xuất bằng test `hud_bar_sprites_from_the_installed_game` trong `map/sprites.rs` (`ER_SPRITE_OUT`).
 - Texture tải lỗi: log `Overlay: textures failed (...)` rồi vẽ thanh phẳng như bản trước.
 
 ## Ý tưởng triển khai rút ra từ souls_vision

@@ -25,13 +25,15 @@ use crate::settings;
 
 static ENABLED: Setting = Setting { key: "Target.Enabled", format: erui::format_bool, apply: Some(settings::set_enabled) };
 static SHOW_NUMBERS: Setting =
-    Setting { key: "Target.ShowNumbers", format: erui::format_bool, apply: Some(settings::set_show_numbers) };
+    Setting { key: "Target.Numbers", format: erui::format_bool, apply: Some(settings::set_show_numbers) };
 static EFFECTS_TARGET: Setting =
-    Setting { key: "Effects.Target", format: erui::format_bool, apply: Some(settings::set_effects_target) };
+    Setting { key: "Target.Effects", format: erui::format_bool, apply: Some(settings::set_effects_target) };
 static EFFECTS_PLAYER: Setting =
-    Setting { key: "Effects.Player", format: erui::format_bool, apply: Some(settings::set_effects_player) };
+    Setting { key: "Player.Effects", format: erui::format_bool, apply: Some(settings::set_effects_player) };
 static BUILDUP: Setting =
     Setting { key: "Target.Buildup", format: erui::format_bool, apply: Some(settings::set_buildup) };
+static PLAYER_SCALE: NumberSetting =
+    NumberSetting::float("Player.Scale", 0.5, 3.0, Some(settings::set_player_scale)).stepped(0.1);
 static WIDTH: NumberSetting =
     NumberSetting::whole("Target.Width", 100.0, 1600.0, Some(settings::set_width)).slider(100.0, 800.0, 10.0);
 static SCALE: NumberSetting = NumberSetting::float("Target.Scale", 0.5, 3.0, Some(settings::set_scale)).stepped(0.1);
@@ -101,13 +103,14 @@ fn build(b: &mut erui::MenuBuilder) -> Result<(), String> {
     let minimap = b.submenu(root, &t("minimap_page.title"), &t("minimap_page.help"))?;
     b.toggle(target, &t("enabled.label"), &t("enabled.help"), &ENABLED, || config::get().target.enabled as u8)?;
     b.toggle(target, &t("numbers.label"), &t("numbers.help"), &SHOW_NUMBERS, || {
-        config::get().target.show_numbers as u8
+        config::get().target.numbers as u8
     })?;
     b.toggle(target, &t("buildup.label"), &t("buildup.help"), &BUILDUP, || config::get().target.buildup as u8)?;
-    b.toggle(target, &t("effects.label"), &t("effects.help"), &EFFECTS_TARGET, || config::get().effects.target as u8)?;
+    b.toggle(target, &t("effects.label"), &t("effects.help"), &EFFECTS_TARGET, || config::get().target.effects as u8)?;
     b.toggle(target, &t("effects_player.label"), &t("effects_player.help"), &EFFECTS_PLAYER, || {
-        config::get().effects.player as u8
+        config::get().player.effects as u8
     })?;
+    b.number(target, &t("player_scale.label"), &t("player_scale.help"), &PLAYER_SCALE, || config::get().player.scale)?;
     b.number(target, &t("width.label"), &t("width.help"), &WIDTH, || f64::from(config::get().target.width))?;
     b.number(target, &t("scale.label"), &t("scale.help"), &SCALE, || config::get().target.scale)?;
     b.number(target, &t("offset_x.label"), &t("offset_x.help"), &OFFSET_X, || f64::from(config::get().layout.offset_x))?;
@@ -190,7 +193,7 @@ mod tests {
     fn menu_keys_are_in_the_template() {
         let doc: toml::Value = toml::from_str(config::TEMPLATE).unwrap();
         let settings = [&ENABLED, &SHOW_NUMBERS, &BUILDUP, &EFFECTS_TARGET, &EFFECTS_PLAYER, &MINIMAP, &MINIMAP_MAP, &MINIMAP_GRACES, &MINIMAP_POINTS, &MINIMAP_BEACONS, &MINIMAP_COMPASS, &MINIMAP_CLOCK, &MINIMAP_DEATHS, &MINIMAP_TRAIL, &MINIMAP_GOBLINS, &MINIMAP_FULL_MAP, &MINIMAP_COOP, &MINIMAP_SPIRITS];
-        let numbers = [&WIDTH, &SCALE, &OFFSET_X, &OFFSET_Y, &MINIMAP_RANGE, &MINIMAP_SIZE, &MINIMAP_SCALE];
+        let numbers = [&WIDTH, &SCALE, &PLAYER_SCALE, &OFFSET_X, &OFFSET_Y, &MINIMAP_RANGE, &MINIMAP_SIZE, &MINIMAP_SCALE];
         let keys = settings.iter().map(|s| s.key).chain(numbers.iter().map(|n| n.key));
         for key in keys.chain([MINIMAP_ROTATE.key, MINIMAP_HIDE_IN_CAVES.key, MINIMAP_HIDE_IN_BOSS_FIGHTS.key]) {
             assert!(key.split('.').try_fold(&doc, |table, part| table.get(part)).is_some(), "{key} is not in the template");
