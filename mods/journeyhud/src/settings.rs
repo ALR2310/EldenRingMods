@@ -23,7 +23,7 @@ static BUILDUP: AtomicBool = AtomicBool::new(true);
 static EFFECTS_TARGET: AtomicBool = AtomicBool::new(true);
 static EFFECTS_PLAYER: AtomicBool = AtomicBool::new(true);
 /// `f32` bits.
-static PLAYER_SCALE: AtomicU32 = AtomicU32::new(0x3F80_0000);
+static PLAYER_SCALE: AtomicU32 = AtomicU32::new(0x3F33_3333);
 static WIDTH: AtomicI32 = AtomicI32::new(250);
 static OFFSET_X: AtomicI32 = AtomicI32::new(48);
 static OFFSET_Y: AtomicI32 = AtomicI32::new(47);

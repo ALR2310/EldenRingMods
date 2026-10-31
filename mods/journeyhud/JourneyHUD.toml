@@ -31,7 +31,7 @@ Numbers = true      # Show health, posture and buildup numbers.
 # Your own status: the effects with the time left under the game's status icons, and the
 # game's buildup gauge (poison, rot...) moved next to them, away from the target panel.
 Effects = true
-Scale = 1.0             # Size of the buildup gauge, 1 = the game's own (0.5 - 3.0).
+Scale = 0.7             # Size of the buildup gauge, 1 = the game's own (0.5 - 3.0).
 
 
 [Minimap]
