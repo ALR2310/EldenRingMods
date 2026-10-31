@@ -23,3 +23,7 @@ FileDescription = "Input Bridge - Elden Ring mod"
 InternalName = "InputBridge"
 OriginalFilename = "InputBridge.dll"
 LegalCopyright = "Copyright (c) 2026 ALR2310"
+
+# Doi tuong su dung: "internal" (noi bo, khong phat hanh) hoac "public" (len Nexus)
+[package.metadata.mod]
+audience = "internal"

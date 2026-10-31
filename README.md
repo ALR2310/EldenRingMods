@@ -45,6 +45,8 @@ Seamless Co-op và các bản mod lớn như Convergence và Reforged.
 | [**InputBridge**](mods/inputbridge)           | Gửi phím vào game đang ở nền, để agent kiểm tra mod tự động            | nội bộ                                                  |
 | [**SomeTweaks**](mods/sometweaks)             | Gói QoL thử nghiệm, đã ngừng phát triển                                 | không đăng                                              |
 
+Mod ghi "nội bộ" ở cột Nexus không phát hành; nhãn nằm ở `[package.metadata.mod] audience` trong `Cargo.toml` của mod (`internal` hoặc `public`).
+
 Phiên bản và ghi chú phát hành của từng mod nằm ở `CHANGELOG.md` trong thư mục mod đó.
 
 ## Cài đặt mod
