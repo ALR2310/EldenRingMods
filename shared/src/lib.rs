@@ -18,6 +18,8 @@ pub mod i18n;
 pub mod input;
 pub mod logger;
 pub mod memscan;
+#[cfg(feature = "overlay")]
+pub mod overlay;
 pub mod params;
 pub mod player;
 pub mod reload;

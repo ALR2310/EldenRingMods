@@ -44,7 +44,10 @@ Seamless Co-op và các bản mod lớn như Convergence và Reforged.
 | [**WeightMultiplier**](mods/weightmultiplier) | Nhân hệ số Trọng Tải                                                    | [10549](https://www.nexusmods.com/eldenring/mods/10549) |
 | [**WindowResize**](mods/windowresize)         | Kéo viền để đổi kích thước cửa sổ Windowed                              | nội bộ                                                  |
 | [**InputBridge**](mods/inputbridge)           | Gửi phím vào game đang ở nền, để agent kiểm tra mod tự động            | nội bộ                                                  |
+| [**Toolbox**](mods/toolbox)                   | Công cụ nhỏ để thử: mở bản đồ và gọi Torrent mọi nơi, GUI (`F8`) chỉnh buildup | nội bộ                                                  |
 | [**SomeTweaks**](mods/sometweaks)             | Gói QoL thử nghiệm, đã ngừng phát triển                                 | không đăng                                              |
+
+Mod ghi "nội bộ" ở cột Nexus không phát hành; nhãn nằm ở `[package.metadata.mod] audience` trong `Cargo.toml` của mod (`internal` hoặc `public`).
 
 Phiên bản và ghi chú phát hành của từng mod nằm ở `CHANGELOG.md` trong thư mục mod đó.
 
@@ -96,7 +99,7 @@ cho cả bộ.
 | Bộ nhớ        | `memscan`, `codepatch`                    | Quét AOB, JMP hook                                                                      |
 | Game engine   | `task`, `task_hook`, `alloc_hook`         | Đăng ký tác vụ chạy theo frame, tìm hàm của game bằng AOB để không vỡ khi game cập nhật |
 |               | `player`, `params`, `anim`                | Phát hiện lúc người chơi đã vào thế giới, duyệt param an toàn, phân loại animation      |
-| Tương tác     | `input`, `reload`, `announce`             | Phím nóng, nạp lại config, banner thông báo trong game                                  |
+| Tương tác     | `input`, `reload`, `announce`, `overlay`  | Phím nóng, nạp lại config, banner thông báo, khung menu ImGui DX12 trong game           |
 
 Mỗi mod được link tĩnh với `common` và không chia sẻ trạng thái lúc chạy với mod khác.
 Mô tả đầy đủ từng module ở [shared/src/lib.rs](shared/src/lib.rs).
