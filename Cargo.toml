@@ -19,6 +19,7 @@ members = [
     "mods/autopickup",
     "mods/inputbridge",
     "mods/journeyhud",
+    "mods/toolbox",
 ]
 
 [workspace.dependencies]

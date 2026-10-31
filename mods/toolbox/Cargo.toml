@@ -1,0 +1,29 @@
+[package]
+name = "toolbox"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "Toolbox"
+crate-type = ["cdylib"]
+
+[dependencies]
+common = { path = "../../shared", features = ["overlay"] }
+eldenring.workspace = true
+fromsoftware-shared.workspace = true
+
+[build-dependencies]
+winresource = "0.1"
+
+# Windows version resource (DLL Properties), see build.rs
+[package.metadata.winresource]
+ProductName = "Toolbox"
+FileDescription = "Toolbox - Elden Ring mod"
+InternalName = "Toolbox"
+OriginalFilename = "Toolbox.dll"
+LegalCopyright = "Copyright (c) 2026 ALR2310"
+
+# Doi tuong su dung: "internal" (noi bo, khong phat hanh) hoac "public" (len Nexus)
+[package.metadata.mod]
+audience = "internal"

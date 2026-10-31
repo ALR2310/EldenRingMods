@@ -77,6 +77,14 @@ hết vào nhánh `mod/` của mod.
   `docs/nexus.md`. Phân tích dump crash: `docs/crash_dump_analysis.md`. Cổng "đã
   vào game", đọc/ghi param an toàn, hot reload, log riêng tư: `shared/docs/`.
 
+## Mod nội bộ và mod public: `[package.metadata.mod] audience`
+
+Mỗi mod khai báo trong `Cargo.toml` của nó `[package.metadata.mod] audience =
+"internal"` (dùng nội bộ, hiện: `windowresize`, `inputbridge`, `toolbox`) hoặc
+`"public"` (lên Nexus). Mod `internal` không CHANGELOG, không Nexus ID, không phát
+hành, không có trên VirusTotal; chỉ cần README, HISTORY, docs. Mod mới phải khai
+nhãn này. Không tách thư mục (người dùng, 2026-10-31, chỉ gắn nhãn cho nhẹ).
+
 ## Thư mục `tmp/` (git-ignored)
 
 - `tmp/repos/`: mã nguồn tham khảo clone về (souls_vision, kubilaiswf-minimap,
