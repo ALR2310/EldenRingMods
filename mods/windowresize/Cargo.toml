@@ -21,3 +21,7 @@ FileDescription = "Window Resize - Elden Ring mod"
 InternalName = "WindowResize"
 OriginalFilename = "WindowResize.dll"
 LegalCopyright = "Copyright (c) 2026 ALR2310"
+
+# Doi tuong su dung: "internal" (noi bo, khong phat hanh) hoac "public" (len Nexus)
+[package.metadata.mod]
+audience = "internal"
