@@ -31,7 +31,7 @@ const HP_HEIGHT: f32 = 13.0;
 const POISE_HEIGHT: f32 = 12.0;
 /// Space between the health bar and the posture bar. The frames' lines (2.4 px, centered on the edges of
 /// the bars) take 1.2 px of it on each side, so a gap shows only from about 3 px.
-const BAR_GAP: f32 = 4.0;
+const BAR_GAP: f32 = 5.0;
 /// Font size of the numbers inside the health and the posture bar, at 1080p: small enough that
 /// the digits stay inside bars 12 px thick.
 const BAR_NUMBER: f32 = 10.0;
@@ -64,6 +64,10 @@ const EFFECTS_GAP: f32 = 4.0;
 /// the diamonds end at y 141, the times start a little lower.
 const GAME_ICONS_CENTER_X: f32 = 155.5;
 const GAME_ICONS_PITCH: f32 = 42.0;
+/// The movie lays the 42 slots out 14 to a row, 41 px between the rows (`Item_0_14` is at (10, 56), the
+/// first row's are at y 15); a long list (many talismans with `ExpandedTalismanSlots`, then a buff) wraps.
+const GAME_ICONS_PER_ROW: usize = 14;
+const GAME_ICONS_ROW_PITCH: f32 = 41.0;
 const GAME_ICONS_BOTTOM: f32 = 146.0;
 /// Space between the times under the game's icons and the player's buildup gauge.
 const GAUGE_UNDER_ICONS_GAP: f32 = 6.0;
@@ -102,7 +106,12 @@ fn fade_by([r, g, b, a]: [f32; 4], alpha: f32) -> [f32; 4] {
 }
 
 fn fade([r, g, b, a]: [f32; 4]) -> [f32; 4] {
-    [r, g, b, a * f32::from_bits(PANEL_ALPHA.load(Ordering::Relaxed))]
+    [
+        r,
+        g,
+        b,
+        a * f32::from_bits(PANEL_ALPHA.load(Ordering::Relaxed)),
+    ]
 }
 
 const TRAIL_HOLD: f32 = 0.9;
@@ -173,7 +182,12 @@ impl Trail {
     /// time in seconds.
     fn update(&mut self, id: usize, value: f32, max: f32, dt: f32) {
         if self.id != id {
-            *self = Trail { id, value, from: value, hold: 0.0 };
+            *self = Trail {
+                id,
+                value,
+                from: value,
+                hold: 0.0,
+            };
             return;
         }
         if value < self.value {
@@ -203,7 +217,11 @@ impl ImguiRenderLoop for HudRenderLoop {
         logger::log("Overlay: ImGui initialized");
     }
 
-    fn before_render<'a>(&'a mut self, ctx: &mut Context, render_context: &'a mut dyn RenderContext) {
+    fn before_render<'a>(
+        &'a mut self,
+        ctx: &mut Context,
+        render_context: &'a mut dyn RenderContext,
+    ) {
         let [w, h] = ctx.io().display_size;
         self.area = game_area(w, h);
         self.s = self.area[3] / BASE_HEIGHT * settings::scale();
@@ -216,7 +234,9 @@ impl ImguiRenderLoop for HudRenderLoop {
             // Started only now, not at launch: reading the archives takes a few hundred MB and some
             // seconds of disk and CPU, which the game does not need to compete with while it starts.
             if self.map.is_none() {
-                self.map = std::env::current_exe().ok().and_then(|exe| exe.parent().map(MapLayer::new));
+                self.map = std::env::current_exe()
+                    .ok()
+                    .and_then(|exe| exe.parent().map(MapLayer::new));
             }
             if let Some(map) = self.map.as_mut() {
                 map.upload(render_context);
@@ -226,26 +246,48 @@ impl ImguiRenderLoop for HudRenderLoop {
 
     fn render(&mut self, ui: &mut Ui) {
         if settings::minimap_enabled() {
-            for (keys, zoom_in) in [(settings::zoom_in_keys(), true), (settings::zoom_out_keys(), false)] {
-                if keys.into_iter().any(|key| key != 0 && input::is_key_pressed(key)) {
+            for (keys, zoom_in) in [
+                (settings::zoom_in_keys(), true),
+                (settings::zoom_out_keys(), false),
+            ] {
+                if keys
+                    .into_iter()
+                    .any(|key| key != 0 && input::is_key_pressed(key))
+                {
                     settings::zoom(zoom_in);
                 }
             }
         }
         let snapshot: Option<RadarSnapshot> = radar::current();
         let show_map = settings::minimap_map();
-        if let (Some(map), Some(snapshot), true) = (self.map.as_mut(), snapshot.as_ref(), show_map) {
+        if let (Some(map), Some(snapshot), true) = (self.map.as_mut(), snapshot.as_ref(), show_map)
+        {
             if let Some(id) = snapshot.map {
                 // The window must stay ahead of the widest view, within what it can hold.
-                map.follow(id, snapshot.position, settings::minimap_range() + 20.0, snapshot.fragments);
+                map.follow(
+                    id,
+                    snapshot.position,
+                    settings::minimap_range() + 20.0,
+                    snapshot.fragments,
+                );
             }
         }
-        self.radar.draw(ui, snapshot.as_ref(), &Placement { area: self.area }, self.map.as_ref(), show_map);
+        self.radar.draw(
+            ui,
+            snapshot.as_ref(),
+            &Placement { area: self.area },
+            self.map.as_ref(),
+            show_map,
+        );
         let dt = ui.io().delta_time;
         let wanted = if radar::in_control() { 1.0 } else { 0.0 };
         self.panel_alpha += (wanted - self.panel_alpha) * (dt * FADE_RATE).min(1.0);
         PANEL_ALPHA.store(self.panel_alpha.to_bits(), Ordering::Relaxed);
-        let icons_wanted = if crate::state_icons::shown() { 1.0 } else { 0.0 };
+        let icons_wanted = if crate::state_icons::shown() {
+            1.0
+        } else {
+            0.0
+        };
         self.icons_alpha += (icons_wanted - self.icons_alpha) * (dt * FADE_RATE).min(1.0);
         let layout = Layout {
             area: self.area,
@@ -265,7 +307,8 @@ impl ImguiRenderLoop for HudRenderLoop {
             anchor_gauges();
             return;
         };
-        self.trail.update(target.id, target.hp as f32, target.max_hp as f32, dt);
+        self.trail
+            .update(target.id, target.hp as f32, target.max_hp as f32, dt);
         match target.poise {
             Some((poise, max)) => self.poise_trail.update(target.id, poise, max, dt),
             None => self.poise_trail.id = 0,
@@ -372,7 +415,13 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
         draw_bar(&draw, &poise_bar);
         if layout.show_numbers {
             let label = format!("{poise:.0} / {max:.0}");
-            draw_bar_number(ui, &label, [left, right, poise_from, bottom], BAR_NUMBER * s, s);
+            draw_bar_number(
+                ui,
+                &label,
+                [left, right, poise_from, bottom],
+                BAR_NUMBER * s,
+                s,
+            );
         }
     }
     // A frame for each bar, drawn over both so one bar's does not hide the other's.
@@ -389,7 +438,8 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
     }
     if settings::effects_target() && !target.effects.is_empty() {
         let size = s * TARGET_EFFECTS_SCALE;
-        let per_row = (((right - left) / (EFFECT_CELL * size)).floor() as usize).clamp(1, PLAYER_EFFECTS_PER_ROW);
+        let per_row = (((right - left) / (EFFECT_CELL * size)).floor() as usize)
+            .clamp(1, PLAYER_EFFECTS_PER_ROW);
         let cells = Cells {
             origin: [right, row_top + EFFECTS_GAP * s],
             right_aligned: true,
@@ -410,14 +460,21 @@ fn anchor_gauges() {
     // (the game scales it with the resolution itself).
     let scale = crate::settings::player_scale();
     let left = GAME_ICONS_CENTER_X - GAME_ICONS_PITCH / 2.0;
-    let top = GAME_ICONS_BOTTOM + GAME_ICON_TIME * 1.5 + GAUGE_UNDER_ICONS_GAP;
+    // Under the last row the game's icons fill.
+    let used = (0..crate::state_icons::SLOTS).take_while(|&slot| crate::state_icons::icon(slot).is_some()).count();
+    let last_row = used.saturating_sub(1) / GAME_ICONS_PER_ROW;
+    let top = GAME_ICONS_BOTTOM + last_row as f32 * GAME_ICONS_ROW_PITCH + GAME_ICON_TIME * 1.5 + GAUGE_UNDER_ICONS_GAP;
     crate::state_icons::place_gauges(left + crate::state_icons::GAUGE_WIDTH * scale, top, scale);
 }
 
 /// The time left as `24s`, or `1:30` from a minute on.
 fn effect_time(left: f32) -> String {
     let seconds = left.max(0.0).ceil() as u32;
-    if seconds >= 60 { format!("{}:{:02}", seconds / 60, seconds % 60) } else { format!("{seconds}s") }
+    if seconds >= 60 {
+        format!("{}:{:02}", seconds / 60, seconds % 60)
+    } else {
+        format!("{seconds}s")
+    }
 }
 
 /// The time left under each icon of the game's own row (the effects of the player, one icon per
@@ -427,21 +484,35 @@ fn effect_time(left: f32) -> String {
 fn draw_icon_times(ui: &Ui, effects: &[Effect], alpha: f32, layout: &Layout) {
     let res = layout.area[3] / BASE_HEIGHT;
     let em = GAME_ICON_TIME * res;
-    let centered = |slot: usize| layout.area[0] + (GAME_ICONS_CENTER_X + slot as f32 * GAME_ICONS_PITCH) * res;
-    let time_below = |label: &str, center: f32, alpha: f32| {
+    let centered = |slot: usize| {
+        layout.area[0] + (GAME_ICONS_CENTER_X + (slot % GAME_ICONS_PER_ROW) as f32 * GAME_ICONS_PITCH) * res
+    };
+    let time_below = |label: &str, center: f32, row: usize, alpha: f32| {
         let size = text::measure(ui, label, em);
-        let pos = [(center - size[0] / 2.0).round(), (layout.area[1] + GAME_ICONS_BOTTOM * res).round()];
-        text::add_shadowed(label, pos, em, fade(fade_by(TEXT, alpha)), fade(fade_by(TEXT_SHADOW, alpha)), res.max(1.0));
+        let pos = [
+            (center - size[0] / 2.0).round(),
+            (layout.area[1] + (GAME_ICONS_BOTTOM + row as f32 * GAME_ICONS_ROW_PITCH) * res).round(),
+        ];
+        text::add_shadowed(
+            label,
+            pos,
+            em,
+            fade(fade_by(TEXT, alpha)),
+            fade(fade_by(TEXT_SHADOW, alpha)),
+            res.max(1.0),
+        );
     };
     for slot in 0..crate::state_icons::SLOTS {
-        let Some(icon) = crate::state_icons::icon(slot) else { break };
+        let Some(icon) = crate::state_icons::icon(slot) else {
+            break;
+        };
         let left = effects
             .iter()
             .filter(|e| e.kind.is_none() && e.icon == icon && !e.permanent)
             .map(|e| e.left)
             .fold(f32::NEG_INFINITY, f32::max);
         if left > 0.0 && alpha > 0.01 {
-            time_below(&effect_time(left), centered(slot), alpha);
+            time_below(&effect_time(left), centered(slot), slot / GAME_ICONS_PER_ROW, alpha);
         }
     }
 }
@@ -461,7 +532,13 @@ struct Cells {
 
 /// The effects as cells, `per_row` to a row, from the right edge leftwards or from the left
 /// edge rightwards.
-fn draw_effects(ui: &Ui, draw: &DrawListMut<'_>, effects: &[Effect], cells: Cells, layout: &Layout) {
+fn draw_effects(
+    ui: &Ui,
+    draw: &DrawListMut<'_>,
+    effects: &[Effect],
+    cells: Cells,
+    layout: &Layout,
+) {
     let (s, [edge, top]) = (cells.s, cells.origin);
     let shown = target::shown_effects(effects.to_vec(), cells.per_row * EFFECT_ROWS);
     for (i, effect) in shown.iter().enumerate() {
@@ -474,27 +551,48 @@ fn draw_effects(ui: &Ui, draw: &DrawListMut<'_>, effects: &[Effect], cells: Cell
             (x0, x0 + EFFECT_CELL * s)
         };
         let y = top + row as f32 * EFFECT_ROW * s;
-        let alpha = if effect.permanent { 1.0 } else { (0.4 + 0.6 * effect.left / EFFECT_FADE_SECONDS).clamp(0.4, 1.0) };
+        let alpha = if effect.permanent {
+            1.0
+        } else {
+            (0.4 + 0.6 * effect.left / EFFECT_FADE_SECONDS).clamp(0.4, 1.0)
+        };
         let height = EFFECT_ICON * s;
         let center = (x0 + x1) / 2.0;
         let icon_top = y + (2.0 * s).round();
-        if let Some(icon) = effect.kind.and_then(Icon::buildup).and_then(|icon| layout.icons?.icon(icon)) {
+        if let Some(icon) = effect
+            .kind
+            .and_then(Icon::buildup)
+            .and_then(|icon| layout.icons?.icon(icon))
+        {
             let width = (height * icon.size[0] / icon.size[1]).min(EFFECT_CELL * s);
-            draw.add_image(icon.texture, [center - width / 2.0, icon_top], [center + width / 2.0, icon_top + height])
-                .col(fade([1.0, 1.0, 1.0, alpha]))
-                .build();
-        } else if let Some((texture, cell)) = layout.icons.and_then(|map| map.status_icon(effect.icon)) {
-            draw.add_image(texture, [center - height / 2.0, icon_top], [center + height / 2.0, icon_top + height])
-                .uv_min(cell.uv_min)
-                .uv_max(cell.uv_max)
-                .col(fade([1.0, 1.0, 1.0, alpha]))
-                .build();
+            draw.add_image(
+                icon.texture,
+                [center - width / 2.0, icon_top],
+                [center + width / 2.0, icon_top + height],
+            )
+            .col(fade([1.0, 1.0, 1.0, alpha]))
+            .build();
+        } else if let Some((texture, cell)) =
+            layout.icons.and_then(|map| map.status_icon(effect.icon))
+        {
+            draw.add_image(
+                texture,
+                [center - height / 2.0, icon_top],
+                [center + height / 2.0, icon_top + height],
+            )
+            .uv_min(cell.uv_min)
+            .uv_max(cell.uv_max)
+            .col(fade([1.0, 1.0, 1.0, alpha]))
+            .build();
         }
         if !effect.permanent {
             let label = effect_time(effect.left);
             let em = cells.text;
             let size = text::measure(ui, &label, em);
-            let pos = [(center - size[0] / 2.0).round(), (icon_top + height + 1.0 * s).round()];
+            let pos = [
+                (center - size[0] / 2.0).round(),
+                (icon_top + height + 1.0 * s).round(),
+            ];
             text::add_shadowed(&label, pos, em, fade(TEXT), fade(TEXT_SHADOW), s.max(1.0));
         }
     }
@@ -502,16 +600,29 @@ fn draw_effects(ui: &Ui, draw: &DrawListMut<'_>, effects: &[Effect], cells: Cell
 
 /// One buildup bar: the game's icon of the status, then a bar filled with what has built up, with
 /// `built / max` in it when the numbers are shown.
-fn draw_buildup(ui: &Ui, draw: &DrawListMut<'_>, buildup: &Buildup, [left, top, right]: [f32; 3], layout: &Layout) {
+fn draw_buildup(
+    ui: &Ui,
+    draw: &DrawListMut<'_>,
+    buildup: &Buildup,
+    [left, top, right]: [f32; 3],
+    layout: &Layout,
+) {
     let s = layout.s;
     let middle = top + BUILDUP_ROW * s / 2.0;
     let mut bar_left = left;
-    if let Some(icon) = layout.icons.and_then(|map| Icon::buildup(buildup.kind).and_then(|icon| map.icon(icon))) {
+    if let Some(icon) = layout
+        .icons
+        .and_then(|map| Icon::buildup(buildup.kind).and_then(|icon| map.icon(icon)))
+    {
         let height = BUILDUP_ICON * s;
         let width = height * icon.size[0] / icon.size[1];
-        draw.add_image(icon.texture, [left, middle - height / 2.0], [left + width, middle + height / 2.0])
-            .col(fade([1.0, 1.0, 1.0, 1.0]))
-            .build();
+        draw.add_image(
+            icon.texture,
+            [left, middle - height / 2.0],
+            [left + width, middle + height / 2.0],
+        )
+        .col(fade([1.0, 1.0, 1.0, 1.0]))
+        .build();
         bar_left = left + width + BUILDUP_ICON_GAP * s;
     }
     let color = BUILDUP_COLORS[buildup.kind];
@@ -532,7 +643,13 @@ fn draw_buildup(ui: &Ui, draw: &DrawListMut<'_>, buildup: &Buildup, [left, top, 
     draw_bar(draw, &bar);
     if layout.show_numbers {
         let label = format!("{} / {}", buildup.built, buildup.max);
-        draw_bar_number(ui, &label, [bar_left, right, middle - half, middle + half], BAR_NUMBER * s, s);
+        draw_bar_number(
+            ui,
+            &label,
+            [bar_left, right, middle - half, middle + half],
+            BAR_NUMBER * s,
+            s,
+        );
     }
 }
 
@@ -540,12 +657,17 @@ fn draw_buildup(ui: &Ui, draw: &DrawListMut<'_>, buildup: &Buildup, [left, top, 
 /// stays inside the bar, with a shadow so it reads over both the bar and the track.
 fn draw_bar_number(ui: &Ui, text: &str, [left, right, top, bottom]: [f32; 4], em: f32, s: f32) {
     let size = text::measure(ui, text, em);
-    let pos = [((left + right - size[0]) / 2.0).round(), ((top + bottom - size[1]) / 2.0).round()];
+    let pos = [
+        ((left + right - size[0]) / 2.0).round(),
+        ((top + bottom - size[1]) / 2.0).round(),
+    ];
     text::add_shadowed(text, pos, em, fade(TEXT), fade(TEXT_SHADOW), s.max(1.0));
 }
 
 fn draw_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>) {
-    draw.add_rect(bar.from, bar.to, fade(TRACK)).filled(true).build();
+    draw.add_rect(bar.from, bar.to, fade(TRACK))
+        .filled(true)
+        .build();
     match bar.textures {
         Some(textures) => textured_bar(draw, bar, textures),
         None => flat_bar(draw, bar),
@@ -561,9 +683,18 @@ fn textured_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>, textures: &Textures) {
     // The textures have a transparent row above and below the visible bar.
     let unit = (to[1] - from[1]) / textures::BAR_ROWS;
     let (top, bottom) = (from[1] - unit, to[1] + unit);
-    let tint = |c: [f32; 4]| fade([(c[0] / TEXTURE_LEVEL).min(1.0), (c[1] / TEXTURE_LEVEL).min(1.0), (c[2] / TEXTURE_LEVEL).min(1.0), 1.0]);
+    let tint = |c: [f32; 4]| {
+        fade([
+            (c[0] / TEXTURE_LEVEL).min(1.0),
+            (c[1] / TEXTURE_LEVEL).min(1.0),
+            (c[2] / TEXTURE_LEVEL).min(1.0),
+            1.0,
+        ])
+    };
 
-    draw.add_image(textures.background, [from[0], top], [to[0], bottom]).col(fade(BACKGROUND_TINT)).build();
+    draw.add_image(textures.background, [from[0], top], [to[0], bottom])
+        .col(fade(BACKGROUND_TINT))
+        .build();
 
     let fraction = bar.fraction.clamp(0.0, 1.0);
     let end = from[0] + width * fraction;
@@ -584,15 +715,23 @@ fn textured_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>, textures: &Textures) {
     if bar.trail.is_some() && fraction > 0.0 {
         let middle = (from[1] + to[1]) / 2.0;
         let [edge_w, edge_h] = textures::EDGE_SIZE.map(|v| v * unit);
-        draw.add_image(textures.edge, [end - edge_w / 2.0, middle - edge_h / 2.0], [end + edge_w / 2.0, middle + edge_h / 2.0])
-            .col(fade([1.0, 1.0, 1.0, 1.0]))
-            .build();
+        draw.add_image(
+            textures.edge,
+            [end - edge_w / 2.0, middle - edge_h / 2.0],
+            [end + edge_w / 2.0, middle + edge_h / 2.0],
+        )
+        .col(fade([1.0, 1.0, 1.0, 1.0]))
+        .build();
         if bar.glow > 0.0 {
             let [glow_w, glow_h] = textures::GLOW_SIZE.map(|v| v * unit);
             let right = end + textures::GLOW_TAIL * unit;
-            draw.add_image(textures.glow, [right - glow_w, middle - glow_h / 2.0], [right, middle + glow_h / 2.0])
-                .col(fade([1.0, 1.0, 1.0, bar.glow]))
-                .build();
+            draw.add_image(
+                textures.glow,
+                [right - glow_w, middle - glow_h / 2.0],
+                [right, middle + glow_h / 2.0],
+            )
+            .col(fade([1.0, 1.0, 1.0, bar.glow]))
+            .build();
         }
     }
 }
@@ -604,9 +743,13 @@ fn flat_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>) {
     let fraction = bar.fraction.clamp(0.0, 1.0);
     if let Some(trail) = bar.trail {
         let trail = trail.clamp(fraction, 1.0);
-        draw.add_rect([from[0] + width * fraction, from[1]], [from[0] + width * trail, to[1]], fade(bar.trail_color))
-            .filled(true)
-            .build();
+        draw.add_rect(
+            [from[0] + width * fraction, from[1]],
+            [from[0] + width * trail, to[1]],
+            fade(bar.trail_color),
+        )
+        .filled(true)
+        .build();
     }
     if fraction > 0.0 {
         let end = from[0] + width * fraction;
@@ -616,7 +759,9 @@ fn flat_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>) {
         draw.add_rect_filled_multicolor([from[0], fade], [end, to[1]], core, core, edge, edge);
         if bar.trail.is_some() {
             let line = bar.s.max(1.0);
-            draw.add_rect([end - line, from[1]], [end, to[1]], self::fade(DIVIDER)).filled(true).build();
+            draw.add_rect([end - line, from[1]], [end, to[1]], self::fade(DIVIDER))
+                .filled(true)
+                .build();
         }
     }
 }
@@ -624,7 +769,15 @@ fn flat_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>) {
 /// The frame around the bars: the game's box for its buildup gauge (a thin line above and below,
 /// a cap at each end) from its own textures, or drawn shapes (the tan line under the bars and a
 /// small ornament at each end) when they could not be loaded.
-fn frame(draw: &DrawListMut<'_>, left: f32, right: f32, top: f32, bottom: f32, s: f32, textures: Option<&Textures>) {
+fn frame(
+    draw: &DrawListMut<'_>,
+    left: f32,
+    right: f32,
+    top: f32,
+    bottom: f32,
+    s: f32,
+    textures: Option<&Textures>,
+) {
     if let Some(textures) = textures {
         textured_frame(draw, [left, right, top, bottom], s, textures);
         return;
@@ -632,29 +785,53 @@ fn frame(draw: &DrawListMut<'_>, left: f32, right: f32, top: f32, bottom: f32, s
     let line = LINE * s.max(0.85);
     let under = bottom + line;
     let color = fade(LINE_COLOR);
-    draw.add_rect([left, bottom], [right, under], color).filled(true).build();
-    draw.add_triangle([left - 3.0 * s, under], [left + 2.0 * s, under], [left + 1.5 * s, top - 1.5 * s], color)
+    draw.add_rect([left, bottom], [right, under], color)
         .filled(true)
         .build();
-    draw.add_triangle([right - 2.0 * s, under], [right + 3.0 * s, under], [right + 0.5 * s, bottom - 3.0 * s], color)
-        .filled(true)
-        .build();
+    draw.add_triangle(
+        [left - 3.0 * s, under],
+        [left + 2.0 * s, under],
+        [left + 1.5 * s, top - 1.5 * s],
+        color,
+    )
+    .filled(true)
+    .build();
+    draw.add_triangle(
+        [right - 2.0 * s, under],
+        [right + 3.0 * s, under],
+        [right + 0.5 * s, bottom - 3.0 * s],
+        color,
+    )
+    .filled(true)
+    .build();
 }
 
 /// `frame` from the game's box. Its lines are `LINE_TEXEL` thick per texel of the texture and sit
 /// on the top and the bottom of the bars; the caps are stretched so they span from one line to the
 /// other. The texture's texels are `s / 2` wide, as the bars' are.
-fn textured_frame(draw: &DrawListMut<'_>, [left, right, top, bottom]: [f32; 4], s: f32, textures: &Textures) {
+fn textured_frame(
+    draw: &DrawListMut<'_>,
+    [left, right, top, bottom]: [f32; 4],
+    s: f32,
+    textures: &Textures,
+) {
     let white = fade([1.0, 1.0, 1.0, 1.0]);
     let [width, height] = textures::WAKU_SIZE;
     let kx = 0.5 * s;
     let thick = WAKU_LINE_TEXEL * s;
-    for ([from, to, center], y) in [(textures::WAKU_TOP_LINE, top), (textures::WAKU_BOTTOM_LINE, bottom)] {
-        draw.add_image(textures.waku, [left, y - (center - from) * thick], [right, y + (to - center) * thick])
-            .uv_min([0.1, from / height])
-            .uv_max([0.1 + (right - left) / kx / width, to / height])
-            .col(white)
-            .build();
+    for ([from, to, center], y) in [
+        (textures::WAKU_TOP_LINE, top),
+        (textures::WAKU_BOTTOM_LINE, bottom),
+    ] {
+        draw.add_image(
+            textures.waku,
+            [left, y - (center - from) * thick],
+            [right, y + (to - center) * thick],
+        )
+        .uv_min([0.1, from / height])
+        .uv_max([0.1 + (right - left) / kx / width, to / height])
+        .col(white)
+        .build();
     }
     // Caps: the art spans the lines, 28.5 texels of the texture apart.
     let between = textures::WAKU_BOTTOM_LINE[2] - textures::WAKU_TOP_LINE[2];
@@ -663,7 +840,9 @@ fn textured_frame(draw: &DrawListMut<'_>, [left, right, top, bottom]: [f32; 4], 
     let y1 = y0 + height * ky;
     let [left_w, _] = textures::WAKU_LEFT_SIZE;
     let x1 = left + 1.0 * s;
-    draw.add_image(textures.waku_left, [x1 - left_w * kx, y0], [x1, y1]).col(white).build();
+    draw.add_image(textures.waku_left, [x1 - left_w * kx, y0], [x1, y1])
+        .col(white)
+        .build();
     let from = textures::WAKU_CAP_FROM;
     let x0 = right + 1.0 * s - (textures::WAKU_CAP_ART_END - from) * kx;
     draw.add_image(textures.waku, [x0, y0], [x0 + (width - from) * kx, y1])
@@ -674,9 +853,15 @@ fn textured_frame(draw: &DrawListMut<'_>, [left, right, top, bottom]: [f32; 4], 
 }
 
 pub fn install() {
-    match Hudhook::builder().with::<ImguiDx12Hooks>(HudRenderLoop::default()).build().apply() {
+    match Hudhook::builder()
+        .with::<ImguiDx12Hooks>(HudRenderLoop::default())
+        .build()
+        .apply()
+    {
         Ok(()) => logger::log("Overlay: DX12 hooks applied"),
-        Err(e) => logger::error(&format!("Overlay: DX12 hooks failed ({e:?}), overlay unavailable")),
+        Err(e) => logger::error(&format!(
+            "Overlay: DX12 hooks failed ({e:?}), overlay unavailable"
+        )),
     }
 }
 

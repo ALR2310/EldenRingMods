@@ -112,7 +112,7 @@ Khung hình game là vùng 16:9 (2560x1440), nên 1 px 1080p = 1,333 px ảnh.
 
 ## Hàng effect của người chơi
 
-`target::own_effects_now` (snapshot riêng `OWN`, đọc mỗi frame) và `ui::draw_effects` với `Cells { right_aligned: false }`; không có effect nổ của buildup (game có icon riêng cho người chơi), nên chỉ hiện effect có `iconId` (cả vĩnh viễn, không có số). Khoá `Player.Effects` (mặc định bật; trước là `Effects.Player`), cùng giới hạn 6 ô một hàng, 12 ô.
+`target::own_effects_now` (snapshot riêng `OWN`, đọc mỗi frame) và `ui::draw_effects` với `Cells { right_aligned: false }`; không có effect nổ của buildup (game có icon riêng cho người chơi), nên chỉ hiện effect có `iconId` (cả vĩnh viễn, không có số). Phần này đã bị thay bằng chữ thời gian dưới icon của game (mục "Cách làm hiện tại cho người chơi"); khoá `Player.Effects` (trước là `Effects.Player`) bật tắt cả chữ đó lẫn việc dời thanh buildup.
 
 ## Kẻ địch không có effect có icon
 
@@ -127,7 +127,7 @@ Black Blade Kindred (`NpcParam 47701242`) chỉ có các effect "NPC: Disable Po
 
 Ý người dùng: thay vì vẽ hàng thứ hai (icon lặp), chèn thời gian vào chính hàng icon trạng thái của game. Đã tìm được:
 
-- **Movie:** `menu/01_000_fe.gfx` (1,6 MB; trích bằng test `#[ignore] hud_movie_from_the_installed_game` trong `map/sprites.rs`, ghi ra `ER_GFX_OUT`; công cụ dựng cây clip `tmp/scratchpad/swf_tree.py`). Hàng icon là `PlayerHUD/Gauge/Equip/Fade/Item_0_0 .. Item_0_41`: **42 ô xếp một hàng ngang, không xuống dòng**, ô i ở x = 10 + 42 x i, y = 15 (đơn vị 1080p, cách nhau đúng 42 px như đo trên ảnh). Mỗi ô chỉ có clip `Icon` (một hình, ảnh gắn lúc chạy); **không có ô chữ**.
+- **Movie:** `menu/01_000_fe.gfx` (1,6 MB; trích bằng test `#[ignore] hud_movie_from_the_installed_game` trong `map/sprites.rs`, ghi ra `ER_GFX_OUT`; công cụ dựng cây clip `tmp/scratchpad/swf_tree.py`). Hàng icon là `PlayerHUD/Gauge/Equip/Fade/Item_0_0 .. Item_0_41`: **42 ô xếp 14 ô một hàng, xuống dòng sau ô thứ 14** (sửa 2026-10-31: bản trước ghi nhầm là một hàng; thử game với `ExpandedTalismanSlots` cộng Golden Vow cho thấy hàng thứ hai), ô i ở x = 10 + 42 x (i mod 14), y = 15 + 41 x (i div 14) (đơn vị 1080p, cách nhau 42 px theo cột và 41 px theo hàng). Mỗi ô chỉ có clip `Icon` (một hình, ảnh gắn lúc chạy); **không có ô chữ**.
 - **Lớp của game:** `CS::PlayerStateIconViewParts` (vtable RVA 0x2AEFD18, 2.7.2.0). Constructor `sub_1408D5470` gom các ô `Fade/Item_0_%d` (tìm tới khi thiếu) vào một vector (đầu `+112`, cuối `+120`, ô 304 byte, clip `Icon` ở `+120` của ô). Hàm cập nhật mỗi frame **`sub_1408D58F0(view, a2, model)`** (gọi từ `sub_1408CA1C0` với `view = hud + 126608` và `model = *(hud + 96) + 14344`).
 - **Khối dữ liệu (`model`, 2736 byte):** 42 slot x 64 byte tại `model + 64 x i` (mô tả ảnh: gắn vào clip `Icon` bằng `sub_1407361C0`), cờ **`Flicker`** từng slot tại `model + 2688 + i` (icon nhấp nháy, nhiều khả năng khi sắp hết hạn), cờ chung tại `model + 2730`. Hàm điền khối này từ SpEffect của người chơi chưa tìm ra.
 - **Quan sát:** Golden Vow (`1660000`, `1660001`, `1660002`) cộng Pickled Liver (`20501140`, icon 20408 trùng `1660002`) là 4 effect có icon nhưng game hiện **3 icon**: có vẻ game gộp theo icon.
