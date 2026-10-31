@@ -20,3 +20,4 @@ sử git của `README.md`.
 | 2026-10-07 | Đổi thư mục `crates/` thành `mods/`; tách README thành README + HISTORY + docs/; kiểm tra bằng IDA: hai mẫu AOB của hàm warp duy nhất trên 2.6.2.0, 2.7.0.0, 2.7.1.0 | [docs](docs/warp_mechanism.md) |
 | 2026-10-22 | Log gọn lại theo kiểu ngắn, kỹ thuật cho dev: bỏ dòng lặp ý, địa chỉ patch, câu dài; chỉ ghi 1 lần khi chờ thế giới | |
 | 2026-10-22 | Dọn mã: định dạng gói tin WHERE / HERE tách sang `wire.rs` (mã hoá, giải mã, kiểm tra vị trí) thuần và có test khứ hồi, `net.rs` dùng nó thay cho các phép đọc offset rải rác, doc đầu file của các module chuyển sang `docs/`, bỏ dòng `Activating` | |
+| 2026-10-31 | Tách khung menu ImGui DX12 (`ui.rs` + `input_block.rs` + `assets/`) lên `common::overlay` để dùng chung với `Toolbox` | [overlay](../../shared/docs/overlay.md) |
