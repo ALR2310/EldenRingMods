@@ -1,6 +1,5 @@
 #![allow(non_snake_case)] // crate name is "SoulsTeleport" to control the output DLL's filename
 
-mod input_block;
 mod net;
 mod party;
 mod steam;

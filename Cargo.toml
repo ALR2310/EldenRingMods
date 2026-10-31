@@ -18,6 +18,7 @@ members = [
     "mods/animcancel",
     "mods/autopickup",
     "mods/inputbridge",
+    "mods/toolbox",
 ]
 
 [workspace.dependencies]

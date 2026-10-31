@@ -223,6 +223,23 @@
             "problemMatcher": "$rustc"
         },
         {
+            "label": "Cargo: Build Toolbox (Release)",
+            "detail": "Builds Toolbox (release), then copies Toolbox.dll + Toolbox.ini into builds/<crate>/",
+            "type": "process",
+            "command": "powershell.exe",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
+                "-Mod", "Toolbox"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": "$rustc"
+        },
+        {
             "label": "Cargo: Build AnimCancel (Release)",
             "detail": "Builds AnimCancel (release), then copies AnimCancel.dll + AnimCancelV1.toml into builds/<crate>/",
             "type": "process",
@@ -291,6 +308,7 @@
                 "Cargo: Build SpeedMultiplier (Release)",
                 "Cargo: Build SpiritMultiplier (Release)",
                 "Cargo: Build WindowResize (Release)",
+                "Cargo: Build Toolbox (Release)",
                 "Cargo: Build AnimCancel (Release)",
                 "Cargo: Build AutoPickup (Release)",
                 "Cargo: Build InputBridge (Release)"
