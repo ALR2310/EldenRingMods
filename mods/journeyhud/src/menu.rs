@@ -30,6 +30,8 @@ static EFFECTS_TARGET: Setting =
     Setting { key: "Target.Effects", format: erui::format_bool, apply: Some(settings::set_effects_target) };
 static EFFECTS_PLAYER: Setting =
     Setting { key: "Player.Effects", format: erui::format_bool, apply: Some(settings::set_effects_player) };
+static PLAYER_BUILDUP: Setting =
+    Setting { key: "Player.Buildup", format: erui::format_bool, apply: Some(settings::set_player_buildup) };
 static BUILDUP: Setting =
     Setting { key: "Target.Buildup", format: erui::format_bool, apply: Some(settings::set_buildup) };
 static PLAYER_SCALE: NumberSetting =
@@ -109,6 +111,9 @@ fn build(b: &mut erui::MenuBuilder) -> Result<(), String> {
     b.toggle(target, &t("effects.label"), &t("effects.help"), &EFFECTS_TARGET, || config::get().target.effects as u8)?;
     b.toggle(target, &t("effects_player.label"), &t("effects_player.help"), &EFFECTS_PLAYER, || {
         config::get().player.effects as u8
+    })?;
+    b.toggle(target, &t("player_buildup.label"), &t("player_buildup.help"), &PLAYER_BUILDUP, || {
+        config::get().player.buildup as u8
     })?;
     b.number(target, &t("player_scale.label"), &t("player_scale.help"), &PLAYER_SCALE, || config::get().player.scale)?;
     b.number(target, &t("width.label"), &t("width.help"), &WIDTH, || f64::from(config::get().target.width))?;

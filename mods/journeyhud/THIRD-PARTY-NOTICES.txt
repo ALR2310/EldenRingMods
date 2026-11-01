@@ -78,8 +78,8 @@ points of the world map show and how the beacons are stored. Followed in what is
 no code of it is included.
 
 souls_vision (https://github.com/samjviana/souls_vision, GPL-3.0): consulted for where the
-game keeps a target's health and posture only; JourneyHUD's target panel is written
-independently and contains none of its code.
+game keeps a target's health, posture and status buildup only; JourneyHUD's target panel is
+written independently and contains none of its code.
 
 
 4. Libraries built into the DLL
@@ -249,7 +249,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 5. The game's own art
 ---------------------
-The world map, the map icons and the health bar textures are the game's. The map and icons are
-read from the player's own installation while the game runs and nothing of them is shipped.
-The four health bar textures in assets/ were taken from the game's HUD and are embedded in
-the DLL.
+The world map, the map icons and the bar textures are the game's. The map and icons are read
+from the player's own installation while the game runs and nothing of them is shipped. The six
+bar and frame textures in assets/ were taken from the game's HUD and are embedded in the DLL.

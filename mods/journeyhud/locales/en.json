@@ -24,7 +24,11 @@
   },
   "effects_player": {
     "label": "Your effects",
-    "help": "Show your own effects with the time left under the game's status icons, and move your buildup gauge next to them."
+    "help": "Show the time left of your own effects under the game's status icons."
+  },
+  "player_buildup": {
+    "label": "Your status buildup",
+    "help": "Move your own buildup gauge (poison, rot...) to the top left, under the status icons."
   },
   "player_scale": {
     "label": "Buildup gauge size",

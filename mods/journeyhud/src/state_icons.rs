@@ -139,7 +139,7 @@ static ROOT_Y: AtomicU32 = AtomicU32::new(0);
 static ROOT_KNOWN: AtomicBool = AtomicBool::new(false);
 static ROOT_UNKNOWN_LOGGED: AtomicBool = AtomicBool::new(false);
 /// What each gauge clip had before the mod moved it (x, y, scales in percent), as `f64` bits, to put
-/// it back when the player's effects go off.
+/// it back when `Player.Buildup` goes off.
 static CLIP_BEFORE: [[AtomicU64; 5]; GAUGES] = [const { [const { AtomicU64::new(0) }; 5] }; GAUGES];
 /// What was last set on each gauge: the view and the position bits, so a clip is only set when it
 /// changes (or when the game rebuilt the view).
@@ -163,7 +163,7 @@ pub fn place_gauges(right: f32, top: f32, scale: f32) {
 }
 
 /// Runs the game's gauge update, then puts the clip where the mod wants it (or back where the
-/// game has it while the player's effects are off).
+/// game has it while `Player.Buildup` is off).
 unsafe extern "system" fn gauge_update(view: *mut u8, index: i64, model: *const u8) {
     // SAFETY: `GAUGE_ORIGINAL` is the call's destination, stored before the redirect.
     let original: GaugeFn = unsafe { std::mem::transmute(GAUGE_ORIGINAL.load(Ordering::Acquire)) };
@@ -247,7 +247,7 @@ unsafe fn place_gauge(view: *mut u8, index: usize) {
         return;
     }
     let fresh = APPLIED_VIEW[index].load(Ordering::Relaxed) != view as usize;
-    if !crate::settings::effects_player() {
+    if !crate::settings::player_buildup() {
         // Off: the position is left to the game and to other mods (Convergence moves this list
         // itself); only what the mod moved goes back.
         if !fresh {
