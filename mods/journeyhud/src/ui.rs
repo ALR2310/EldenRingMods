@@ -460,10 +460,11 @@ fn anchor_gauges() {
     // (the game scales it with the resolution itself).
     let scale = crate::settings::player_scale();
     let left = GAME_ICONS_CENTER_X - GAME_ICONS_PITCH / 2.0;
-    // Under the last row the game's icons fill.
+    // Under the last row the game's icons fill (and the time text below it, when shown).
     let used = (0..crate::state_icons::SLOTS).take_while(|&slot| crate::state_icons::icon(slot).is_some()).count();
     let last_row = used.saturating_sub(1) / GAME_ICONS_PER_ROW;
-    let top = GAME_ICONS_BOTTOM + last_row as f32 * GAME_ICONS_ROW_PITCH + GAME_ICON_TIME * 1.5 + GAUGE_UNDER_ICONS_GAP;
+    let times = if crate::settings::effects_player() { GAME_ICON_TIME * 1.5 } else { 0.0 };
+    let top = GAME_ICONS_BOTTOM + last_row as f32 * GAME_ICONS_ROW_PITCH + times + GAUGE_UNDER_ICONS_GAP;
     crate::state_icons::place_gauges(left + crate::state_icons::GAUGE_WIDTH * scale, top, scale);
 }
 

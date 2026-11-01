@@ -22,6 +22,7 @@ static SHOW_NUMBERS: AtomicBool = AtomicBool::new(true);
 static BUILDUP: AtomicBool = AtomicBool::new(true);
 static EFFECTS_TARGET: AtomicBool = AtomicBool::new(true);
 static EFFECTS_PLAYER: AtomicBool = AtomicBool::new(true);
+static PLAYER_BUILDUP: AtomicBool = AtomicBool::new(true);
 /// `f32` bits.
 static PLAYER_SCALE: AtomicU32 = AtomicU32::new(0x3F33_3333);
 static WIDTH: AtomicI32 = AtomicI32::new(250);
@@ -61,6 +62,7 @@ pub fn load(config: &Config) {
     set_buildup(target.buildup as u8);
     set_effects_target(target.effects as u8);
     set_effects_player(config.player.effects as u8);
+    set_player_buildup(config.player.buildup as u8);
     set_player_scale(config.player.scale);
     set_width(f64::from(target.width));
     set_offset_x(f64::from(config.layout.offset_x));
@@ -101,6 +103,11 @@ pub fn effects_target() -> bool {
 /// Whether the effects of the player are shown.
 pub fn effects_player() -> bool {
     EFFECTS_PLAYER.load(Ordering::Relaxed)
+}
+
+/// Whether the player's buildup gauge is moved to the top-left under the status icons.
+pub fn player_buildup() -> bool {
+    PLAYER_BUILDUP.load(Ordering::Relaxed)
 }
 
 /// Size of the player's buildup gauge, as a fraction of the game's own.
@@ -268,6 +275,10 @@ pub fn set_effects_target(value: u8) {
 
 pub fn set_effects_player(value: u8) {
     EFFECTS_PLAYER.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_player_buildup(value: u8) {
+    PLAYER_BUILDUP.store(value != 0, Ordering::Relaxed);
 }
 
 pub fn set_player_scale(value: f64) {

@@ -44,7 +44,9 @@ phát hành đầu tiên. `Migration::steps[i]` đưa file từ phiên bản `i 
 nên mỗi bước chạy đúng một lần cho mỗi file, theo thứ tự.
 
 **Một bước đã phát hành không bao giờ được đổi:** file đã qua nó sẽ không chạy lại;
-sửa lỗi bằng một bước mới.
+sửa lỗi bằng một bước mới. **Mod chưa phát hành** (chưa lên Nexus lần nào): giữ
+`ConfigVersion = 1` và `STEPS = &[]`; đổi tên hay bố cục khoá trong lúc phát triển
+sửa thẳng mẫu, không tạo bước migration (người dùng, 2026-11-01).
 
 ## Đưa file về khớp mẫu lúc khởi động
 
