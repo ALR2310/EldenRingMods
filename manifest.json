@@ -375,6 +375,12 @@
     "internalId": "18610093305111",
     "name": "Journey HUD",
     "crate": "journeyhud",
-    "deploys": []
+    "deploys": [
+      {
+        "version": "1.0.0",
+        "commit": "881818cfe8f2f4dc0e6586fa8fce3a6b33e34a92"
+      }
+    ],
+    "modFileId": "8285250"
   }
 ]
