@@ -11,16 +11,24 @@ hết vào nhánh `mod/` của mod.
   rồi thì chuyển sang nó (kiểm `git branch` trước, đừng tạo nhánh trùng ý).
 - Thay đổi ở `shared/` (crate `common`) hay file gốc repo (README gốc, `TODO.md`,
   `.vscode/tasks.json`, `Cargo.toml`) mà việc của mod đó cần thì cùng nhánh với
-  mod. Việc không thuộc mod nào (hạ tầng, quy tắc chung) thì hỏi người dùng
-  nhánh nào trước khi làm.
+  mod.
+- **Việc chung, không thuộc riêng mod nào** (người dùng, 2026-11-02): làm trên
+  nhánh `shared/<chủ đề>` khi sửa crate `shared/` (vd. `shared/crash-handler`),
+  hoặc `infra/<chủ đề>` khi là hạ tầng khác (scripts, `.vscode`, quy tắc, tài
+  liệu chung; vd. `infra/ida-tools`). Tạo từ `main`, mỗi chủ đề một nhánh, tên
+  tiếng Anh kebab-case. Đừng làm việc chung trên nhánh `mod/` của mod đang mở
+  chỉ vì đang ở đó. Nếu thay đổi `shared/` do một mod cần thì vẫn theo quy tắc
+  ở trên (cùng nhánh mod). Không rõ thuộc loại nào thì hỏi.
 - **Ngoại lệ: thay đổi cùng một kiểu trên nhiều mod** (vd. thêm một trường vào
   `[package.metadata.winresource]` của mọi mod) làm và commit trên `main`, không
   rải lên từng nhánh `mod/` (người dùng, 2026-10-27). Mod chỉ có trên nhánh của
   nó (chưa vào `main`) thì sửa trên nhánh đó.
 - **Ngoại lệ: InputBridge** (người dùng, 2026-10-27): cải tiến `inputbridge` làm
   thẳng trong phiên đang làm mod khác, không cần chuyển nhánh.
-- Không tự merge, xoá hay đổi tên nhánh; không tự commit khi chưa được kiểm
-  (xem mục "Quy tắc code và quy trình thử" bên dưới).
+- Không tự merge, xoá hay đổi tên nhánh `mod/...`; không tự commit khi chưa được
+  kiểm (xem mục "Quy tắc code và quy trình thử" bên dưới). Nhánh `shared/...` và
+  `infra/...` thì được xoá sau khi đã merge vào `main` (người dùng, 2026-11-02);
+  merge vào `main` vẫn chờ người dùng bảo.
 
 ## Quy tắc code và quy trình thử
 
