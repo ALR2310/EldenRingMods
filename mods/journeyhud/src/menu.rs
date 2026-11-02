@@ -40,7 +40,7 @@ static WIDTH: NumberSetting =
     NumberSetting::whole("Target.Width", 100.0, 1600.0, Some(settings::set_width)).slider(100.0, 800.0, 10.0);
 static SCALE: NumberSetting = NumberSetting::float("Target.Scale", 0.5, 3.0, Some(settings::set_scale)).stepped(0.1);
 static OFFSET_X: NumberSetting =
-    NumberSetting::whole("Layout.OffsetX", 0.0, 400.0, Some(settings::set_offset_x)).slider(0.0, 300.0, 5.0);
+    NumberSetting::whole("Layout.OffsetX", -400.0, 400.0, Some(settings::set_offset_x)).slider(-300.0, 300.0, 5.0);
 static OFFSET_Y: NumberSetting =
     NumberSetting::whole("Layout.OffsetY", 0.0, 400.0, Some(settings::set_offset_y)).slider(0.0, 300.0, 5.0);
 

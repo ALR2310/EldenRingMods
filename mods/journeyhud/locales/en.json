@@ -48,7 +48,7 @@
   },
   "offset_x": {
     "label": "Right margin",
-    "help": "Distance of the minimap and the target bar from the right edge of the screen."
+    "help": "Distance from the right edge. Negative values move the minimap and target bar right."
   },
   "offset_y": {
     "label": "Top margin",

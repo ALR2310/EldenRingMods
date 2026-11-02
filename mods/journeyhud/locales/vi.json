@@ -48,7 +48,7 @@
   },
   "offset_x": {
     "label": "Lề phải",
-    "help": "Khoảng cách từ minimap và thanh mục tiêu tới mép phải màn hình."
+    "help": "Khoảng cách từ mép phải. Giá trị âm đẩy minimap và thanh mục tiêu sang phải."
   },
   "offset_y": {
     "label": "Lề trên",
