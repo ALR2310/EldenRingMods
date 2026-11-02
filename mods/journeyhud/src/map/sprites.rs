@@ -42,8 +42,8 @@ struct Menu {
 impl Menu {
     fn open(game_dir: &Path) -> io::Result<Menu> {
         let oodle = Oodle::load(&game_dir.join("oo2core_6_win64.dll"))?;
-        let layouts = oodle.decompress_dcx(&archive::open(game_dir, LAYOUTS)?.read_all()?)?;
-        let tpf = oodle.decompress_dcx(&archive::open(game_dir, TEXTURES)?.read_all()?)?;
+        let layouts = oodle.decompress_dcx(&read_menu_file(game_dir, LAYOUTS)?)?;
+        let tpf = oodle.decompress_dcx(&read_menu_file(game_dir, TEXTURES)?)?;
         Ok(Menu { layouts, tpf, sheets: Vec::new() })
     }
 
@@ -96,6 +96,16 @@ impl Menu {
             }
         }
         found.into_iter().map(|(id, sheet, rect)| Ok((id, self.crop(sheet, rect)?))).collect()
+    }
+}
+
+/// Reads a loose menu file before its archive copy. ModEngine redirects this open to an enabled
+/// override, while an unpacked game has the loose file directly under `game_dir`.
+fn read_menu_file(game_dir: &Path, archive_path: &str) -> io::Result<Vec<u8>> {
+    match std::fs::read(game_dir.join(archive_path.trim_start_matches('/'))) {
+        Ok(data) => Ok(data),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => archive::open(game_dir, archive_path)?.read_all(),
+        Err(error) => Err(error),
     }
 }
 
