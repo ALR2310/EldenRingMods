@@ -55,6 +55,7 @@ Task chạy mỗi frame đọc người chơi chính, mục tiêu đang khoá, �
 - Minimap chưa hiện các marker ghi chú (map marker xanh lá) do người chơi đặt hay kẻ địch thường xung quanh (ngoài mục tiêu đang khoá); panel không hiện tên kẻ địch.
 - Trong co-op Seamless, thanh tích tụ và thời gian hiệu ứng của kẻ địch đọc từ bản kẻ địch trên máy mình nên có thể chỉ phản ánh phần máy mình biết.
 - Chữ thời gian dưới hàng icon trạng thái của người chơi đặt theo vị trí HUD mặc định (nếu đổi cỡ HUD trong tuỳ chọn của game thì chữ có thể lệch).
+- Màn hình HDR: overlay vẽ bằng màu SDR nên mod tự chuyển sang HDR khi game xuất HDR (chi tiết `docs/hdr.md`).
 - Cần Elden Ring chạy DX12; có thể xung đột với phần mềm overlay khác hook DXGI (vd. MSI Afterburner).
 
 ## Tài liệu
