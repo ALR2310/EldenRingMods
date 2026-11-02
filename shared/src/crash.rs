@@ -5,13 +5,12 @@
 //!
 //! It never handles anything: the vectored handler only logs and returns
 //! "continue search", so the game's own handlers run as before. These are
-//! first-chance exceptions, so a line here is not always the crash. The one
-//! that kills the process is marked `FATAL`: it is logged again by the
-//! top-level unhandled-exception filter (which then calls the previous filter).
+//! first-chance exceptions, so a line here is not always the crash: the last
+//! one before the log ends is. (A top-level unhandled-exception filter was
+//! tried and dropped: the game's CRT replaces it, see `shared/docs/crash.md`.)
 
 use std::cell::Cell;
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, Once};
 
 use crate::logger;
@@ -29,6 +28,8 @@ const CONTEXT_SIZE: usize = 0x4D0;
 const CONTEXT_RSP: usize = 0x98;
 const CONTEXT_RIP: usize = 0xF8;
 const STACK_OVERFLOW: u32 = 0xC000_00FD;
+/// Bytes scanned at the top of the stack for the outermost frames.
+const OUTER_BYTES: usize = 0x1000;
 /// Bytes shown from the faulting instruction.
 const CODE_BYTES: usize = 16;
 
@@ -46,7 +47,6 @@ struct Context([u8; CONTEXT_SIZE]);
 
 unsafe extern "system" {
     fn AddVectoredExceptionHandler(first: u32, handler: Handler) -> *mut c_void;
-    fn SetUnhandledExceptionFilter(filter: Option<Handler>) -> Option<Handler>;
     fn RtlLookupFunctionEntry(pc: u64, image_base: *mut u64, history: *mut c_void) -> *mut c_void;
     #[allow(clippy::too_many_arguments)]
     fn RtlVirtualUnwind(
@@ -67,8 +67,6 @@ unsafe extern "system" {
 
 static INSTALLED: Once = Once::new();
 static SEEN: Mutex<Vec<(u32, usize)>> = Mutex::new(Vec::new());
-/// The unhandled-exception filter that was installed before ours (0 = none).
-static PREVIOUS_FILTER: AtomicUsize = AtomicUsize::new(0);
 
 thread_local! {
     static IN_HANDLER: Cell<bool> = const { Cell::new(false) };
@@ -78,9 +76,6 @@ thread_local! {
 pub fn install() {
     INSTALLED.call_once(|| unsafe {
         AddVectoredExceptionHandler(1, handler);
-        // Best effort: the game may replace the filter later.
-        let previous = SetUnhandledExceptionFilter(Some(unhandled));
-        PREVIOUS_FILTER.store(previous.map_or(0, |f| f as usize), Ordering::Relaxed);
     });
 }
 
@@ -202,11 +197,7 @@ fn stack_frames(rsp: usize) -> Vec<String> {
     let mut frames = Vec::new();
     for word in stack.chunks_exact(8) {
         let value = u64::from_le_bytes(word.try_into().unwrap()) as usize;
-        if value < 0x10000 || !in_module(value) {
-            continue;
-        }
-        let mut before = [0u8; 8];
-        if read_bytes(value - 8, &mut before) && preceded_by_call(&before) {
+        if looks_like_return_address(value) {
             frames.push(describe(value));
             if frames.len() == MAX_FRAMES {
                 break;
@@ -216,22 +207,38 @@ fn stack_frames(rsp: usize) -> Vec<String> {
     frames
 }
 
-/// Last-chance filter: the process dies after this one, so log it as FATAL
-/// (bypassing the dedupe), then let the previous filter decide as before.
-unsafe extern "system" fn unhandled(info: *const ExceptionPointers) -> i32 {
-    if !info.is_null() && !IN_HANDLER.with(|f| f.replace(true)) {
-        // SAFETY: the OS passes valid exception and context records.
-        let (record, context) = unsafe { ((*info).record, (*info).context) };
-        if !record.is_null() && !context.is_null() {
-            log_exception(record, context, true);
+/// Inside a module and right after a `call`.
+fn looks_like_return_address(value: usize) -> bool {
+    if value < 0x10000 || !in_module(value) {
+        return false;
+    }
+    let mut before = [0u8; 8];
+    read_bytes(value - 8, &mut before) && preceded_by_call(&before)
+}
+
+/// The outermost frames (thread start up to where a runaway recursion began),
+/// scanned from the top of the stack downwards. After a stack overflow the
+/// innermost frames are all the same loop; these show who entered it.
+fn outer_frames() -> Vec<String> {
+    let (low, high) = stack_bounds();
+    if high <= low || high - low < OUTER_BYTES {
+        return Vec::new();
+    }
+    let mut stack = vec![0u8; OUTER_BYTES];
+    if !read_bytes(high - OUTER_BYTES, &mut stack) {
+        return Vec::new();
+    }
+    let mut frames = Vec::new();
+    for word in stack.chunks_exact(8).rev() {
+        let value = u64::from_le_bytes(word.try_into().unwrap()) as usize;
+        if looks_like_return_address(value) {
+            frames.push(describe(value));
+            if frames.len() == MAX_FRAMES {
+                break;
+            }
         }
-        IN_HANDLER.with(|f| f.set(false));
     }
-    match PREVIOUS_FILTER.load(Ordering::Relaxed) {
-        0 => EXCEPTION_CONTINUE_SEARCH,
-        // SAFETY: stored from the value SetUnhandledExceptionFilter returned.
-        previous => unsafe { std::mem::transmute::<usize, Handler>(previous)(info) },
-    }
+    frames
 }
 
 unsafe extern "system" fn handler(info: *const ExceptionPointers) -> i32 {
@@ -241,7 +248,7 @@ unsafe extern "system" fn handler(info: *const ExceptionPointers) -> i32 {
     // SAFETY: the OS passes valid exception and context records.
     let (record, context) = unsafe { ((*info).record, (*info).context) };
     if !record.is_null() && !context.is_null() {
-        log_exception(record, context, false);
+        log_exception(record, context);
     }
     IN_HANDLER.with(|f| f.set(false));
     EXCEPTION_CONTINUE_SEARCH
@@ -257,18 +264,14 @@ fn reg_text(name: &str, value: u64) -> String {
     }
 }
 
-/// `fatal`: the exception reached the top-level filter, so it is logged even
-/// when it is not one of the named codes or was already logged.
-fn log_exception(record: *const u8, context: *const u8, fatal: bool) {
+fn log_exception(record: *const u8, context: *const u8) {
     // SAFETY: EXCEPTION_RECORD / CONTEXT (x64) field offsets.
     let code = unsafe { (record as *const u32).read_unaligned() };
-    let name = match exception_name(code) {
-        Some(name) => name.to_string(),
-        None if fatal => format!("exception {code:#X}"),
-        None => return,
+    let Some(name) = exception_name(code) else {
+        return;
     };
     let address = unsafe { (record.add(0x10) as *const usize).read_unaligned() };
-    if !fatal {
+    {
         let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
         if seen.len() >= MAX_LOGGED || seen.contains(&(code, address)) {
             return;
@@ -276,8 +279,7 @@ fn log_exception(record: *const u8, context: *const u8, fatal: bool) {
         seen.push((code, address));
     }
 
-    let label = if fatal { "FATAL Exception" } else { "Exception" };
-    let mut text = format!("{label}: {name} at {} (thread {})", describe(address), unsafe { GetCurrentThreadId() });
+    let mut text = format!("Exception: {name} at {} (thread {})", describe(address), unsafe { GetCurrentThreadId() });
     if code == 0xC000_0005 {
         let (kind, target) = unsafe {
             (
@@ -290,7 +292,7 @@ fn log_exception(record: *const u8, context: *const u8, fatal: bool) {
             1 => "write",
             _ => "execute",
         };
-        text = format!("{label}: access violation, {kind} {target:#X}, at {} (thread {})", describe(address), unsafe { GetCurrentThreadId() });
+        text = format!("Exception: access violation, {kind} {target:#X}, at {} (thread {})", describe(address), unsafe { GetCurrentThreadId() });
     }
     logger::error(&text);
 
@@ -315,6 +317,12 @@ fn log_exception(record: *const u8, context: *const u8, fatal: bool) {
     if !frames.is_empty() {
         logger::error(&format!("  stack: {}", frames.join(" < ")));
     }
+    if code == STACK_OVERFLOW {
+        let outer = outer_frames();
+        if !outer.is_empty() {
+            logger::error(&format!("  outermost: {}", outer.join(" > ")));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -336,8 +344,14 @@ mod tests {
         record[..4].copy_from_slice(&0xC000_0005u32.to_le_bytes());
         record[0x10..0x18].copy_from_slice(&0x1234usize.to_le_bytes());
         let context = [0u8; 0x4D0];
-        log_exception(record.as_ptr(), context.as_ptr(), false);
-        log_exception(record.as_ptr(), context.as_ptr(), true);
+        log_exception(record.as_ptr(), context.as_ptr());
+    }
+
+    #[test]
+    fn outer_frames_reach_the_thread_start() {
+        let frames = outer_frames();
+        assert!(!frames.is_empty(), "no outer frames");
+        assert!(frames.iter().any(|f| f.starts_with("KERNEL32") || f.starts_with("ntdll")), "frames: {frames:?}");
     }
 
     #[test]
