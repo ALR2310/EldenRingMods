@@ -65,6 +65,14 @@ InCaves = false         # caves, catacombs and dungeons
 InBossFights = false    # while a boss health bar is on screen
 
 
+[Rendering]
+# HDR output (for example ERSS-FG with HDR on): converts the overlay's colours so they match
+# the game. Read at game start, not on reload.
+HDRMode = "Auto"        # "Auto", "SDR", "HDR10" or "scRGB"
+HDRBrightness = 1.0     # overall brightness, 1.0 = HDR reference white (0.1 - 4.0)
+HDRGamma = 1.0          # above 1.0 darkens dim colours, below 1.0 lifts them (0.5 - 2.0)
+
+
 [Logging]
 # Write a log file next to the DLL, for troubleshooting.
 LogFile = true

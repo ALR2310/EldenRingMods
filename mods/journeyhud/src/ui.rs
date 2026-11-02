@@ -11,6 +11,7 @@ use hudhook::{Hudhook, ImguiRenderLoop, RenderContext};
 
 use common::{input, logger};
 
+use crate::config;
 use crate::map::layer::{Icon, MapLayer};
 use crate::radar::{self, Snapshot as RadarSnapshot};
 use crate::radar_ui::{self, Placement, Radar};
@@ -214,7 +215,8 @@ impl ImguiRenderLoop for HudRenderLoop {
             Ok(loaded) => self.textures = Some(loaded),
             Err(e) => logger::error(&format!("Overlay: textures failed ({e}), flat bars")),
         }
-        logger::log("Overlay: ImGui initialized");
+        let (applied, facts) = hudhook::color::applied();
+        logger::log(&format!("Overlay: ImGui initialized, colour output {applied:?} ({facts})"));
     }
 
     fn before_render<'a>(
@@ -853,7 +855,29 @@ fn textured_frame(
         .build();
 }
 
+/// The HDR conversion of the config for hudhook's pixel shader. An unknown `HDRMode` is
+/// `Auto` (and logged), values out of range are clamped.
+fn hdr_settings(rendering: &config::Rendering) -> hudhook::color::Settings {
+    use hudhook::color::{Mode, Settings};
+    let mode = match rendering.hdr_mode.trim().to_ascii_lowercase().as_str() {
+        "auto" => Mode::Auto,
+        "sdr" => Mode::Sdr,
+        "hdr10" => Mode::Hdr10,
+        "scrgb" => Mode::ScRgb,
+        other => {
+            logger::error(&format!("Rendering.HDRMode \"{other}\" is not Auto, SDR, HDR10 or scRGB, using Auto"));
+            Mode::Auto
+        }
+    };
+    Settings {
+        mode,
+        brightness: rendering.hdr_brightness.clamp(0.1, 4.0) as f32,
+        gamma: rendering.hdr_gamma.clamp(0.5, 2.0) as f32,
+    }
+}
+
 pub fn install() {
+    hudhook::color::set(hdr_settings(&config::get().rendering));
     match Hudhook::builder()
         .with::<ImguiDx12Hooks>(HudRenderLoop::default())
         .build()
@@ -878,6 +902,43 @@ mod tests {
     }
 
     use super::{Trail, effect_time, game_area};
+
+    /// hudhook compiles its pixel shader when the pipeline is built and panics on an error,
+    /// in the game: every conversion must compile.
+    #[test]
+    fn every_hdr_pixel_shader_compiles() {
+        use hudhook::color::{Applied, pixel_shader};
+        use hudhook::windows::Win32::Graphics::Direct3D::Fxc::D3DCompile;
+        use hudhook::windows::Win32::Graphics::Direct3D::{ID3DBlob, ID3DInclude};
+        use hudhook::windows::core::s;
+        for applied in [Applied::None, Applied::Hdr10, Applied::ScRgb] {
+            let src = pixel_shader(applied, 1.5, 0.8);
+            let (mut code, mut err): (Option<ID3DBlob>, Option<ID3DBlob>) = (None, None);
+            let result = unsafe {
+                D3DCompile(
+                    src.as_ptr() as _,
+                    src.len(),
+                    None,
+                    None,
+                    None::<&ID3DInclude>,
+                    s!("main "),
+                    s!("ps_5_0 "),
+                    0,
+                    0,
+                    &mut code,
+                    Some(&mut err),
+                )
+            };
+            let message = err
+                .map(|e| unsafe {
+                    String::from_utf8_lossy(std::slice::from_raw_parts(e.GetBufferPointer() as *const u8, e.GetBufferSize()))
+                        .into_owned()
+                })
+                .unwrap_or_default();
+            assert!(result.is_ok(), "{applied:?}: {message}
+{src}");
+        }
+    }
 
     #[test]
     fn area_is_the_16_9_rect_centered_in_the_display() {

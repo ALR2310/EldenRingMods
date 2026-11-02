@@ -464,8 +464,6 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 [[package]]
 name = "hudhook"
 version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d7f3def5b8fafd0bd3acf6a63fdbe5c637963ce1d207192ef3c47bd4f28b394"
 dependencies = [
  "bitflags 2.13.1",
  "cc",

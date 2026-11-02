@@ -24,6 +24,7 @@ pub struct Config {
     pub player: Player,
     pub layout: Layout,
     pub minimap: Minimap,
+    pub rendering: Rendering,
     pub logging: Logging,
 }
 
@@ -126,6 +127,18 @@ pub struct Layers {
 pub struct Hide {
     pub in_caves: bool,
     pub in_boss_fights: bool,
+}
+
+#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
+#[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
+pub struct Rendering {
+    /// `Auto`, `SDR`, `HDR10` or `scRGB` (any case), see `ui::install`.
+    #[serde(rename = "HDRMode")]
+    pub hdr_mode: String,
+    #[serde(rename = "HDRBrightness")]
+    pub hdr_brightness: f64,
+    #[serde(rename = "HDRGamma")]
+    pub hdr_gamma: f64,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
