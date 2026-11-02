@@ -10,6 +10,10 @@ Báo cáo: YuriElaris (Nexus, 2026-11-01): JourneyHUD + QuestPath làm game tho�
 - `Exception: access violation, read 0xFFFFFFFFFFFFFFFF, at QuestPath.dll+0x18108` có ở cả ME2 và ME3, thread của QuestPath, ngay sau `flag-manager search` của nó: QuestPath tự dò bộ nhớ và tự bắt, vô hại.
 - `Exception: stack overflow at GameOverlayRenderer64.dll` (Steam overlay) chỉ ở ME3: đệ quy trong hook của Steam, chết trước khi hudhook xong.
 
+## Tái hiện ở máy ta (2026-11-02)
+
+Profile ME3 `TestMod` chỉ bật JourneyHUD, QuestPath, WindowResize (không delay, không ERSS-FG) thì crash lặp lại mọi lần: `Exception: stack overflow at GameOverlayRenderer64.dll+0xDE197`, vòng đệ quy nằm trong Steam overlay. Dòng `outermost:` của `crash.rs` cho thấy thread tràn stack do JourneyHUD tạo ra (`JourneyHUD.dll+0x133235` rồi `+0x73677`, `+0x15059`, `+0x1AC98B`, `+0x1AC722`, sau đó vào `ntdll`), cùng với việc log không có `Overlay: DX12 hooks applied`: đó là thread đang cài hook DX12. Các RVA chưa được dịch ra tên hàm (không có công cụ đọc PDB). Cùng build chạy bình thường trên ME2.
+
 ## Nguyên nhân (suy đoán, chưa chứng minh)
 
 hudhook tạo swapchain tạm để lấy vtable DX12 trong lúc QuestPath hook việc tạo DXGI (`DXGI creation hooks installed`) và Steam overlay cũng hook: ba lớp hook gọi lẫn nhau. Mỗi mod chạy riêng thì không lỗi; ME3 nạp DLL gần như đồng thời nên trùng thời điểm.
