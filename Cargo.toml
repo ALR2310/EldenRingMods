@@ -38,6 +38,10 @@ toml_edit = "0.25.17"
 # Menu translation files (common::i18n).
 serde_json = "1"
 
+# hudhook 0.9.3 plus an HDR colour conversion in the DX12 pixel shader (vendor/README.md).
+[patch.crates-io]
+hudhook = { path = "vendor/hudhook" }
+
 [profile.release]
 lto = true
 codegen-units = 1
