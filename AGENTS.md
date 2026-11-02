@@ -25,8 +25,10 @@ hết vào nhánh `mod/` của mod.
   nó (chưa vào `main`) thì sửa trên nhánh đó.
 - **Ngoại lệ: InputBridge** (người dùng, 2026-10-27): cải tiến `inputbridge` làm
   thẳng trong phiên đang làm mod khác, không cần chuyển nhánh.
-- Không tự merge, xoá hay đổi tên nhánh; không tự commit khi chưa được kiểm
-  (xem mục "Quy tắc code và quy trình thử" bên dưới).
+- Không tự merge, xoá hay đổi tên nhánh `mod/...`; không tự commit khi chưa được
+  kiểm (xem mục "Quy tắc code và quy trình thử" bên dưới). Nhánh `shared/...` và
+  `infra/...` thì được xoá sau khi đã merge vào `main` (người dùng, 2026-11-02);
+  merge vào `main` vẫn chờ người dùng bảo.
 
 ## Quy tắc code và quy trình thử
 
