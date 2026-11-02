@@ -31,3 +31,4 @@
 ## Màn hình
 
 - 2026-10-27 [observed] Kích thước cửa sổ game thay đổi (320x168, 800x450); `screenshot(max_width=...)` thu nhỏ khung. Cửa sổ nhỏ thì chữ trong menu rất khó đọc.
+- 2026-11-02 [observed] 2026-11-02: MCP chọn cửa sổ theo tiêu đề có chữ "Elden Ring": một tab Chrome tên "Journey HUD at Elden Ring Nexus" bị chụp thay cho game và phím E có thể đã gửi nhầm vào Chrome. Trước khi bấm phím, kiểm tra dòng "Window:" của screenshot là "ELDEN RING™"; nếu là Chrome thì dừng, báo người dùng đóng hoặc đổi tên tab.
