@@ -2,8 +2,9 @@
 
 ## [Unreleased]
 
-- Added support for placing the minimap and target bar farther right.
-- Added support for menu sprite overrides from other mods.
+- Added support for negative values in the layout offset.
+- Added compatibility with mods that override menu sprites, for example Blue Markers.
+- Added compatibility with HDR output, for example ERSS-FG.
 
 ## [1.0.0] - 2026-11-01
 

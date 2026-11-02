@@ -67,8 +67,9 @@ Chi tiết: `mods/journeyhud/docs/design.md`
 - [ ] [research] JourneyHUD: buildup trong co-op Seamless (2026-10-28, chưa có dịp thử): hai máy cùng đánh một kẻ địch, so dòng log `Buildup:`; máy chủ thấy tổng, máy khách chỉ thấy phần mình? (`docs/buildup.md`)
 - [ ] [verify] JourneyHUD: chữ giờ dưới icon trạng thái của game khi đổi cỡ HUD trong tuỳ chọn game (`mods/journeyhud/docs/effects.md`); còn làm: khối sát thương giữa người chơi (co-op)
 - [ ] [research] JourneyHUD: kẻ địch xung quanh trên minimap, đầu chuỗi beacon trên 2.6.2.0 đến 2.7.1.0 (`docs/map.md`)
-- [ ] [bug] JourneyHUD: crash cùng QuestPath trên ModEngine3 nếu không đặt `initializer.delay.ms = 3000` (YuriElaris, 2026-11-01); tự trì hoãn hook DX12 trong mod (`mods/journeyhud/docs/questpath.md`, hướng dài hạn `docs/overlay_swapchain.md`)
-- [ ] [bug] JourneyHUD: overlay quá sáng trên màn hình HDR 10-bit (ERSS-FG 4.14.1 `IsHDR`/`Force10Bit`, liziai996, 2026-11-01); thêm `HdrMode` / `HdrBrightness` hoặc tự nhận định dạng swap chain rồi bù màu (`mods/journeyhud/docs/hdr.md`)
+- [ ] [verify] JourneyHUD: HDR (liziai996, 2026-11-01): bản có `[Rendering] HDRMode` đã chạy trên máy ta (`Auto` chọn HDR10, hết cháy màu); nhờ liziai996 thử `Auto`, nếu còn sáng thì chỉnh `HDRBrightness`/`HDRGamma` (`mods/journeyhud/docs/hdr.md`)
+- [ ] [bug] JourneyHUD: crash cùng QuestPath trên ModEngine3 nếu không đặt `initializer.delay.ms = 3000` (YuriElaris, 2026-11-01) và DLSS-G của ERSS-FG (liziai996, `ERSS-FG.dll+0x13d87c`, hết khi `delay,20000`); không tái hiện được ở máy ta; tự trì hoãn hook DX12 trong mod (`mods/journeyhud/docs/questpath.md`, hướng dài hạn `docs/overlay_swapchain.md`)
+- [ ] [bug] JourneyHUD: overlay quá sáng trên màn hình HDR 10-bit (ERSS-FG 4.14.1 `IsHDR`/`Force10Bit`, liziai996, 2026-11-01); thêm `HDRMode` / `HDRBrightness` hoặc tự nhận định dạng swap chain rồi bù màu (`mods/journeyhud/docs/hdr.md`)
 - [ ] [bug] JourneyHUD: bật DLSS-G (ERSS-FG) thì nạp DLL ở thời điểm mặc định crash tại `ERSS-FG.dll+0x13d87c`, trì hoãn `delay,20000` hết lỗi (liziai996, 2026-11-01); ghi vào Requirements trên Nexus, gộp với việc tự trì hoãn hook ở trên
 
 ## NoFallDamage
