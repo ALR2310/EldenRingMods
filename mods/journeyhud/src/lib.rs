@@ -45,6 +45,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
                     config::reload()?;
                     logger::set_enabled(config::get().logging.log_file);
                     settings::load(&config::get());
+                    ui::apply_hdr();
                     menu::sync_from_config();
                     Ok(())
                 },
@@ -52,7 +53,18 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         });
         state_icons::install();
         state_icons::install_gauge();
-        ui::install();
+        // The overlay hooks the game's DX12 swap chain; other mods and overlays hook it too, so
+        // `LoadDelay` can hold this back (its own thread: the rest of the mod does not wait).
+        match config::get().general.load_delay {
+            0 => ui::install(),
+            ms => {
+                logger::log(&format!("Overlay: waiting {ms} ms before hooking"));
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(u64::from(ms)));
+                    ui::install();
+                });
+            }
+        }
         common::diag::log_environment_when_game_ready();
         target::run();
     });

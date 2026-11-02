@@ -53,6 +53,10 @@ static MINIMAP_RANGE: AtomicI32 = AtomicI32::new(100);
 static ZOOM_IN_KEYS: [AtomicI32; ZOOM_KEYS] = [AtomicI32::new(VK_OEM_PLUS), AtomicI32::new(0), AtomicI32::new(0), AtomicI32::new(0)];
 static ZOOM_OUT_KEYS: [AtomicI32; ZOOM_KEYS] = [AtomicI32::new(VK_OEM_MINUS), AtomicI32::new(0), AtomicI32::new(0), AtomicI32::new(0)];
 static MINIMAP_SIZE: AtomicI32 = AtomicI32::new(125);
+/// The key that hides and shows the minimap and the target panel (0: none), and whether they are
+/// hidden now. A reload keeps the hidden state: it is the player's, not the file's.
+static TOGGLE_KEY: AtomicI32 = AtomicI32::new(0);
+static HIDDEN: AtomicBool = AtomicBool::new(false);
 
 /// Takes every setting from the loaded config.
 pub fn load(config: &Config) {
@@ -85,6 +89,7 @@ pub fn load(config: &Config) {
     set_minimap_hide_in_caves(minimap.hide.in_caves as u8);
     set_minimap_hide_in_boss_fights(minimap.hide.in_boss_fights as u8);
     set_minimap_range(f64::from(minimap.range));
+    TOGGLE_KEY.store(parse_virtual_key(&config.general.toggle_key, 0), Ordering::Relaxed);
     store_keys(&ZOOM_IN_KEYS, &minimap.zoom_in_key);
     store_keys(&ZOOM_OUT_KEYS, &minimap.zoom_out_key);
     set_minimap_size(f64::from(minimap.size));
@@ -229,6 +234,19 @@ pub fn minimap_range() -> f32 {
 }
 
 /// The virtual-key codes that zoom in (0 = unused).
+pub fn toggle_key() -> i32 {
+    TOGGLE_KEY.load(Ordering::Relaxed)
+}
+
+/// Whether the minimap and the target panel are hidden by the toggle key.
+pub fn hidden() -> bool {
+    HIDDEN.load(Ordering::Relaxed)
+}
+
+pub fn toggle_hidden() {
+    HIDDEN.fetch_xor(true, Ordering::Relaxed);
+}
+
 pub fn zoom_in_keys() -> [i32; ZOOM_KEYS] {
     ZOOM_IN_KEYS.each_ref().map(|key| key.load(Ordering::Relaxed))
 }

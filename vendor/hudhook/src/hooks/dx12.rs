@@ -574,8 +574,7 @@ unsafe fn init_pipeline() -> Result<Mutex<Pipeline<D3D12RenderEngine>>> {
         create_active_context(&swap_chain, &command_queue, &swap_chain_desc, rtv_format)?;
 
     let mut ctx = Context::create();
-    let color = crate::color::resolve(&swap_chain.cast::<IDXGISwapChain>()?, rtv_format);
-    let engine = D3D12RenderEngine::new(&command_queue, &mut ctx, rtv_format, color)?;
+    let engine = D3D12RenderEngine::new(&command_queue, &mut ctx, rtv_format)?;
 
     let Some(render_loop) = RENDER_LOOP.take() else {
         error!("Render loop not yet initialized");
@@ -636,10 +635,13 @@ unsafe fn update_display_size_after_swap_chain_change(
 
 fn render(swap_chain: &IDXGISwapChain3) -> Result<()> {
     unsafe {
+        crate::color::diag("hook: Present reached".to_string());
         if !validate_pending_initialization_context(swap_chain)? {
+            crate::color::diag("hook: waiting for a swap chain with its command queue".to_string());
             return Ok(());
         }
         if !validate_active_context(swap_chain)? {
+            crate::color::diag("hook: active context not valid yet".to_string());
             return Ok(());
         }
 
@@ -657,7 +659,9 @@ fn render(swap_chain: &IDXGISwapChain3) -> Result<()> {
             return Ok(());
         }
 
-        let pipeline = PIPELINE.get_or_try_init(|| init_pipeline())?;
+        let pipeline = PIPELINE.get_or_try_init(|| init_pipeline()).inspect_err(|e| {
+            crate::color::diag(format!("hook: building the pipeline failed: {e:?}"));
+        })?;
 
         let Some(mut pipeline) = pipeline.try_lock() else {
             error!("Could not lock pipeline");
@@ -679,7 +683,10 @@ fn render(swap_chain: &IDXGISwapChain3) -> Result<()> {
         let target: ID3D12Resource =
             swap_chain.GetBuffer(swap_chain.GetCurrentBackBufferIndex())?;
 
-        pipeline.render(target)?;
+        pipeline.render(target).inspect_err(|e| {
+            crate::color::diag(format!("hook: drawing failed: {e:?}"));
+        })?;
+        crate::color::diag("hook: first frame drawn".to_string());
     }
 
     Ok(())
@@ -1018,6 +1025,8 @@ fn get_target_addrs() -> (
 
     let swap_chain2: IDXGISwapChain2 = swap_chain.cast().unwrap();
     let swap_chain3: IDXGISwapChain3 = swap_chain.cast().unwrap();
+    // Local change: note the colour space given to swap chains (crate::color).
+    crate::color::patch_set_color_space1(&swap_chain3);
 
     let create_swap_chain_ptr: DXGIFactoryCreateSwapChainType =
         unsafe { mem::transmute(factory.vtable().base__.base__.CreateSwapChain) };

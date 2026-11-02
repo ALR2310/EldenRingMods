@@ -1,29 +1,36 @@
 //! Local addition to hudhook (not in upstream): colour output of the DX12 overlay.
 //!
 //! ImGui colours and textures are sRGB values. On an SDR swap chain that is right as is. On
-//! an HDR one (HDR10 `R10G10B10A2` in the ST2084 colour space, or scRGB `R16G16B16A16_FLOAT`)
-//! the same numbers are read as PQ or linear light, so the overlay comes out far too bright
-//! and oversaturated. [`set`] lets the host choose a conversion that the pixel shader applies
-//! to every pixel it draws.
+//! an HDR one (HDR10: PQ / ST2084 in Rec.2020, or scRGB: linear Rec.709, 1.0 = 80 nits) the same
+//! numbers are read as PQ or linear light, so the overlay comes out far too bright and
+//! oversaturated. The pixel shader converts every pixel it draws, driven by [`Settings`].
 //!
-//! Set it before the hook is applied; the pipeline reads it when it is built (first frame,
-//! and again whenever the game recreates its swap chain).
+//! Both the settings and the mode can change while the game runs, nothing is baked into the
+//! shader. In [`Mode::Auto`] the mode follows the colour space the game or another mod last
+//! gave the swap chain with `IDXGISwapChain3::SetColorSpace1`: a pointer in the shared swap
+//! chain vtable is replaced (data only, no code patch, so it cannot clash with other hooks)
+//! by a function that notes the value and calls the original. A call made before the patch
+//! was installed is not seen, then `Auto` stays on SDR until the next call.
+
+use std::ffi::c_void;
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicUsize, Ordering};
 
 use parking_lot::Mutex;
 
-use windows::core::Interface;
+use windows::core::{Interface, HRESULT};
 use windows::Win32::Graphics::Dxgi::Common::{
-    DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020, DXGI_FORMAT, DXGI_FORMAT_R10G10B10A2_UNORM,
-    DXGI_FORMAT_R16G16B16A16_FLOAT,
+    DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709, DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020,
+    DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020,
 };
-use windows::Win32::Graphics::Dxgi::{IDXGIOutput6, IDXGISwapChain};
+use windows::Win32::Graphics::Dxgi::IDXGISwapChain3;
+use windows::Win32::System::Memory::{VirtualProtect, PAGE_READWRITE};
 
 /// What the host asks for.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Mode {
     /// No conversion (the upstream behaviour).
     Sdr,
-    /// Convert when the swap chain is 10-bit or half-float and the monitor is in HDR.
+    /// Follow the colour space set on the swap chain (HDR10 or scRGB convert, anything else not).
     Auto,
     /// Force PQ (ST2084) output in Rec.2020.
     Hdr10,
@@ -43,7 +50,7 @@ pub struct Settings {
     pub gamma: f32,
 }
 
-/// What the pipeline ended up using, for the host's log.
+/// The conversion in use right now.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Applied {
     /// No conversion.
@@ -54,93 +61,126 @@ pub enum Applied {
     ScRgb,
 }
 
-static SETTINGS: Mutex<Settings> = Mutex::new(Settings { mode: Mode::Sdr, brightness: 1.0, gamma: 1.0 });
-static APPLIED: Mutex<(Applied, String)> = Mutex::new((Applied::None, String::new()));
+/// What the overlay does now and what it knows, for the host's log.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Status {
+    /// The conversion in use.
+    pub applied: Applied,
+    /// The last colour space (`DXGI_COLOR_SPACE_TYPE` value) seen in `SetColorSpace1`, or -1.
+    pub color_space: i32,
+    /// How many `SetColorSpace1` calls were seen.
+    pub calls: u32,
+}
 
-/// Chooses the conversion for pipelines built from now on.
+static SETTINGS: Mutex<Settings> = Mutex::new(Settings { mode: Mode::Sdr, brightness: 1.0, gamma: 1.0 });
+static COLOR_SPACE: AtomicI32 = AtomicI32::new(-1);
+static CALLS: AtomicU32 = AtomicU32::new(0);
+static ORIGINAL: AtomicUsize = AtomicUsize::new(0);
+static PATCHED: AtomicBool = AtomicBool::new(false);
+
+/// Chooses the conversion; takes effect on the next frame.
 pub fn set(settings: Settings) {
     *SETTINGS.lock() = settings;
 }
 
-/// What the last pipeline used, with the facts it decided on (format, monitor colour space).
-pub fn applied() -> (Applied, String) {
-    APPLIED.lock().clone()
-}
-
-/// Whether the monitor the swap chain is on is in HDR (ST2084). `None` when it cannot be
-/// told.
-fn monitor_is_hdr(swap_chain: &IDXGISwapChain) -> Option<bool> {
-    let output = unsafe { swap_chain.GetContainingOutput() }.ok()?;
-    let desc = unsafe { output.cast::<IDXGIOutput6>().ok()?.GetDesc1() }.ok()?;
-    Some(desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020)
-}
-
-/// Decides the conversion for this swap chain; called when the pipeline is built.
-pub(crate) fn resolve(swap_chain: &IDXGISwapChain, format: DXGI_FORMAT) -> (Applied, f32, f32) {
-    let settings = *SETTINGS.lock();
-    let monitor = monitor_is_hdr(swap_chain);
-    let applied = match settings.mode {
+fn applied_for(mode: Mode, color_space: i32) -> Applied {
+    match mode {
         Mode::Sdr => Applied::None,
         Mode::Hdr10 => Applied::Hdr10,
         Mode::ScRgb => Applied::ScRgb,
-        Mode::Auto => match (format, monitor) {
-            (DXGI_FORMAT_R10G10B10A2_UNORM, Some(true)) => Applied::Hdr10,
-            (DXGI_FORMAT_R16G16B16A16_FLOAT, Some(true)) => Applied::ScRgb,
-            _ => Applied::None,
+        Mode::Auto => {
+            if color_space == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020.0
+                || color_space == DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020.0
+            {
+                Applied::Hdr10
+            } else if color_space == DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709.0 {
+                Applied::ScRgb
+            } else {
+                Applied::None
+            }
         },
-    };
-    *APPLIED.lock() = (
-        applied,
-        format!("mode {:?}, swap chain format {:?}, monitor HDR {:?}", settings.mode, format, monitor),
-    );
-    (applied, settings.brightness, settings.gamma)
+    }
 }
 
-/// The pixel shader (HLSL) for the chosen conversion; public so a host can test-compile it.
-pub fn pixel_shader(applied: Applied, brightness: f32, gamma: f32) -> String {
-    let body = match applied {
-        Applied::None => return PS_PLAIN.to_string(),
-        // sRGB to linear Rec.709, to Rec.2020, scale to nits, PQ (ST2084) encode.
-        Applied::Hdr10 => {
-            "float3 lin = srgb_to_linear(c.rgb);\n\
-             lin = pow(max(lin, 0.0), GAMMA);\n\
-             float3 rec2020 = float3(\n\
-               dot(lin, float3(0.627404, 0.329283, 0.043313)),\n\
-               dot(lin, float3(0.069097, 0.919540, 0.011362)),\n\
-               dot(lin, float3(0.016391, 0.088013, 0.895595)));\n\
-             float3 p = pow(saturate(rec2020 * (203.0 * BRIGHTNESS / 10000.0)), 0.1593017578125);\n\
-             c.rgb = pow((0.8359375 + 18.8515625 * p) / (1.0 + 18.6875 * p), 78.84375);"
-        },
-        // scRGB is linear Rec.709 with 1.0 at 80 nits.
-        Applied::ScRgb => {
-            "float3 lin = srgb_to_linear(c.rgb);\n\
-             c.rgb = pow(max(lin, 0.0), GAMMA) * (203.0 * BRIGHTNESS / 80.0);"
-        },
-    };
-    format!(
-        "#define BRIGHTNESS {brightness:.6}\n#define GAMMA {gamma:.6}\n{PS_HEAD}\n\
-         float3 srgb_to_linear(float3 c) {{\n\
-           return (c <= 0.04045) ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);\n\
-         }}\n\n\
-         float4 main(PS_INPUT input): SV_Target {{\n\
-           float4 c = input.col * texture0.Sample(sampler0, input.uv);\n\
-           {body}\n\
-           return c;\n\
-         }}"
-    )
+/// What the overlay does now.
+pub fn status() -> Status {
+    let color_space = COLOR_SPACE.load(Ordering::Relaxed);
+    Status {
+        applied: applied_for(SETTINGS.lock().mode, color_space),
+        color_space,
+        calls: CALLS.load(Ordering::Relaxed),
+    }
 }
 
-const PS_HEAD: &str = r#"
-struct PS_INPUT {
-  float4 pos: SV_POSITION;
-  float4 col: COLOR0;
-  float2 uv: TEXCOORD0;
-};
+/// The four numbers the pixel shader reads each frame: mode (0 none, 1 HDR10, 2 scRGB), the
+/// brightness multiplier, the gamma exponent and one spare.
+pub(crate) fn frame_params() -> [f32; 4] {
+    let settings = *SETTINGS.lock();
+    let mode = match applied_for(settings.mode, COLOR_SPACE.load(Ordering::Relaxed)) {
+        Applied::None => 0.0,
+        Applied::Hdr10 => 1.0,
+        Applied::ScRgb => 2.0,
+    };
+    [mode, settings.brightness, settings.gamma, 0.0]
+}
 
-SamplerState sampler0: register(s0);
-Texture2D texture0: register(t0);"#;
+/// Index of `SetColorSpace1` in the `IDXGISwapChain3` vtable (IUnknown 3, IDXGIObject 4,
+/// IDXGIDeviceSubObject 1, IDXGISwapChain 10, 1: 11, 2: 7, then GetCurrentBackBufferIndex,
+/// CheckColorSpaceSupport, SetColorSpace1).
+const SET_COLOR_SPACE1_SLOT: usize = 38;
 
-const PS_PLAIN: &str = r#"
+type SetColorSpace1Fn = unsafe extern "system" fn(this: *mut c_void, color_space: i32) -> HRESULT;
+
+unsafe extern "system" fn set_color_space1(this: *mut c_void, color_space: i32) -> HRESULT {
+    // SAFETY: `ORIGINAL` holds the function the slot had before the patch, set before the patch.
+    let original: SetColorSpace1Fn = unsafe { std::mem::transmute(ORIGINAL.load(Ordering::Acquire)) };
+    let result = unsafe { original(this, color_space) };
+    if result.is_ok() {
+        COLOR_SPACE.store(color_space, Ordering::Relaxed);
+        CALLS.fetch_add(1, Ordering::Relaxed);
+    }
+    result
+}
+
+/// Replaces the `SetColorSpace1` slot in the vtable of `swap_chain` (shared by every swap
+/// chain of its class) with a function that records the colour space. Once only.
+pub(crate) fn patch_set_color_space1(swap_chain: &IDXGISwapChain3) {
+    if PATCHED.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    // SAFETY: a COM object starts with a pointer to its vtable; the slot index is that of
+    // `IDXGISwapChain3::SetColorSpace1`, the page is made writable while the pointer is swapped.
+    unsafe {
+        let vtable = *(swap_chain.as_raw() as *const *mut usize);
+        let slot = vtable.add(SET_COLOR_SPACE1_SLOT);
+        let original = *slot;
+        if original == set_color_space1 as SetColorSpace1Fn as usize {
+            return;
+        }
+        let mut old = Default::default();
+        if VirtualProtect(slot as *const c_void, std::mem::size_of::<usize>(), PAGE_READWRITE, &mut old).is_err() {
+            return;
+        }
+        ORIGINAL.store(original, Ordering::Release);
+        *slot = set_color_space1 as SetColorSpace1Fn as usize;
+        let _ = VirtualProtect(slot as *const c_void, std::mem::size_of::<usize>(), old, &mut old);
+    }
+}
+
+/// The pixel shader (HLSL), same for every mode; public so a host can test-compile it.
+///
+/// It reads the mode, brightness and gamma from the root constants (register b0): the vertex
+/// shader's projection matrix has four unused numbers in its third row, the renderer puts
+/// [`frame_params`] there.
+pub fn pixel_shader() -> String {
+    r#"
+    cbuffer pixelBuffer : register(b0) {
+      float4 row0;
+      float4 row1;
+      float4 params;
+      float4 row3;
+    };
+
     struct PS_INPUT {
       float4 pos: SV_POSITION;
       float4 col: COLOR0;
@@ -150,7 +190,45 @@ const PS_PLAIN: &str = r#"
     SamplerState sampler0: register(s0);
     Texture2D texture0: register(t0);
 
+    float3 srgb_to_linear(float3 c) {
+      return (c <= 0.04045) ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
+    }
+
     float4 main(PS_INPUT input): SV_Target {
-      float4 out_col = input.col * texture0.Sample(sampler0, input.uv);
-      return out_col;
-    }"#;
+      float4 c = input.col * texture0.Sample(sampler0, input.uv);
+      if (params.x > 0.5) {
+        float3 lin = pow(max(srgb_to_linear(c.rgb), 0.0), params.z);
+        if (params.x < 1.5) {
+          // HDR10: Rec.709 to Rec.2020, scale to nits, PQ (ST2084) encode.
+          float3 rec2020 = float3(
+            dot(lin, float3(0.627404, 0.329283, 0.043313)),
+            dot(lin, float3(0.069097, 0.919540, 0.011362)),
+            dot(lin, float3(0.016391, 0.088013, 0.895595)));
+          float3 p = pow(saturate(rec2020 * (203.0 * params.y / 10000.0)), 0.1593017578125);
+          c.rgb = pow((0.8359375 + 18.8515625 * p) / (1.0 + 18.6875 * p), 78.84375);
+        } else {
+          // scRGB: linear Rec.709, 1.0 is 80 nits.
+          c.rgb = lin * (203.0 * params.y / 80.0);
+        }
+      }
+      return c;
+    }"#
+        .to_string()
+}
+
+/// Lines about what the DX12 hook sees, for the host's log (hudhook has no logger the host can
+/// read). Each distinct line is kept once.
+static DIAG: Mutex<(Vec<String>, Vec<String>)> = Mutex::new((Vec::new(), Vec::new()));
+
+pub(crate) fn diag(message: String) {
+    let mut diag = DIAG.lock();
+    if diag.1.len() < 64 && !diag.1.contains(&message) {
+        diag.1.push(message.clone());
+        diag.0.push(message);
+    }
+}
+
+/// The lines the hook added since the last call.
+pub fn take_diag() -> Vec<String> {
+    std::mem::take(&mut DIAG.lock().0)
+}

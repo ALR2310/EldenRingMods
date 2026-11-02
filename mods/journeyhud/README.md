@@ -34,6 +34,7 @@ JourneyHUD vẽ một overlay gọn ở góc trên bên phải: phía trên là 
 | **Đường đã đi**           | vệt đường bạn vừa đi trên minimap, mờ dần về phía cũ, tắt được                                                                                                                                                                  |
 | **Map for Goblins**       | marker của mod Map for Goblins DLL (vật phẩm, địa điểm) hiện trên minimap bằng icon của nó, khi mod đó được cài; đọc qua API của nó, tắt được                                                                                   |
 | **Tự ẩn**                 | ẩn dần khi mở menu hay màn hình tải; không khoá mục tiêu thì ẩn panel mục tiêu; tuỳ chọn ẩn minimap trong hang/dungeon hoặc khi đánh boss (panel mục tiêu tự trượt lên)                                                         |
+| **Phím ẩn/hiện**          | một phím (`ToggleKey`, mặc định F6) ẩn hoặc hiện lại minimap và panel mục tiêu; để trống thì không có phím                                                                                                                      |
 
 ## Cấu hình
 

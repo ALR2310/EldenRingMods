@@ -104,7 +104,6 @@ impl D3D12RenderEngine {
         command_queue: &ID3D12CommandQueue,
         ctx: &mut Context,
         rtv_format: DXGI_FORMAT,
-        color: (crate::color::Applied, f32, f32),
     ) -> Result<Self> {
         let device: ID3D12Device = util::try_out_ptr(|v| unsafe { command_queue.GetDevice(v) })?;
         let node_mask = unsafe { command_queue.GetDesc() }.NodeMask;
@@ -132,7 +131,7 @@ impl D3D12RenderEngine {
         let rtv_heap_start = unsafe { rtv_heap.GetCPUDescriptorHandleForHeapStart() };
 
         let (root_signature, pipeline_state) =
-            unsafe { create_shader_program(&device, rtv_format, node_mask, color) }?;
+            unsafe { create_shader_program(&device, rtv_format, node_mask) }?;
 
         let fence = Fence::new(&device)?;
 
@@ -381,10 +380,14 @@ impl D3D12RenderEngine {
         self.command_list.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         self.command_list.SetPipelineState(&self.pipeline_state);
         self.command_list.SetGraphicsRootSignature(&self.root_signature);
+        // Local change: the third row of the projection matrix is not used by the vertex
+        // shader (z is 0), the pixel shader reads the colour conversion from it (crate::color).
+        let mut constants = self.projection_buffer;
+        constants[2] = crate::color::frame_params();
         self.command_list.SetGraphicsRoot32BitConstants(
             0,
             16,
-            self.projection_buffer.as_ptr() as *const c_void,
+            constants.as_ptr() as *const c_void,
             0,
         );
         self.command_list.OMSetBlendFactor(Some(&[0f32; 4]));
@@ -420,7 +423,6 @@ unsafe fn create_shader_program(
     device: &ID3D12Device,
     rtv_format: DXGI_FORMAT,
     node_mask: u32,
-    color: (crate::color::Applied, f32, f32),
 ) -> Result<(ID3D12RootSignature, ID3D12PipelineState)> {
     let parameters = [
         D3D12_ROOT_PARAMETER {
@@ -432,7 +434,8 @@ unsafe fn create_shader_program(
                     Num32BitValues: 16,
                 },
             },
-            ShaderVisibility: D3D12_SHADER_VISIBILITY_VERTEX,
+            // Local change: the pixel shader reads three of these numbers (crate::color).
+            ShaderVisibility: D3D12_SHADER_VISIBILITY_ALL,
         },
         D3D12_ROOT_PARAMETER {
             ParameterType: D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
@@ -519,7 +522,7 @@ unsafe fn create_shader_program(
     }"#;
 
     // Local change: the pixel shader may convert sRGB to the HDR output (see crate::color).
-    let ps_source = crate::color::pixel_shader(color.0, color.1, color.2);
+    let ps_source = crate::color::pixel_shader();
     let ps: &str = &ps_source;
 
     let vtx_shader: ID3DBlob = util::try_out_err_blob(|v, err_blob| unsafe {
