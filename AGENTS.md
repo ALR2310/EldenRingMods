@@ -12,13 +12,12 @@ hết vào nhánh `mod/` của mod.
 - Thay đổi ở `shared/` (crate `common`) hay file gốc repo (README gốc, `TODO.md`,
   `.vscode/tasks.json`, `Cargo.toml`) mà việc của mod đó cần thì cùng nhánh với
   mod.
-- **Việc chung, không thuộc riêng mod nào** (người dùng, 2026-11-02): làm trên
-  nhánh `shared/<chủ đề>` khi sửa crate `shared/` (vd. `shared/crash-handler`),
-  hoặc `infra/<chủ đề>` khi là hạ tầng khác (scripts, `.vscode`, quy tắc, tài
-  liệu chung; vd. `infra/ida-tools`). Tạo từ `main`, mỗi chủ đề một nhánh, tên
-  tiếng Anh kebab-case. Đừng làm việc chung trên nhánh `mod/` của mod đang mở
-  chỉ vì đang ở đó. Nếu thay đổi `shared/` do một mod cần thì vẫn theo quy tắc
-  ở trên (cùng nhánh mod). Không rõ thuộc loại nào thì hỏi.
+- **Tính năng áp dụng cho từ 2 mod trở lên trong cùng một phiên** (người dùng,
+  2026-11-02): tách nhánh riêng, `shared/<chủ đề>` khi chủ yếu sửa crate `shared/`
+  (vd. `shared/crash-handler`), `infra/<chủ đề>` khi là hạ tầng khác (scripts,
+  `.vscode`, tài liệu chung). Việc không thuộc mod nào (vd. sửa quy tắc) cũng
+  làm trên `infra/<chủ đề>`. Tạo từ `main`, mỗi chủ đề một nhánh, tên tiếng Anh
+  kebab-case. Chỉ một mod dùng thì không tách, theo quy tắc ở trên.
 - **Ngoại lệ: thay đổi cùng một kiểu trên nhiều mod** (vd. thêm một trường vào
   `[package.metadata.winresource]` của mọi mod) làm và commit trên `main`, không
   rải lên từng nhánh `mod/` (người dùng, 2026-10-27). Mod chỉ có trên nhánh của
