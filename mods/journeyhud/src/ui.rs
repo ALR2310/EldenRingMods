@@ -154,6 +154,9 @@ struct HudRenderLoop {
     panel_alpha: f32,
     /// 0 to 1: follows whether the game shows its row of status icons, for the times under it.
     icons_alpha: f32,
+    /// The colour conversion last logged, to log again when the game or a mod changes the
+    /// swap chain's colour space.
+    hdr_logged: Option<hudhook::color::Status>,
     radar: Radar,
     /// The world map under the minimap; `None` until the player is in the world (see
     /// `before_render`) and when the game folder is unknown.
@@ -215,8 +218,7 @@ impl ImguiRenderLoop for HudRenderLoop {
             Ok(loaded) => self.textures = Some(loaded),
             Err(e) => logger::error(&format!("Overlay: textures failed ({e}), flat bars")),
         }
-        let (applied, facts) = hudhook::color::applied();
-        logger::log(&format!("Overlay: ImGui initialized, colour output {applied:?} ({facts})"));
+        logger::log("Overlay: ImGui initialized");
     }
 
     fn before_render<'a>(
@@ -247,7 +249,23 @@ impl ImguiRenderLoop for HudRenderLoop {
     }
 
     fn render(&mut self, ui: &mut Ui) {
-        if settings::minimap_enabled() {
+        let hdr = hudhook::color::status();
+        if self.hdr_logged != Some(hdr) {
+            self.hdr_logged = Some(hdr);
+            logger::log(&format!(
+                "Overlay: colour output {:?} (swap chain colour space {}, set {} time(s), HDRMode {:?})",
+                hdr.applied,
+                hdr.color_space,
+                hdr.calls,
+                config::get().rendering.hdr_mode,
+            ));
+        }
+        let toggle = settings::toggle_key();
+        if toggle != 0 && input::is_key_pressed(toggle) {
+            settings::toggle_hidden();
+        }
+        let hidden = settings::hidden();
+        if settings::minimap_enabled() && !hidden {
             for (keys, zoom_in) in [
                 (settings::zoom_in_keys(), true),
                 (settings::zoom_out_keys(), false),
@@ -274,13 +292,15 @@ impl ImguiRenderLoop for HudRenderLoop {
                 );
             }
         }
-        self.radar.draw(
-            ui,
-            snapshot.as_ref(),
-            &Placement { area: self.area },
-            self.map.as_ref(),
-            show_map,
-        );
+        if !hidden {
+            self.radar.draw(
+                ui,
+                snapshot.as_ref(),
+                &Placement { area: self.area },
+                self.map.as_ref(),
+                show_map,
+            );
+        }
         let dt = ui.io().delta_time;
         let wanted = if radar::in_control() { 1.0 } else { 0.0 };
         self.panel_alpha += (wanted - self.panel_alpha) * (dt * FADE_RATE).min(1.0);
@@ -315,7 +335,7 @@ impl ImguiRenderLoop for HudRenderLoop {
             Some((poise, max)) => self.poise_trail.update(target.id, poise, max, dt),
             None => self.poise_trail.id = 0,
         }
-        if self.panel_alpha > 0.01 {
+        if self.panel_alpha > 0.01 && !hidden {
             draw_target(ui, &target, [&self.trail, &self.poise_trail], &layout);
         }
     }
@@ -876,8 +896,23 @@ fn hdr_settings(rendering: &config::Rendering) -> hudhook::color::Settings {
     }
 }
 
-pub fn install() {
+/// Hands the `[Rendering]` HDR keys to the overlay; it uses them from the next frame, so a
+/// reload of the config takes effect without a restart.
+pub fn apply_hdr() {
     hudhook::color::set(hdr_settings(&config::get().rendering));
+}
+
+pub fn install() {
+    apply_hdr();
+    // What the DX12 hook sees (first Present, pipeline errors), once each: hudhook has no log.
+    std::thread::spawn(|| {
+        loop {
+            for line in hudhook::color::take_diag() {
+                logger::log(&format!("Overlay: {line}"));
+            }
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    });
     match Hudhook::builder()
         .with::<ImguiDx12Hooks>(HudRenderLoop::default())
         .build()
@@ -907,12 +942,12 @@ mod tests {
     /// in the game: every conversion must compile.
     #[test]
     fn every_hdr_pixel_shader_compiles() {
-        use hudhook::color::{Applied, pixel_shader};
+        use hudhook::color::pixel_shader;
         use hudhook::windows::Win32::Graphics::Direct3D::Fxc::D3DCompile;
         use hudhook::windows::Win32::Graphics::Direct3D::{ID3DBlob, ID3DInclude};
         use hudhook::windows::core::s;
-        for applied in [Applied::None, Applied::Hdr10, Applied::ScRgb] {
-            let src = pixel_shader(applied, 1.5, 0.8);
+        {
+            let src = pixel_shader();
             let (mut code, mut err): (Option<ID3DBlob>, Option<ID3DBlob>) = (None, None);
             let result = unsafe {
                 D3DCompile(
@@ -935,7 +970,7 @@ mod tests {
                         .into_owned()
                 })
                 .unwrap_or_default();
-            assert!(result.is_ok(), "{applied:?}: {message}
+            assert!(result.is_ok(), "{message}
 {src}");
         }
     }

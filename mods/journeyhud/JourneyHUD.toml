@@ -9,6 +9,12 @@ ReloadKey = "F5"
 # Show a banner after a reload. Errors always show.
 ReloadBanner = false
 
+# Delay in milliseconds before the overlay hooks the game's graphics
+LoadDelay = 5000
+
+# Key that hides and shows the minimap and the target panel (empty = no key).
+ToggleKey = "F6"
+
 
 [Layout]
 # Position of the minimap and target bar, from the top-right corner of the
@@ -66,8 +72,7 @@ InBossFights = false    # while a boss health bar is on screen
 
 
 [Rendering]
-# HDR output (for example ERSS-FG with HDR on): converts the overlay's colours so they match
-# the game. Read at game start, not on reload.
+# Enable HDR mode, and set the brightness and gamma.
 HDRMode = "Auto"        # "Auto", "SDR", "HDR10" or "scRGB"
 HDRBrightness = 1.0     # overall brightness, 1.0 = HDR reference white (0.1 - 4.0)
 HDRGamma = 1.0          # above 1.0 darkens dim colours, below 1.0 lifts them (0.5 - 2.0)

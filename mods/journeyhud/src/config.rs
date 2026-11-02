@@ -36,6 +36,9 @@ pub struct General {
     #[serde(deserialize_with = "common::toml_config::key_name")]
     pub reload_key: String,
     pub reload_banner: bool,
+    #[serde(deserialize_with = "common::toml_config::key_name")]
+    pub toggle_key: String,
+    pub load_delay: u32,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
@@ -243,6 +246,15 @@ mod tests {
         assert_eq!(comments(&text), comments(TEMPLATE));
         assert_eq!(text.lines().count(), TEMPLATE.lines().count());
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn the_toggle_key_is_f6_and_can_be_left_empty() {
+        assert_eq!(common::input::parse_virtual_key(&template().general.toggle_key, 0), 0x75);
+        let parsed: Config = common::toml_config::parse("[General]
+ToggleKey = \"\"
+", TEMPLATE).unwrap();
+        assert_eq!(common::input::parse_virtual_key(&parsed.general.toggle_key, 0), 0);
     }
 
     #[test]
