@@ -298,7 +298,7 @@ pub fn set_width(value: f64) {
 }
 
 pub fn set_offset_x(value: f64) {
-    OFFSET_X.store(value.round().clamp(0.0, 400.0) as i32, Ordering::Relaxed);
+    OFFSET_X.store(value.round().clamp(-400.0, 400.0) as i32, Ordering::Relaxed);
 }
 
 pub fn set_offset_y(value: f64) {

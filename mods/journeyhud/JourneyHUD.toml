@@ -13,7 +13,7 @@ ReloadBanner = false
 [Layout]
 # Position of the minimap and target bar, from the top-right corner of the
 # screen, in pixels at 1080p.
-OffsetX = 48            # distance from the right edge
+OffsetX = 48            # distance from the right edge; negative moves right
 OffsetY = 47            # distance from the top edge
 
 
