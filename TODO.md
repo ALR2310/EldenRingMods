@@ -70,7 +70,6 @@ Chi tiết: `mods/journeyhud/docs/design.md`
 - [ ] [bug] JourneyHUD: crash cùng QuestPath trên ModEngine3 nếu không đặt `initializer.delay.ms = 3000` (YuriElaris, 2026-11-01); tự trì hoãn hook DX12 trong mod (`mods/journeyhud/docs/questpath.md`, hướng dài hạn `docs/overlay_swapchain.md`)
 - [ ] [bug] JourneyHUD: overlay quá sáng trên màn hình HDR 10-bit (ERSS-FG 4.14.1 `IsHDR`/`Force10Bit`, liziai996, 2026-11-01); thêm `HdrMode` / `HdrBrightness` hoặc tự nhận định dạng swap chain rồi bù màu (`mods/journeyhud/docs/hdr.md`)
 - [ ] [bug] JourneyHUD: bật DLSS-G (ERSS-FG) thì nạp DLL ở thời điểm mặc định crash tại `ERSS-FG.dll+0x13d87c`, trì hoãn `delay,20000` hết lỗi (liziai996, 2026-11-01); ghi vào Requirements trên Nexus, gộp với việc tự trì hoãn hook ở trên
-- [ ] JourneyHUD: kim người chơi trên minimap dễ nhìn hơn, và nhận sprite của mod ghi đè `01_common.tpf.dcx` như Blue Markers (WalrusLife, 2026-11-02); hiện chỉ đọc archive gốc (`mods/journeyhud/docs/player_marker.md`)
 
 ## NoFallDamage
 
