@@ -144,7 +144,7 @@ unsafe extern "system" fn find_callback(hwnd: Hwnd, out: isize) -> i32 {
     1
 }
 
-fn find_game_window() -> Option<Hwnd> {
+pub fn find_game_window() -> Option<Hwnd> {
     let mut found: Hwnd = null_mut();
     unsafe { EnumWindows(find_callback, &mut found as *mut Hwnd as isize) };
     (!found.is_null()).then_some(found)

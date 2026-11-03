@@ -22,6 +22,7 @@ pub struct Config {
     pub menu: Menu,
     pub input_bridge: InputBridge,
     pub window_resize: WindowResize,
+    pub taskbar: Taskbar,
     pub map_anywhere: Toggle,
     pub torrent_anywhere: Toggle,
     pub buildup: Buildup,
@@ -70,6 +71,13 @@ pub struct WindowResize {
     pub aspect_height: i32,
     pub min_width: i32,
     pub min_height: i32,
+}
+
+#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
+#[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
+pub struct Taskbar {
+    /// `Game`, `Blank` or `Default` (any case), see `taskbar.rs`.
+    pub icon: String,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]

@@ -72,6 +72,15 @@ MinWidth = 160
 MinHeight = 90
 
 
+[Taskbar]
+# The icon the game shows on its taskbar button (and in Alt-Tab):
+#   "Game"    the game's own icon
+#   "Blank"   a transparent icon
+#   "Default" Windows' generic application icon
+# Takes effect a couple of seconds after the window exists; works with the reload key too.
+Icon = "Game"
+
+
 [MapAnywhere]
 # Open the map and fast travel from anywhere: mid-boss-fight and inside
 # caves/dungeons. Code patch applied at startup, restart the game to undo.
