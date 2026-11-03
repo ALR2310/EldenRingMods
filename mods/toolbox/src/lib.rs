@@ -7,6 +7,7 @@ mod map_anywhere;
 mod patch;
 mod resize;
 mod speffect;
+mod taskbar;
 mod torrent_anywhere;
 mod ui;
 
@@ -45,6 +46,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         std::thread::spawn(torrent_anywhere::run);
         std::thread::spawn(buildup::run);
         std::thread::spawn(resize::run);
+        std::thread::spawn(taskbar::run);
         if startup.input_bridge.enabled {
             let dir = dir.clone();
             std::thread::spawn(move || input::run(&dir));

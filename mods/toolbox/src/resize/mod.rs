@@ -4,4 +4,4 @@
 mod geometry;
 mod window;
 
-pub use window::run;
+pub use window::{find_game_window, run};
