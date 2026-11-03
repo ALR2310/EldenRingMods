@@ -76,6 +76,7 @@ const SWP_FRAMECHANGED: u32 = 0x0020;
 
 const DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2: isize = -4;
 
+const WM_SETICON: u32 = 0x0080;
 const WM_SETCURSOR: u32 = 0x0020;
 const WM_GETMINMAXINFO: u32 = 0x0024;
 const WM_SIZING: u32 = 0x0214;
@@ -255,6 +256,12 @@ fn apply_start_size(hwnd: Hwnd) {
 
 unsafe extern "system" fn wnd_proc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize {
     let orig = ORIG_WNDPROC.load(Ordering::SeqCst);
+    // `[Taskbar] Icon`: whatever icon the game sets is swapped for the configured one.
+    if msg == WM_SETICON
+        && let Some(icon) = crate::taskbar::override_icon()
+    {
+        return unsafe { CallWindowProcW(orig, hwnd, msg, wparam, icon) };
+    }
     if FRAME_ADDED.load(Ordering::SeqCst) {
         match msg {
             WM_ENTERSIZEMOVE => USER_RESIZED.store(true, Ordering::SeqCst),
