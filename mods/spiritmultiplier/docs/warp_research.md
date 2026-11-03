@@ -1,6 +1,6 @@
 # Dịch chuyển spirit về người chơi
 
-**Status 2026-10-09: hoạt động (đã test in-game: hạ ngưỡng và `WarpWhenFar`). Mã: `src/warp.rs`. Mặc định: `WarpDistance=25`, `WarpBlockedTime=1`, `WarpStuckTime=2`, `WarpStuckRange=3` (các giá trị đã test), `WarpWhenFar=false`.**
+**Status 2026-11-03: sửa spirit của khách bị warp về host trong Seamless (mục cuối), đã test host + sandbox: đúng. Status 2026-10-09: hoạt động (đã test in-game: hạ ngưỡng và `WarpWhenFar`). Mã: `src/warp.rs`. Mặc định: `WarpDistance=25`, `WarpBlockedTime=1`, `WarpStuckTime=2`, `WarpStuckRange=3` (các giá trị đã test), `WarpWhenFar=false`.**
 
 ## Cơ chế của game (2.7.1.0, từ IDA)
 
@@ -91,3 +91,14 @@ The node layout is hard-coded, so it is checked first: [layout_known]
 looks for the engine's own code that reads those offsets and, if it is not
 there (the game was updated), the entry features stay off. Every node is
 also checked to be readable before it is touched.
+
+## Seamless: spirit của khách bị warp về host (2026-11-03)
+
+Báo cáo: cả hai triệu hồi, host chạy ra xa thì spirit của đồng đội dịch chuyển tới host, đồng đội chạy lại gần thì lại bị kéo về host. Tái hiện được với host + sandbox; log `WarpProbe` hai máy.
+
+- Giả thuyết đầu (mod đăng ký nhầm spirit của người khác vì `is_remote` sai) **sai**: trên cả hai máy `is_remote` đúng (spirit của người kia `true`), khoá `groups` đúng (id chủ: host 1, khách 2), mod chỉ đăng ký spirit local.
+- Log máy khách: spirit của chính nó ở 58 m so với chủ, mod yêu cầu warp mỗi ~2 s, mỗi lần stage 2 → 3 chạy đủ mà khoảng cách vẫn 58 m: điểm đến không phải người chơi local.
+- Nguyên nhân (IDA, 2.7.1.0): `sub_1404C36B0(manager)`, hàm trả "người chơi để warp tới" cho `sub_1404C0EC0` (tìm điểm) và `sub_1404C3180` (xoay), trả `WorldChrMan.main_player` chỉ khi **không** trong phiên nhiều người. Điều kiện (`sub_1409FA320`): singleton phiên `qword_143D7E540` có danh sách ở `+120..+128` (phần tử 256 byte) không rỗng, hoặc `*(qword_143D6D988+3472)+20 >= 2`; khi đó điểm đến là người chơi trong `player_chr_set` có handle lưu ở `session+144` (host). Cờ khoảng cách/tia chặn ở `sub_1404C28D0` cũng tính theo vị trí từ `sub_1404C37D0` có cùng rẽ nhánh (chưa đụng; mod tự đo khoảng cách tới `main_player` cho spirit của mình).
+- Sửa lần 1 (chỉ đổi đích hai lời gọi `sub_1404C36B0` về `main_player`): spirit của khách warp về chủ nhưng **bị yêu cầu warp liên tục (mỗi ~3 s) và ẩn hiện** khi host đứng xa. Log máy khách: cờ `0x033/0x073` (bit4 tia chặn, bit5 chặn lâu) sau mỗi lần warp, vì cờ ở `sub_1404C28D0` đo tia/khoảng cách tới vị trí từ `sub_1404C37D0` / `sub_1404C39D0`, cũng rẽ nhánh theo phiên (tới host).
+- Sửa lần 2 (`warp.rs`, `force_local_warp_target`, chỉ khi `ersc.dll` đã nạp): cả 4 hàm (`sub_1404C36B0`, `37D0`, `39D0`, `28D0`) hỏi `sub_1409FA320` rồi `test al,al; jz`; đổi đích 4 lời gọi đó sang `xor eax,eax; ret` (AOB duy nhất ở 2.6.2.0 - 2.7.2.0, `codepatch::redirect_rel32`), nên cả đích, vị trí và cờ đều theo người chơi local như solo. Đã test host + sandbox (2026-11-03): spirit của cả hai ở đúng chỗ, không ẩn hiện, không còn yêu cầu warp lặp.
+- Còn lại: vanilla co-op (không Seamless) chưa kiểm xem khách có bị cùng lỗi không.
