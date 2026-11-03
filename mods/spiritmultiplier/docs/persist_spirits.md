@@ -1,6 +1,6 @@
 # Giữ spirit qua grace và dịch chuyển (nghiên cứu)
 
-**Status 2026-11-03: ngồi grace giữ được spirit (đã test solo, 2.7.2.0): `KeepSpiritsOnRest` (`src/keep_on_rest.rs`) chặn hai chỗ, SpEffect 202 (`DisappearAll`) và lời gọi `sub_1404B83B0` trong hàm reset chr `sub_14050E0E0` (đánh cờ xoá mọi nhóm spirit); log: 2 nhóm còn nguyên, bộ đếm huỷ nhóm đều 0. Seamless host + sandbox cũng chạy (2026-11-03, sau khi mod vá lại chỗ bị Seamless ghi đè). Chưa làm: fast travel. Khoá của `groups` là id chủ spirit, không phải map id.**
+**Status 2026-11-03: ngồi grace giữ được spirit (đã test solo, 2.7.2.0): `KeepSpiritsOnRest` (`src/keep_on_rest.rs`) chặn hai chỗ, SpEffect 202 (`DisappearAll`) và lời gọi `sub_1404B83B0` trong hàm reset chr `sub_14050E0E0` (đánh cờ xoá mọi nhóm spirit); log: 2 nhóm còn nguyên, bộ đếm huỷ nhóm đều 0. Seamless host + sandbox cũng chạy (2026-11-03, sau khi mod vá lại chỗ bị Seamless ghi đè). Fast travel đã chốt không làm (xem mục cuối). Khoá của `groups` là id chủ spirit, không phải map id.**
 
 Hai tính năng muốn làm (người dùng, 2026-10-26):
 
@@ -76,3 +76,7 @@ Fast travel chưa xử lý: chưa có log; điều kiện 3 (`manager+0x20 < 0`)
 Thêm log chẩn đoán: lời gọi nào tới `DisappearAll` (điều kiện nào trong 4) và tới `sub_1404BBAA0`; map id người chơi; số nhóm theo từng map id. Test: ngồi grace, fast travel trong cùng map, fast travel xa, chết, đi xa trong overworld, một lần trong Seamless. Kết quả cho biết tín hiệu nhận biết reload, rồi mới viết tính năng.
 
 Tham chiếu: `src/multi_spirit.rs` (`disappear_all_hook`, `groups`), `src/buddy_stone.rs` (`NoRestResummon`, `SummonAnywhere`), `src/warp.rs`, [multi_spirit.md](multi_spirit.md), [summon_anywhere.md](summon_anywhere.md).
+
+## Fast travel: không làm được, đã chốt bỏ (2026-11-03)
+
+Test solo (triệu hồi rồi dịch chuyển tới chính grace đang ngồi) với `PersistProbe`: lúc màn hình tải (`block 0xffffffff`) cả map `groups` biến mất (không còn cả mục khoá 0, khác ngồi grace), chr của spirit không còn (`chr not found` ở log Warp), `active_summon_speffect_id` về `-1` (ngồi grace thì còn giữ), mọi bộ đếm `DisappearAll` và huỷ nhóm đều 0. Tức cả thế giới và manager spirit bị huỷ rồi dựng lại qua màn hình tải: không có lệnh xoá riêng nào để chặn như ngồi grace. Chỉ còn cách tự triệu hồi lại sau khi tải (lưu SpEffect Ash, ghi vào `request_summon_speffect_id` `+0x20` sau khi thế giới sẵn sàng); người dùng không muốn hướng đó (spirit hiện lại bằng hoạt ảnh triệu hồi, đầy máu), nên không làm.
