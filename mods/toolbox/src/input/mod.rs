@@ -1,4 +1,9 @@
-#![allow(non_snake_case)] // crate name is "InputBridge" to control the output DLL's filename
+//! Input bridge (was the `InputBridge` mod): feeds the game keyboard, mouse and focus from the
+//! outside so an agent can play while the window is in the background. `docs/background_input.md`.
+//!
+//! Commands arrive through `Toolbox.cmd` next to the DLL (`cmd.rs`), the DirectInput reads are
+//! filtered by `dinput.rs` (through the overlay's hooks), `focus.rs` spoofs the foreground window
+//! and `gate.rs` clears the game's own focus gate.
 
 mod cmd;
 mod dinput;
@@ -10,9 +15,7 @@ mod winput;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use common::{config, dll_dir, logger};
-
-const DEFAULT_INI: &str = include_str!("../InputBridge.ini");
+use common::logger;
 
 /// One line every 5 s, only when a counter moved: which DirectInput paths the
 /// game really uses, and what they return while the window is not focused.
@@ -51,39 +54,20 @@ fn report_stats() {
     }
 }
 
-/// # Safety
-/// This is exposed this way so the library loader can call it. Do not call it
-/// yourself.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
-    const DLL_PROCESS_ATTACH: u32 = 1;
-    if reason != DLL_PROCESS_ATTACH {
-        return true;
+/// Applies `[InputBridge]` and starts everything; blocks (the command loop), so call it on its
+/// own thread.
+pub fn run(dir: &str) {
+    let config = crate::config::get();
+    let input = &config.input_bridge;
+    dinput::BACKGROUND.store(input.background_keyboard, Ordering::Relaxed);
+    dinput::ISOLATE.store(input.isolate_input, Ordering::Relaxed);
+    focus::ENABLED.store(input.spoof_foreground, Ordering::Relaxed);
+    dinput::install();
+    let gate_ready = input.background_keyboard && gate::resolve();
+    if input.spoof_foreground {
+        focus::install();
     }
-
-    std::thread::spawn(move || {
-        let dir = dll_dir(hmodule);
-        let ini_path = format!("{dir}\\InputBridge.ini");
-        let added_keys = config::load_or_create_default(&ini_path, DEFAULT_INI);
-
-        logger::init(&dir, "InputBridge.log");
-        logger::install_panic_hook();
-        if added_keys > 0 {
-            logger::log(&format!("InputBridge.ini: added {added_keys} key(s) from the template"));
-        }
-
-        dinput::BACKGROUND.store(config::get_bool("BackgroundKeyboard", true), Ordering::Relaxed);
-        dinput::ISOLATE.store(config::get_bool("IsolateInput", true), Ordering::Relaxed);
-        focus::ENABLED.store(config::get_bool("SpoofForeground", true), Ordering::Relaxed);
-        dinput::install();
-        let gate_ready = dinput::BACKGROUND.load(Ordering::Relaxed) && gate::resolve();
-        if focus::ENABLED.load(Ordering::Relaxed) {
-            focus::install();
-        }
-        winput::install();
-        std::thread::spawn(report_stats);
-        cmd::run(&dir, gate_ready);
-    });
-
-    true
+    winput::install();
+    std::thread::spawn(report_stats);
+    cmd::run(dir, gate_ready);
 }

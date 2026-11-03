@@ -67,7 +67,7 @@ Khi thử: tắt mọi DLL tham chiếu khác (xem memory về cô lập kiểm 
 - Đổi Mode rồi reload và qua menu vá lại opcode trong stub mà không crash; log `Weight: mode=... value=...` mới.
 - Với mod trọng lượng khác hook cùng chỗ (vd. ZibaPeso): hộp cảnh báo xung đột vẫn hiện và mod không cài hook.
 
-## WindowResize
+## Toolbox: resize cửa sổ
 
 - Kéo từng cạnh và góc: tỉ lệ 16:9 giữ đúng, cạnh đối diện đứng yên, không nhỏ hơn MinWidth và MinHeight.
 - Width / Height lúc khởi động (cả hai, chỉ một) áp đúng; Fullscreen và Borderless không bị thêm viền.

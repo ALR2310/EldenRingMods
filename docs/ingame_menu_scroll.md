@@ -21,7 +21,7 @@ Bối cảnh: [ingame_menu.md](ingame_menu.md). Phân trang hiện tại là hà
 
 1. **Giữ phân trang** nhưng giảm số hàng gốc: mỗi mod đã chỉ có 1 hàng gốc; 10 mod là 10 hàng. Có GFX có 9 chỗ trống nên chỉ vượt 1 hàng.
 2. **Rải hàng gốc ra các trang có sẵn**: ERNativeUI cho thêm hàng vào Camera, Display, Sound, Network, Keyboard/Mouse, Graphics (`get_builtin_page`); trang
-   Graphics kiểu Advanced Settings có 15 vị trí. Hợp lý về ngữ nghĩa với mod nào gần một mục (ví dụ WindowResize vào Display). Cần client gọi `get_builtin_page`.
+   Graphics kiểu Advanced Settings có 15 vị trí. Hợp lý về ngữ nghĩa với mod nào gần một mục (ví dụ resize cửa sổ của Toolbox vào Display). Cần client gọi `get_builtin_page`.
 3. **Hub chung**: một hàng "Mods" gom mọi mod. API hiện tại không cho nhóm xuyên provider, nên cần sửa host (hoặc một DLL hub đăng ký thay cho các mod).
 4. **Ảo hoá hàng (fork host)**: giữ N hàng vật lý, khi tiêu điểm đi quá hàng cuối/đầu thì gán lại nội dung các hàng theo cửa sổ trượt (giống tái dùng 11
    vị trí của màn gán phím). Phải bắt phím lên/xuống và con lăn chuột, gán lại nhãn/bộ điều khiển giá trị (`PropertySliderController`...), giữ trạng thái focus. Công sức lớn,

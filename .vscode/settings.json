@@ -31,8 +31,7 @@
         "Spiritcaller",
         "spiritmultiplier",
         "vtable",
-        "weightmultiplier",
-        "windowresize"
+        "weightmultiplier"
     ],
     "[toml]": {
         "editor.formatOnSave": false
