@@ -148,6 +148,8 @@ pub struct Rendering {
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct Logging {
     pub log_file: bool,
+    /// Extra diagnostic lines about the map in the log (see `settings::map_probe`).
+    pub map_probe: bool,
 }
 
 const MIGRATION: Migration = Migration { version_key: "General.ConfigVersion", steps: STEPS, keep: &[] };
@@ -246,6 +248,12 @@ mod tests {
         assert_eq!(comments(&text), comments(TEMPLATE));
         assert_eq!(text.lines().count(), TEMPLATE.lines().count());
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn the_log_is_on_and_the_map_probe_is_off_by_default() {
+        let logging = template().logging;
+        assert!(logging.log_file && !logging.map_probe);
     }
 
     #[test]

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Fixed the minimap being blank at the Mistwood after defeating Radahn.
+- Fixed the minimap being blank at Crumbling Farum Azula.
+- Fixed the option to hide the minimap in caves also affecting areas that are not caves.
+
 ## [1.1.0] - 2026-11-02
 
 - Added support for negative values in the layout offset.
