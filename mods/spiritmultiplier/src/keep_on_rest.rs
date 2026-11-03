@@ -63,49 +63,83 @@ unsafe extern "system" fn flag_all_hook(manager: usize) {
     }
 }
 
-fn install() -> bool {
-    let Some(anchor) = memscan::wait_for_pattern_in_module(AOB, Duration::from_millis(500), Duration::from_secs(30))
-    else {
-        logger::error("KeepSpiritsOnRest: pattern not found (game updated?)");
-        return false;
-    };
-    let site = unsafe { anchor.add(CALL_OFFSET) };
-    // SAFETY: reads the 5 bytes of a call found in the game image.
-    let Some(original) = (unsafe { codepatch::rel32_target(site) }) else {
-        if !unsafe { crate::conflicts::check(site, "KeepSpiritsOnRest") } {
-            logger::error("KeepSpiritsOnRest: site is not a call");
+/// One redirected `call`: where it is, our stub, the cell holding the
+/// destination it had before (the game's function, or another mod's stub).
+struct Patch {
+    site: *mut u8,
+    stub: usize,
+    hook: usize,
+    original: &'static AtomicUsize,
+    name: &'static str,
+}
+
+// SAFETY: `site` is an address in the game image, only read/written through codepatch.
+unsafe impl Send for Patch {}
+
+impl Patch {
+    /// Redirects the `call` at `site` to `hook`, remembering its destination.
+    fn apply(site: *mut u8, hook: usize, original: &'static AtomicUsize, name: &'static str) -> Option<Patch> {
+        // SAFETY: reads the 5 bytes of a call found in the game image.
+        let Some(target) = (unsafe { codepatch::rel32_target(site) }) else {
+            if !unsafe { crate::conflicts::check(site, name) } {
+                logger::error(&format!("{name}: site is not a call"));
+            }
+            return None;
+        };
+        original.store(target as usize, Ordering::Relaxed);
+        let jump = codepatch::absolute_jmp(hook as u64);
+        // SAFETY: `site` is the scanned call; the stub takes the same arguments and returns like its destination.
+        let stub = unsafe { codepatch::redirect_rel32(site, &jump) }?;
+        Some(Patch { site, stub: stub as usize, hook, original, name })
+    }
+
+    /// Seamless Co-op redirects the same `call` of the manager update (its
+    /// diff lists the 202 check) after we did, which silently drops our stub
+    /// (log 2026-11-03: the 202 branch ran with the option on). Patches again,
+    /// chained to whatever is there now, when the destination is not ours.
+    fn keep(&mut self) {
+        // SAFETY: reads the 5 bytes of the call at `site`.
+        let now = unsafe { codepatch::rel32_target(self.site) };
+        if now == Some(self.stub as u64) || now.is_none() {
+            return;
         }
-        return false;
-    };
-    ORIGINAL.store(original as usize, Ordering::Relaxed);
-    let stub = codepatch::absolute_jmp(has_effect_hook as *const () as usize as u64);
-    // SAFETY: `site` is the scanned call; the stub takes the same arguments and returns like the original.
-    if (unsafe { codepatch::redirect_rel32(site, &stub) }).is_none() {
-        logger::error("KeepSpiritsOnRest: redirect failed");
-        return false;
+        if let Some(again) = Patch::apply(self.site, self.hook, self.original, self.name) {
+            logger::log(&format!("{}: patch was replaced, applied again", self.name));
+            *self = again;
+        }
+    }
+}
+
+fn find_call(pattern: &str, offset: usize, name: &str) -> Option<*mut u8> {
+    let anchor = memscan::wait_for_pattern_in_module(pattern, Duration::from_millis(500), Duration::from_secs(30));
+    if anchor.is_none() {
+        logger::error(&format!("{name}: pattern not found (game updated?)"));
+    }
+    // SAFETY: `offset` is inside the pattern that matched.
+    anchor.map(|a| unsafe { a.add(offset) })
+}
+
+fn install() -> Vec<Patch> {
+    let mut patches = Vec::new();
+    if let Some(site) = find_call(AOB, CALL_OFFSET, "KeepSpiritsOnRest")
+        && let Some(patch) = Patch::apply(site, has_effect_hook as *const () as usize, &ORIGINAL, "KeepSpiritsOnRest")
+    {
+        patches.push(patch);
     }
     // The world reset flags every spirit group for removal: the second part.
-    let Some(reset) = memscan::wait_for_pattern_in_module(RESET_AOB, Duration::from_millis(500), Duration::from_secs(30))
-    else {
-        logger::error("KeepSpiritsOnRest: reset pattern not found");
-        return true;
-    };
-    let site = unsafe { reset.add(RESET_CALL_OFFSET) };
-    if let Some(original) = unsafe { codepatch::rel32_target(site) } {
-        FLAG_ALL_ORIGINAL.store(original as usize, Ordering::Relaxed);
-        let stub = codepatch::absolute_jmp(flag_all_hook as *const () as usize as u64);
-        if (unsafe { codepatch::redirect_rel32(site, &stub) }).is_none() {
-            logger::error("KeepSpiritsOnRest: reset redirect failed");
-        }
-    } else if !unsafe { crate::conflicts::check(site, "KeepSpiritsOnRest (reset)") } {
-        logger::error("KeepSpiritsOnRest: reset site is not a call");
+    if let Some(site) = find_call(RESET_AOB, RESET_CALL_OFFSET, "KeepSpiritsOnRest (reset)")
+        && let Some(patch) =
+            Patch::apply(site, flag_all_hook as *const () as usize, &FLAG_ALL_ORIGINAL, "KeepSpiritsOnRest (reset)")
+    {
+        patches.push(patch);
     }
-    true
+    patches
 }
 
 pub fn run() {
     KEEP.store(config::get_bool("KeepSpiritsOnRest", true), Ordering::Relaxed);
-    if !install() {
+    let mut patches = install();
+    if patches.is_empty() {
         return;
     }
     logger::log("KeepSpiritsOnRest: patched");
@@ -124,6 +158,9 @@ pub fn run() {
             let keep = config::get_bool("KeepSpiritsOnRest", true);
             if KEEP.swap(keep, Ordering::Relaxed) != keep {
                 logger::log(&format!("KeepSpiritsOnRest={keep}."));
+            }
+            for patch in patches.iter_mut() {
+                patch.keep();
             }
         },
     );
