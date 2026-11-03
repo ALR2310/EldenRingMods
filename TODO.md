@@ -36,41 +36,17 @@ Chi tiết: `mods/spiritmultiplier/docs/open_issues.md`, `docs/warp_research.md`
 
 - [ ] Nghiên cứu hệ số rune riêng theo nguồn (giết địch / bán đồ...; julianpratt, 2026-08-31)
 
-## Kiểm tra lại sau đợt dọn code
-
-Chi tiết từng mục: `docs/cleanup_verify.md`. Chỉ build và unit test, chưa chạy trong game.
-
-- [ ] [verify] `shared/` (codepatch, diag, memscan, config/toml, task/logger): weightmultiplier, spiritmultiplier, speedmultiplier + Seamless, mọi hook AOB
-- [ ] [verify] AutoRegen: tick `Trigger` 0-4, gesture ngồi/cast/đứng dậy, hồi khi đánh trúng (`Mode`, `DamageType`, `ExcludeAow`), hook cài lại khi reload
-- [ ] [verify] AnimCancel: guard/dodge/jump/weapon swap cắt như cũ, luật guard (dual wield, Twin Blades), probe và log mới
-- [ ] [verify] DropMultiplier: `Mode` 0 và 1, `Percentage` 100, `[Materials]`, reload không cộng dồn, log mới
-- [ ] [verify] FasterRevival: chết thường, giữa đòn, đòn tóm, rơi vực; hồi sinh vẫn ~4-5s, log `Death:` / `Fade:` mới
-- [ ] [verify] InfiniteAilment: Scarlet Rot, Poison, Black Flame, Destined Death (cháy và giảm máu tối đa) áp đúng, reload không cộng dồn, log mới
-- [ ] [verify] PassiveRunes: cộng cố định / theo cấp / lãi kép mỗi chu kỳ, mốc thời gian, đồng hồ dừng ngoài thế giới, giá trị âm, log mới
-- [ ] [verify] RiseArcher: buff Bow / Crossbow / Ballista / đạn áp đúng, reload và menu không cộng dồn, cảnh báo ID đạn không tìm thấy, log mới
-- [ ] [verify] RuneMultiplier: hook cài được (log `Hook: installed`), nhân đúng rune nhận được, không nhân khoản trừ, reload đổi hệ số, mod khác dùng AddSoul không xung đột
-- [ ] [verify] WeightMultiplier: hook cài được, Mode 0 (nhân) và Mode 1 (cố định), đổi Mode khi reload và từ menu, phát hiện hook của mod trọng lượng khác
-- [ ] [verify] Toolbox, resize cửa sổ: viền kéo, mũi tên kéo, khoá tỉ lệ, kích thước nhỏ nhất, kích thước khởi động, kéo cạnh và góc
-- [ ] [verify] SpeedMultiplier: tốc độ người chơi theo nhóm, Torrent, spirit, kẻ địch, nạn nhân chí mạng, [[Override]], Seamless (stub), probe, log mới
-- [ ] [verify] SoulsTeleport: WHERE / HERE giữa hai máy, teleport tới đồng đội, từ chối khi thù địch, chặn gói giả người gửi, menu và chặn chuột
-- [ ] [verify] SpiritMultiplier: [verify] spiritmultiplier: sau dọn code, thử trong game (chi tiết docs/cleanup_verify.md)
-
-## Chung
-
-- [ ] Gắn `common::conflict` (cảnh báo hook trùng mod khác) vào các mod hook byte còn lại: autoregen, runemultiplier; xem `shared/docs/conflict.md`. AOB đầu hàm hỏng khi bị hook trước nên cần pattern đuôi
-
 ## JourneyHUD
 
 Chi tiết: `mods/journeyhud/docs/design.md`
 
-- [ ] [bug] JourneyHUD: game crash hỏng heap (0xC0000374, 2026-10-27 20:51, game đang giải phóng `MicrosoftDiskFileOperator`), chưa rõ mod nào; thử chỉ JourneyHUD, bấm F5 ít thôi
+- [ ] [bug] JourneyHUD: game crash hỏng heap (0xC0000374), thấy 2026-10-27 và 2026-11-03, stack chỉ có `eldenring.exe` / `ntdll`, chưa rõ mod nào (`mods/journeyhud/docs/heap_corruption.md`)
 - [ ] [research] JourneyHUD: buildup trong co-op Seamless (2026-10-28, chưa có dịp thử): hai máy cùng đánh một kẻ địch, so dòng log `Buildup:`; máy chủ thấy tổng, máy khách chỉ thấy phần mình? (`docs/buildup.md`)
 - [ ] [verify] JourneyHUD: chữ giờ dưới icon trạng thái của game khi đổi cỡ HUD trong tuỳ chọn game (`mods/journeyhud/docs/effects.md`); còn làm: khối sát thương giữa người chơi (co-op)
 - [ ] [research] JourneyHUD: kẻ địch xung quanh trên minimap, đầu chuỗi beacon trên 2.6.2.0 đến 2.7.1.0 (`docs/map.md`)
-- [ ] [verify] JourneyHUD: HDR (liziai996, 2026-11-01): bản có `[Rendering] HDRMode` đã chạy trên máy ta (`Auto` chọn HDR10, hết cháy màu); nhờ liziai996 thử `Auto`, nếu còn sáng thì chỉnh `HDRBrightness`/`HDRGamma` (`mods/journeyhud/docs/hdr.md`)
-- [ ] [bug] JourneyHUD: crash cùng QuestPath trên ModEngine3 nếu không đặt `initializer.delay.ms = 3000` (YuriElaris, 2026-11-01) và DLSS-G của ERSS-FG (liziai996, `ERSS-FG.dll+0x13d87c`, hết khi `delay,20000`); tái hiện được ở máy ta với QuestPath trên ME3 (2026-11-02), chưa với ERSS-FG; tự trì hoãn hook DX12 trong mod (`mods/journeyhud/docs/questpath.md`, hướng dài hạn `docs/overlay_swapchain.md`)
-- [ ] [bug] JourneyHUD: overlay quá sáng trên màn hình HDR 10-bit (ERSS-FG 4.14.1 `IsHDR`/`Force10Bit`, liziai996, 2026-11-01); thêm `HDRMode` / `HDRBrightness` hoặc tự nhận định dạng swap chain rồi bù màu (`mods/journeyhud/docs/hdr.md`)
-- [ ] [bug] JourneyHUD: bật DLSS-G (ERSS-FG) thì nạp DLL ở thời điểm mặc định crash tại `ERSS-FG.dll+0x13d87c`, trì hoãn `delay,20000` hết lỗi (liziai996, 2026-11-01); ghi vào Requirements trên Nexus, gộp với việc tự trì hoãn hook ở trên
+- [ ] [verify] JourneyHUD: nền bản đồ ở Finger Birthing Grounds (DLC) sau quy tắc điểm gốc cho dungeon legacy; Farum Azula và Haligtree đã đúng (`mods/journeyhud/docs/map.md`)
+- [ ] Phát hành JourneyHUD bản sửa lỗi bản đồ (3 bullet ở `[Unreleased]`), rồi báo Ver3ion trên Nexus (Mistwood, Farum Azula, InCaves) và dán lại trang mô tả
+- [chờ phản hồi] JourneyHUD: HDR bản 1.1.0 (liziai996, 2026-11-01): nhờ thử `HDRMode = "Auto"`, còn sáng thì chỉnh `HDRBrightness` / `HDRGamma` (`mods/journeyhud/docs/hdr.md`)
 
 ## NoFallDamage
 
