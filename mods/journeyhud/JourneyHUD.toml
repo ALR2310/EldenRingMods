@@ -69,6 +69,7 @@ Beacons = true          # beacons you placed on the world map
 MapForGoblins = true    # markers of the Map for Goblins DLL, when it is loaded
 CoopPlayers = true      # co-op partners (Seamless Co-op included)
 Spirits = true          # your summoned spirits
+Enemies = false         # hostile enemies near you, as red dots
 
 
 [Minimap.Hide]
@@ -89,3 +90,6 @@ LogFile = true
 
 # Log the block you are in and the map tiles that are missing, for a blank minimap.
 MapProbe = false
+
+# Log how many hostile enemies the minimap sees.
+EnemyProbe = false

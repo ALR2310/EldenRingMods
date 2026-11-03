@@ -86,6 +86,10 @@
     "label": "Spirit",
     "help": "Đánh dấu spirit đã triệu hồi của bạn trên minimap."
   },
+  "minimap_enemies": {
+    "label": "Kẻ địch",
+    "help": "Đánh dấu kẻ địch gần bạn bằng chấm đỏ trên minimap."
+  },
   "minimap_full_map": {
     "label": "Bản đồ đầy đủ",
     "help": "Hiện toàn bộ bản đồ thế giới. Tắt thì chỉ hiện phần các mảnh bản đồ bạn có đã mở."

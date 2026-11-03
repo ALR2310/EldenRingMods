@@ -52,6 +52,7 @@ static MINIMAP_FULL_MAP: AtomicBool = AtomicBool::new(true);
 static MINIMAP_GOBLINS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_COOP: AtomicBool = AtomicBool::new(true);
 static MINIMAP_SPIRITS: AtomicBool = AtomicBool::new(true);
+static MINIMAP_ENEMIES: AtomicBool = AtomicBool::new(false);
 static MINIMAP_HIDE_IN_CAVES: AtomicBool = AtomicBool::new(false);
 static MINIMAP_HIDE_IN_BOSS_FIGHTS: AtomicBool = AtomicBool::new(false);
 static MINIMAP_RANGE: AtomicI32 = AtomicI32::new(100);
@@ -65,6 +66,8 @@ static TOGGLE_KEY: AtomicI32 = AtomicI32::new(0);
 static HIDDEN: AtomicBool = AtomicBool::new(false);
 /// `Logging.MapProbe`: extra diagnostic lines in the log, for tracking down a map problem.
 static MAP_PROBE: AtomicBool = AtomicBool::new(false);
+/// `Logging.EnemyProbe`: how many hostile enemies the minimap sees, in the log.
+static ENEMY_PROBE: AtomicBool = AtomicBool::new(false);
 
 /// Takes every setting from the loaded config.
 pub fn load(config: &Config) {
@@ -102,6 +105,8 @@ pub fn load(config: &Config) {
     set_minimap_range(f64::from(minimap.range));
     TOGGLE_KEY.store(parse_virtual_key(&config.general.toggle_key, 0), Ordering::Relaxed);
     MAP_PROBE.store(config.logging.map_probe, Ordering::Relaxed);
+    ENEMY_PROBE.store(config.logging.enemy_probe, Ordering::Relaxed);
+    set_minimap_enemies(minimap.layers.enemies as u8);
     store_keys(&ZOOM_IN_KEYS, &minimap.zoom_in_key);
     store_keys(&ZOOM_OUT_KEYS, &minimap.zoom_out_key);
     set_minimap_size(f64::from(minimap.size));
@@ -244,6 +249,11 @@ pub fn minimap_coop() -> bool {
     MINIMAP_COOP.load(Ordering::Relaxed)
 }
 
+/// Whether the hostile enemies near the player are marked with red dots.
+pub fn minimap_enemies() -> bool {
+    MINIMAP_ENEMIES.load(Ordering::Relaxed)
+}
+
 /// Whether the player's summoned spirits are marked.
 pub fn minimap_spirits() -> bool {
     MINIMAP_SPIRITS.load(Ordering::Relaxed)
@@ -267,6 +277,11 @@ pub fn minimap_range() -> f32 {
 /// The virtual-key codes that zoom in (0 = unused).
 pub fn toggle_key() -> i32 {
     TOGGLE_KEY.load(Ordering::Relaxed)
+}
+
+/// Whether to log how many hostile enemies the minimap sees (`Logging.EnemyProbe`).
+pub fn enemy_probe() -> bool {
+    ENEMY_PROBE.load(Ordering::Relaxed)
 }
 
 /// Whether to write the extra diagnostic lines about the map (`Logging.MapProbe`).
@@ -425,6 +440,10 @@ pub fn set_minimap_goblins(value: u8) {
 
 pub fn set_minimap_coop(value: u8) {
     MINIMAP_COOP.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_minimap_enemies(value: u8) {
+    MINIMAP_ENEMIES.store(value != 0, Ordering::Relaxed);
 }
 
 pub fn set_minimap_spirits(value: u8) {
