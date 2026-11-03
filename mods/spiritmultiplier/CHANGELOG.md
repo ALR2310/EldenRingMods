@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Fixed the joiner's spirits teleporting to the host in Seamless Co-op.
 - Fixed enemies being changed by the spirit AI options when another mod shares their AI with spirits.
 
 ## [1.5.0] - 2026-10-23
