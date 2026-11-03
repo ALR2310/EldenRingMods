@@ -43,25 +43,45 @@ fn counting_stub(counter: usize, original: u64) -> Vec<u8> {
     c
 }
 
-fn install_destroy_counters() {
-    for (i, (pattern, offset)) in DESTROY_SITES.iter().enumerate() {
+/// Calls of `DisappearAll` by site: 0 = player has SpEffect 202, 1 = dismiss
+/// request (counted by `multi_spirit::disappear_all_hook`), 2 = "left the stone
+/// area" (`+0x20 < 0` and both range flags off), 3 = player dead, 4 = the
+/// session-reset routine `sub_140C98CA0`. Sites 1 is not patched here.
+static DISAPPEAR_CALLS: [AtomicU64; 4] = [AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0)];
+
+/// (pattern, offset of the `call`), unique in 2.6.2.0 - 2.7.2.0; counter index
+/// into [DISAPPEAR_CALLS] (cond 1 / 3 / 4 / session reset = 0 / 1 / 2 / 3).
+const DISAPPEAR_SITES: [(&str, usize); 4] = [
+    ("48 8B 89 08 E5 01 00 BA CA 00 00 00 E8 ?? ?? ?? ?? 84 C0 74 08 49 8B CF E8", 24),
+    ("41 80 BF B5 00 00 00 00 75 08 49 8B CF E8 ?? ?? ?? ?? E8", 13),
+    ("84 C0 74 08 49 8B CF E8 ?? ?? ?? ?? 48 8D 54 24 60 48 8B CD E8", 7),
+    ("48 8B C8 E8 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 8B 48 08 48 85 C9 74 08 38 99 E1 00 00 00", 3),
+];
+
+fn install_counters(name: &str, sites: &[(&str, usize)], counters: &'static [AtomicU64; 4]) {
+    for (i, (pattern, offset)) in sites.iter().enumerate() {
         let Some(anchor) = memscan::wait_for_pattern_in_module(pattern, Duration::from_millis(500), Duration::from_secs(30))
         else {
-            logger::error(&format!("PersistProbe: destroy site {i} not found"));
+            logger::error(&format!("PersistProbe: {name} site {i} not found"));
             continue;
         };
         let site = unsafe { anchor.add(*offset) };
         // SAFETY: reads the 5 bytes of a call found in the game image.
         let Some(original) = (unsafe { codepatch::rel32_target(site) }) else {
-            logger::error(&format!("PersistProbe: destroy site {i} is not a call"));
+            logger::error(&format!("PersistProbe: {name} site {i} is not a call"));
             continue;
         };
-        let stub = counting_stub(DESTROY_CALLS[i].as_ptr() as usize, original);
+        let stub = counting_stub(counters[i].as_ptr() as usize, original);
         // SAFETY: `site` is the scanned call; the stub counts then tail-jumps to the original destination.
         if (unsafe { codepatch::redirect_rel32(site, &stub) }).is_none() {
-            logger::error(&format!("PersistProbe: destroy site {i} redirect failed"));
+            logger::error(&format!("PersistProbe: {name} site {i} redirect failed"));
         }
     }
+}
+
+fn install_destroy_counters() {
+    install_counters("destroy", &DESTROY_SITES, &DESTROY_CALLS);
+    install_counters("disappear", &DISAPPEAR_SITES, &DISAPPEAR_CALLS);
 }
 
 /// The players of `WorldChrMan.player_chr_set` as the engine's owner-gone
@@ -173,7 +193,13 @@ pub fn run() {
                 text.push_str(" none");
             }
             let destroyed: Vec<u64> = DESTROY_CALLS.iter().map(|c| c.load(Ordering::Relaxed)).collect();
-            text.push_str(&format!("; raw {raw_groups:?}; spirit fx {spirit_effects}; destroy calls {destroyed:?}"));
+            text.push_str(&format!("; raw {raw_groups:?}; spirit fx {spirit_effects}; destroy calls {destroyed:?}; disappear calls (202/dismiss/left-zone/dead/reset) [{}, {}, {}, {}, {}]",
+                DISAPPEAR_CALLS[0].load(Ordering::Relaxed),
+                crate::multi_spirit::DISAPPEAR_HOOK_CALLS.load(Ordering::Relaxed),
+                DISAPPEAR_CALLS[1].load(Ordering::Relaxed),
+                DISAPPEAR_CALLS[2].load(Ordering::Relaxed),
+                DISAPPEAR_CALLS[3].load(Ordering::Relaxed)
+            ));
             // The manager's request/state fields (offsets of `docs/persist_spirits.md`):
             // +0x20 requested summon SpEffect, +0x24 active one, +0x28 dismiss
             // request, +0x38/+0x3C stone, +0x88 cooldown int, +0xB4..+0xB7 flags.
