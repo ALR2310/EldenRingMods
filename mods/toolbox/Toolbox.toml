@@ -1,0 +1,95 @@
+[General]
+# file format version, managed by the mod - don't change
+ConfigVersion = 1
+
+# Key that reloads this file in-game (hotkeys, Buildup amount and the window resize
+# settings; the patches and InputBridge settings need a game restart).
+# https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
+ReloadKey = "F5"
+
+# Show a banner after a reload. Errors always show.
+ReloadBanner = false
+
+# Delay in milliseconds before the menu hooks the game's graphics. Other overlay
+# mods (JourneyHUD, ...) hook it too; a gap between them avoids a clash.
+# 0 = no extra delay.
+LoadDelay = 8000
+
+
+[Menu]
+# Key that opens and closes the in-game Toolbox GUI (F1..F24, a letter/digit,
+# or a virtual-key code like "0x77").
+Key = "F8"
+
+# Extra multiplier on the menu's automatic resolution scale (0.5 - 3.0).
+# Restart the game after changing.
+Scale = 1.0
+
+# Saved menu position and size (1080p units); -1 = default. Updated
+# automatically when you drag or resize the menu, or click Reset.
+X = -1
+Y = -1
+Width = -1
+Height = -1
+
+
+[InputBridge]
+# Lets an agent (the eldenring-input MCP, mcp/server.py) play the game while its window is in
+# the background: keys and mouse arrive through Toolbox.cmd next to the DLL. Read at startup,
+# restart the game after changing.
+Enabled = true
+
+# Keep feeding the game keyboard input while its window is in the background
+# (the game normally drops its keyboard device when it loses focus).
+BackgroundKeyboard = true
+
+# Make the game believe its window is in front while it is not, and keep it
+# from grabbing the mouse cursor in that case.
+SpoofForeground = true
+
+# While the game window is not in front, ignore the real keyboard, mouse and
+# gamepad, so only the agent's keys reach the game.
+IsolateInput = true
+
+
+[WindowResize]
+# Let the game window be resized by dragging its edges (windowed mode only).
+Resizable = true
+
+# Game area size (in pixels) to set the window to when the game starts.
+# 0 = keep the game's own size. Set only one to have the other follow the
+# aspect ratio below.
+Width = 0
+Height = 0
+
+# Keep the game area at this aspect ratio while dragging.
+# Set either value to 0 to resize freely.
+AspectWidth = 16
+AspectHeight = 9
+
+# Smallest game area (in pixels) the window can be dragged down to.
+MinWidth = 160
+MinHeight = 90
+
+
+[MapAnywhere]
+# Open the map and fast travel from anywhere: mid-boss-fight and inside
+# caves/dungeons. Code patch applied at startup, restart the game to undo.
+Enabled = true
+
+
+[TorrentAnywhere]
+# Summon and ride Torrent anywhere, including areas that force a dismount.
+# Code patch applied at startup, restart the game to undo.
+Enabled = true
+
+
+[Buildup]
+# How much buildup each GUI click adds, in bar points.
+# 0 = fill the whole bar (triggers the status at once).
+Amount = 0
+
+
+[Logging]
+# Write a log file next to the DLL, for troubleshooting.
+LogFile = true

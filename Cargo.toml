@@ -13,11 +13,9 @@ members = [
     "mods/soulsteleport",
     "mods/spiritmultiplier",
     "mods/fasterrevival",
-    "mods/windowresize",
     "mods/speedmultiplier",
     "mods/animcancel",
     "mods/autopickup",
-    "mods/inputbridge",
     "mods/toolbox",
 ]
 

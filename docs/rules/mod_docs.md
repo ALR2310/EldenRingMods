@@ -60,7 +60,7 @@ key, sửa bug về hành vi, đổi cấu trúc code/thư mục):
 
 Mọi mod hiện có đều đã theo cấu trúc này; mod mới tạo thì làm theo khuôn mẫu
 `mods/dropmultiplier/`. `CHANGELOG.md` có cho mọi mod đăng Nexus (không có ở
-`sometweaks` và `windowresize`: không đăng).
+`sometweaks` và `toolbox`: không đăng).
 
 README gốc repo (`README.md`) có bảng liệt kê mod (tên, chức năng, Nexus ID)
 và badge số mod. Khi **thêm, xoá, đổi tên** 1 mod, hoặc mod lần đầu lên

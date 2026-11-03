@@ -11,9 +11,11 @@ use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::time::{Duration, Instant};
 
-use common::{config, logger};
+use common::logger;
 
-use crate::geometry::{self, Limits, Rect};
+use crate::config;
+
+use super::geometry::{self, Limits, Rect};
 
 type Hwnd = *mut c_void;
 
@@ -168,7 +170,7 @@ fn sync_frame(hwnd: Hwnd) {
     let style = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) } as u32;
     let windowed = style & WS_CAPTION == WS_CAPTION;
     let has_frame = style & WS_THICKFRAME != 0;
-    let want = windowed && config::get_bool("Resizable", true);
+    let want = windowed && config::get().window_resize.resizable;
 
     if !windowed {
         FRAME_ADDED.store(false, Ordering::SeqCst);
@@ -231,7 +233,10 @@ fn apply_start_size(hwnd: Hwnd) {
         GetWindowRect(hwnd, &mut window);
     }
     let current = (client.right - client.left, client.bottom - client.top);
-    let (width, height) = (config::get_int("Width", 0), config::get_int("Height", 0));
+    let (width, height) = {
+        let config = config::get();
+        (config.window_resize.width, config.window_resize.height)
+    };
     let Some((w, h)) = geometry::start_client_size(width, height, current, &Limits::from_config()) else {
         return;
     };
