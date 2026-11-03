@@ -81,6 +81,55 @@ struct Registry {
     update: UpdateFn,
 }
 
+/// The four places the warp code asks `sub_1409FA320` "are we in a multiplayer
+/// session?" (`call`, then `test al,al; jz`): `sub_1404C36B0` (the player to
+/// warp to), `sub_1404C37D0` and `sub_1404C39D0` (that player's position) and
+/// `sub_1404C28D0` (the flags). All unique in 2.6.2.0 - 2.7.2.0. (pattern,
+/// offset of the `call` to `sub_1409FA320`).
+const SESSION_CHECKS: [(&str, &str, usize); 4] = [
+    ("target", "48 8B 9B 08 E5 01 00 E8 ?? ?? ?? ?? 48 8B C8 E8 ?? ?? ?? ?? 84 C0 0F 84", 15),
+    ("position A", "66 0F 7F 03 E8 ?? ?? ?? ?? 48 8B C8 E8 ?? ?? ?? ?? 84 C0 0F 84", 12),
+    ("position B", "E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B C8 E8 ?? ?? ?? ?? 84 C0 0F 84 AC 00 00 00", 13),
+    ("flags", "0F 29 4C 24 30 E8 ?? ?? ?? ?? 48 8B C8 E8 ?? ?? ?? ?? 84 C0 74 6D", 13),
+];
+
+/// Makes the warp code treat the game as not being in a session, so it uses
+/// the local player (`WorldChrMan.main_player`) everywhere. In a session
+/// (party list non-empty or 2+ players) it uses the player whose handle the
+/// session singleton holds (`+144`, the host) instead: a guest's spirits then
+/// warped to the host, and the flags (line of sight, distance) were measured
+/// to the host, so they were asked to warp again after every warp (log
+/// 2026-11-03: guest's spirits re-warping every ~3 s while the host stood far
+/// away, and blinking in and out). Each `call sub_1409FA320` goes to `xor
+/// eax,eax; ret`. Returns whether all four were redirected.
+fn force_local_warp_target() -> bool {
+    let mut all = true;
+    for (name, pattern, offset) in SESSION_CHECKS {
+        let Some(anchor) =
+            memscan::wait_for_pattern_in_module(pattern, Duration::from_millis(500), Duration::from_secs(30))
+        else {
+            logger::error(&format!("Warp: {name} pattern not found."));
+            all = false;
+            continue;
+        };
+        let site = unsafe { anchor.add(offset) };
+        // SAFETY: reads the 5 bytes of a call found in the game image.
+        if unsafe { codepatch::rel32_target(site) }.is_none() {
+            if !unsafe { crate::conflicts::check(site, &format!("Warp ({name})")) } {
+                logger::error(&format!("Warp: {name} site is not a call."));
+            }
+            all = false;
+            continue;
+        }
+        // SAFETY: `site` is the scanned call; the stub returns 0 like `sub_1409FA320` returning false.
+        if (unsafe { codepatch::redirect_rel32(site, &[0x31, 0xC0, 0xC3]) }).is_none() {
+            logger::error(&format!("Warp: {name} redirect failed."));
+            all = false;
+        }
+    }
+    all
+}
+
 /// Whether Seamless Co-op (`ersc.dll`) is loaded.
 fn seamless_loaded() -> bool {
     common::diag::is_module_loaded("ersc.dll")
@@ -391,6 +440,41 @@ impl Threshold {
     }
 }
 
+/// `WarpProbe`: who the groups belong to. The `groups` map is keyed by the
+/// owner's player id (`*(PlayerIns+1408 -> +8)`, `docs/persist_spirits.md`), so
+/// comparing each key with the local player's tells a remote spirit apart
+/// without `is_remote`, which Seamless's own spirit creation may leave 0
+/// (spirits of the other player warped to the local player, 2026-11-03).
+fn describe_groups(world_chr_man: &WorldChrMan) -> Option<String> {
+    let player = common::player::main_player_chr_ins_ptr()? as usize;
+    // SAFETY: PlayerIns +1408 is the pointer `sub_1406576E0` reads (null = the
+    // engine falls back to a default), checked readable before the +8 read.
+    let local = unsafe {
+        let data: usize = rd(player, 1408);
+        if readable(data, 16) { Some(rd::<u32>(data, 8)) } else { None }
+    };
+    let mut text = format!("WarpProbe: local owner id {local:x?}; groups:");
+    let mut none = true;
+    for pair in world_chr_man.summon_buddy_manager.groups.iter() {
+        for g in pair.second.iter() {
+            none = false;
+            let handle = unsafe { (&g.chr_ins.as_ref().field_ins_handle as *const _ as *const u64).read_unaligned() };
+            text.push_str(&format!(
+                " [key {:#x}{} is_remote {} alive {} buddy {} handle {handle:#x}]",
+                pair.first,
+                if Some(pair.first as u32) == local { " (local)" } else { "" },
+                g.is_remote,
+                crate::multi_spirit::group_alive(g),
+                g.buddy_param_id
+            ));
+        }
+    }
+    if none {
+        text.push_str(" none");
+    }
+    Some(text)
+}
+
 /// One line describing the warp manager, or `None` if it is not readable.
 fn describe(a1: usize) -> Option<String> {
     if !readable(a1, 64) {
@@ -442,6 +526,9 @@ pub fn run() {
         ) {
             (Some(register), Some(unregister), Some(update)) => {
                 logger::log("Warp: Seamless Co-op found - its spirits are registered for warping here.");
+                if force_local_warp_target() {
+                    logger::log("Warp: spirits warp to their own owner, not the session's host.");
+                }
                 Some(unsafe {
                     Registry {
                         register: std::mem::transmute::<usize, RegisterFn>(register),
@@ -463,6 +550,7 @@ pub fn run() {
     let mut elapsed_ms: f64 = TICK_INTERVAL_MS;
     let mut request_ms: f64 = 0.0;
     let mut last = String::new();
+    let mut last_groups = String::new();
     let mut when_far = false;
     let mut thresholds = [
         Threshold::new("WarpDistance", |m| &mut m.trigger_dist_to_player),
@@ -524,6 +612,13 @@ pub fn run() {
                 {
                     logger::log(&text);
                     last = text;
+                }
+                if config::get_bool("WarpProbe", false)
+                    && let Some(text) = describe_groups(world_chr_man)
+                    && text != last_groups
+                {
+                    logger::log(&text);
+                    last_groups = text;
                 }
             }
 
