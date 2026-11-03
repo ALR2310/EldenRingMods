@@ -80,6 +80,9 @@ MinHeight = 90
 # Takes effect a couple of seconds after the window exists; works with the reload key too.
 Icon = "Game"
 
+# Stop the taskbar button from flashing when the game asks for attention.
+StopFlashing = true
+
 
 [MapAnywhere]
 # Open the map and fast travel from anywhere: mid-boss-fight and inside

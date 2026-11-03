@@ -78,6 +78,7 @@ pub struct WindowResize {
 pub struct Taskbar {
     /// `Game`, `Blank` or `Default` (any case), see `taskbar.rs`.
     pub icon: String,
+    pub stop_flashing: bool,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]

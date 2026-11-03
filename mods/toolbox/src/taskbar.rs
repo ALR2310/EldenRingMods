@@ -1,9 +1,15 @@
 //! Replaces the game's icon on its taskbar button (and title bar / Alt-Tab) with a blank or the
-//! default Windows one (`[Taskbar] Icon`). Done with `WM_SETICON` plus the window class icons;
-//! `"Game"` restores what the window had. The game or Windows may put the icon back (new window,
-//! Explorer restart), so it is checked every couple of seconds.
+//! default Windows one (`[Taskbar] Icon`), and stops the button from flashing
+//! (`[Taskbar] StopFlashing`).
+//!
+//! The icon is set with `WM_SETICON` plus the window class icons; `"Game"` restores what the
+//! window had. The game sets its own icon again at times (about 15 s after start, when it switches
+//! the window mode), so the window procedure that `resize` already subclasses asks
+//! [`override_icon`] and swaps the icon of every `WM_SETICON`: the game's never shows. The loop
+//! here is the fallback for icons set some other way, and applies the first one.
 
 use std::ffi::c_void;
+use std::sync::atomic::{AtomicIsize, Ordering};
 use std::time::Duration;
 
 use common::logger;
@@ -20,6 +26,34 @@ struct IconInfo {
     y_hotspot: u32,
     mask: isize,
     color: isize,
+}
+
+#[repr(C)]
+struct FlashInfo {
+    size: u32,
+    hwnd: Hwnd,
+    flags: u32,
+    count: u32,
+    timeout: u32,
+}
+
+const FLASHW_STOP: u32 = 0;
+
+/// The icon every `WM_SETICON` on the game window must carry (0 = leave them alone).
+static WANTED_ICON: AtomicIsize = AtomicIsize::new(0);
+
+/// For the game window's procedure: the icon to put into a `WM_SETICON` instead of the game's.
+pub fn override_icon() -> Option<isize> {
+    match WANTED_ICON.load(Ordering::Relaxed) {
+        0 => None,
+        icon => Some(icon),
+    }
+}
+
+/// Clears the "needs attention" flash of the taskbar button.
+fn stop_flash(hwnd: Hwnd) {
+    let info = FlashInfo { size: std::mem::size_of::<FlashInfo>() as u32, hwnd, flags: FLASHW_STOP, count: 0, timeout: 0 };
+    unsafe { FlashWindowEx(&info) };
 }
 
 #[link(name = "gdi32")]
@@ -41,6 +75,7 @@ unsafe extern "system" {
     ) -> isize;
     fn CreateIconIndirect(info: *const IconInfo) -> isize;
     fn LoadIconW(instance: *mut c_void, name: *const u16) -> isize;
+    fn FlashWindowEx(info: *const FlashInfo) -> i32;
     fn GetClassLongPtrW(hwnd: Hwnd, index: i32) -> usize;
     fn SetClassLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> usize;
 }
@@ -133,15 +168,20 @@ pub fn run() {
     let mut last_mode = Mode::Game;
     let mut rewrites = 0u32;
     loop {
-        std::thread::sleep(Duration::from_secs(2));
-        let mode = parse(&config::get().taskbar.icon);
+        std::thread::sleep(Duration::from_millis(250));
+        let config = config::get();
+        let mode = parse(&config.taskbar.icon);
         let Some(hwnd) = find_game_window() else { continue };
+        if config.taskbar.stop_flashing {
+            stop_flash(hwnd);
+        }
         if hwnd != window {
             // A new window (or the first): it has its own icons, nothing to restore on the old.
             window = hwnd;
             original = None;
         }
         if mode == Mode::Game {
+            WANTED_ICON.store(0, Ordering::Relaxed);
             if let Some(icons) = original.take() {
                 write(hwnd, icons);
                 logger::log("Taskbar: game icon restored");
@@ -162,6 +202,7 @@ pub fn run() {
             logger::warn("Taskbar: icon not created");
             continue;
         }
+        WANTED_ICON.store(icon, Ordering::Relaxed);
         let wanted = Icons(icon, icon, icon, icon);
         let current = read(hwnd);
         if current != wanted {
