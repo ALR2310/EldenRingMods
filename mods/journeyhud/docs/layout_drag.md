@@ -1,6 +1,6 @@
 # JourneyHUD: kéo thả minimap và panel mục tiêu
 
-**Status 2026-11-03: mới nghiên cứu, chưa viết mã. Kết luận: làm được, nhưng phần khó là cho người chơi một con trỏ chuột tự do mà không làm game xoay camera hay xung đột với DLL khác; vị trí và lưu cấu hình thì đã có sẵn gần hết. `souls_vision` có kéo thả nhưng chỉ kiểu "mở menu game để có con trỏ" (hướng C). Đề xuất chia giai đoạn (phím mũi tên hoặc hướng C trước, kéo thả có bắt chuột sau).**
+**Status 2026-11-03: đã viết hướng B (kéo thả có bắt chuột) và thử qua MCP: kéo minimap và thanh mục tiêu chạy, camera đứng yên, ghi file khi nhả chuột (chưa thử cùng ERSS, và `MousePoll` của bản sao hook trong JourneyHUD báo false khi Toolbox đã hook trước, DirectInput vẫn chặn được). `General.DragKey` (F7) bật chế độ: cài lười các hook con trỏ và chặn chuột của `common::overlay` ở lần bấm đầu, đặt `overlay::MENU_OPEN` để game không thấy chuột, vẽ khung quanh minimap và thanh mục tiêu, kéo thì đổi offset ngay và ghi file khi nhả chuột. Mã: `src/drag.rs`, `src/ui.rs`, `shared/src/overlay/mod.rs` (mở `feed_mouse`, `blocks_window_message`). Các mục bên dưới là nghiên cứu trước khi làm.**
 
 ## Hiện trạng
 
@@ -39,6 +39,8 @@ Kết luận: hướng C chạy được với chi phí rất thấp nhưng ch�
   - Kéo riêng thanh mục tiêu: thêm khoá cộng thêm (vd. `Target.OffsetX/OffsetY`, mặc định 0, tính từ chỗ mặc định dưới minimap) để cấu hình cũ không đổi; khi minimap ẩn, thanh vẫn giữ độ lệch tương đối khi trượt lên.
 - **Giao diện chỉnh:** khung viền quanh từng phần, tên ("Minimap", "Target"), dòng gợi ý phím; nhấp đúp vào khung để về mặc định; gần mép màn hình thì hít vào mép.
 - **Lưu:** khi nhả chuột gọi `config::save` như menu (giữ comment), và `settings::set_offset_*` để áp dụng ngay; đây là chỗ giống hệt đường slider.
+
+- **Trượt lên khi minimap ẩn (người dùng chốt 2026-11-03):** thanh mục tiêu chỉ trượt lên chiếm chỗ minimap (ẩn trong hang, khi đánh boss) khi `TargetOffsetX/Y` đều 0; thanh đã kéo đi thì đứng yên, và trong chế độ kéo luôn đứng ở chỗ có minimap (`radar_ui::column_height(res, slides)`).
 
 ## Rủi ro cần kiểm trước khi viết
 

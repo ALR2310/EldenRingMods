@@ -28,6 +28,12 @@ static PLAYER_SCALE: AtomicU32 = AtomicU32::new(0x3F33_3333);
 static WIDTH: AtomicI32 = AtomicI32::new(250);
 static OFFSET_X: AtomicI32 = AtomicI32::new(48);
 static OFFSET_Y: AtomicI32 = AtomicI32::new(47);
+/// Where the target bar is moved from its place under the minimap, same directions as the offsets.
+static TARGET_OFFSET_X: AtomicI32 = AtomicI32::new(0);
+static TARGET_OFFSET_Y: AtomicI32 = AtomicI32::new(0);
+/// The key that starts and ends the drag mode (0: none), and whether the mode is on (`drag.rs`).
+static DRAG_KEY: AtomicI32 = AtomicI32::new(0);
+static DRAGGING: AtomicBool = AtomicBool::new(false);
 /// `f32` bits.
 static SCALE: AtomicU32 = AtomicU32::new(0x3F80_0000);
 /// `f32` bits.
@@ -73,6 +79,9 @@ pub fn load(config: &Config) {
     set_width(f64::from(target.width));
     set_offset_x(f64::from(config.layout.offset_x));
     set_offset_y(f64::from(config.layout.offset_y));
+    set_target_offset_x(f64::from(config.layout.target_offset_x));
+    set_target_offset_y(f64::from(config.layout.target_offset_y));
+    DRAG_KEY.store(parse_virtual_key(&config.general.drag_key, 0), Ordering::Relaxed);
     set_scale(target.scale);
     set_minimap_enabled(minimap.enabled as u8);
     set_minimap_map(minimap.layers.map as u8);
@@ -141,6 +150,25 @@ pub fn width() -> f32 {
 /// the top-right corner of the game's picture, in pixels at 1080p.
 pub fn offset() -> [f32; 2] {
     [OFFSET_X.load(Ordering::Relaxed) as f32, OFFSET_Y.load(Ordering::Relaxed) as f32]
+}
+
+/// Where the target bar is moved from its place under the minimap (`TargetOffsetX/Y`).
+pub fn target_offset() -> [f32; 2] {
+    [TARGET_OFFSET_X.load(Ordering::Relaxed) as f32, TARGET_OFFSET_Y.load(Ordering::Relaxed) as f32]
+}
+
+/// The key that starts and ends the drag mode (0 = none).
+pub fn drag_key() -> i32 {
+    DRAG_KEY.load(Ordering::Relaxed)
+}
+
+/// Whether the drag mode is on: the minimap and the bar show whatever the game is doing.
+pub fn dragging() -> bool {
+    DRAGGING.load(Ordering::Relaxed)
+}
+
+pub fn set_dragging(on: bool) {
+    DRAGGING.store(on, Ordering::Relaxed);
 }
 
 /// Size multiplier of the minimap.
@@ -329,6 +357,14 @@ pub fn set_offset_x(value: f64) {
 
 pub fn set_offset_y(value: f64) {
     OFFSET_Y.store(value.round().clamp(0.0, 400.0) as i32, Ordering::Relaxed);
+}
+
+pub fn set_target_offset_x(value: f64) {
+    TARGET_OFFSET_X.store(value.round().clamp(-400.0, 400.0) as i32, Ordering::Relaxed);
+}
+
+pub fn set_target_offset_y(value: f64) {
+    TARGET_OFFSET_Y.store(value.round().clamp(-400.0, 400.0) as i32, Ordering::Relaxed);
 }
 
 pub fn set_minimap_scale(value: f64) {

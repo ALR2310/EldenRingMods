@@ -15,12 +15,17 @@ LoadDelay = 5000
 # Key that hides and shows the minimap and the target panel (empty = no key).
 ToggleKey = "F6"
 
+# Key that hides and shows the minimap and the target panel (empty = no key).
+DragKey = "F7"
+
 
 [Layout]
 # Position of the minimap and target bar, from the top-right corner of the
 # screen, in pixels at 1080p.
 OffsetX = 48            # distance from the right edge; negative moves right
 OffsetY = 47            # distance from the top edge
+TargetOffsetX = 0       # moves the target bar from its place under the minimap, same directions as
+TargetOffsetY = 0       # OffsetX and OffsetY (dragging sets these); a moved bar no longer slides up
 
 
 [Target]
