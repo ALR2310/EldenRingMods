@@ -11,6 +11,8 @@
 
 mod input_block;
 
+pub use input_block::{InputExtension, set_extension as set_input_extension};
+
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -21,6 +23,8 @@ use hudhook::windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use hudhook::{BeforeWndProc, Hudhook, ImguiRenderLoop, MessageFilter, RenderContext};
 
 pub use hudhook::imgui::Ui;
+/// MinHook (`MhHook`...), for a mod that hooks more than the overlay does.
+pub use hudhook::mh;
 
 use crate::{config, logger};
 
@@ -70,7 +74,7 @@ const MENU_SCALE_MIN: f32 = 0.5;
 const MENU_SCALE_MAX: f32 = 3.0;
 
 fn menu_scale() -> f32 {
-    let v = config::get_double(KEY_MENU_SCALE, 1.0) as f32;
+    let v = read_f64(KEY_MENU_SCALE, 1.0) as f32;
     if v.is_finite() { v.clamp(MENU_SCALE_MIN, MENU_SCALE_MAX) } else { 1.0 }
 }
 
@@ -90,6 +94,44 @@ const KEY_H: &str = "MenuHeight";
 
 static INI_PATH: OnceLock<String> = OnceLock::new();
 
+/// Where the overlay reads and writes its settings (`MenuScale`, `MenuX`, `MenuY`, `MenuWidth`,
+/// `MenuHeight`, plus whatever the mod passes to [save_ini_values]) when the mod's config is not
+/// an ini: a TOML mod maps these key names to its own entries. Without one the ini of
+/// [set_ini_path] is used.
+pub struct Store {
+    /// Current value of a key, `None` if the config has none.
+    pub get: fn(&str) -> Option<f64>,
+    /// Saves `(key, text)` pairs and makes them current; returns whether it worked.
+    pub save: fn(&[(&str, String)]) -> bool,
+}
+
+static STORE: OnceLock<Store> = OnceLock::new();
+
+/// Redirects the overlay's settings to a non-ini config, see [Store]. Call before [install].
+pub fn set_store(store: Store) {
+    let _ = STORE.set(store);
+}
+
+fn read_f64(key: &str, default: f64) -> f64 {
+    match STORE.get() {
+        Some(store) => (store.get)(key).unwrap_or(default),
+        None => config::get_double(key, default),
+    }
+}
+
+/// Saves into the [Store] or, without one, the ini; `None` when neither is set up.
+fn write_values(values: &[(&str, String)]) -> Option<bool> {
+    if let Some(store) = STORE.get() {
+        return Some((store.save)(values));
+    }
+    let path = INI_PATH.get()?;
+    let ok = config::set_values(path, values);
+    if ok {
+        config::load(path);
+    }
+    Some(ok)
+}
+
 /// Tells the overlay which ini file to persist its layout (`MenuX`/`MenuY`/
 /// `MenuWidth`/`MenuHeight`) and any [set_ini_values] calls into. Call before
 /// [install].
@@ -102,24 +144,19 @@ pub fn ini_path() -> Option<&'static str> {
     INI_PATH.get().map(String::as_str)
 }
 
-/// Updates `values` in the ini file registered via [set_ini_path] AND reloads
-/// the in-memory `common::config` map so the change takes effect immediately.
+/// Updates `values` in the config file (the ini of [set_ini_path], or the [Store]) AND reloads
+/// it so the change takes effect immediately.
 pub fn save_ini_values(values: &[(&str, String)]) -> bool {
-    let Some(path) = INI_PATH.get() else {
-        return false;
-    };
-    let ok = config::set_values(path, values);
-    if ok {
-        config::load(path);
-    } else {
-        logger::error("Menu: saving values to ini failed");
+    let ok = write_values(values).unwrap_or(false);
+    if !ok {
+        logger::error("Menu: saving values to the config failed");
     }
     ok
 }
 
 fn saved_layout(cfg: &WindowConfig) -> ([f32; 2], [f32; 2]) {
     let read = |key: &str, default: f32, min: f32| {
-        let v = config::get_double(key, -1.0) as f32;
+        let v = read_f64(key, -1.0) as f32;
         if v.is_finite() && v >= min { v } else { default }
     };
     (
@@ -129,16 +166,10 @@ fn saved_layout(cfg: &WindowConfig) -> ([f32; 2], [f32; 2]) {
 }
 
 fn save_layout(pos: [f32; 2], size: [f32; 2]) {
-    let Some(path) = INI_PATH.get() else {
-        return;
-    };
     let fmt = |v: f32| format!("{:.0}", v.max(0.0));
-    let ok = config::set_values(
-        path,
-        &[(KEY_X, fmt(pos[0])), (KEY_Y, fmt(pos[1])), (KEY_W, fmt(size[0])), (KEY_H, fmt(size[1]))],
-    );
-    if !ok {
-        logger::error("Menu: position save to ini failed");
+    let values = [(KEY_X, fmt(pos[0])), (KEY_Y, fmt(pos[1])), (KEY_W, fmt(size[0])), (KEY_H, fmt(size[1]))];
+    if write_values(&values) == Some(false) {
+        logger::error("Menu: position save to the config failed");
     }
 }
 
@@ -345,10 +376,8 @@ impl<F: FnMut(&Ui) + Send + Sync + 'static> ImguiRenderLoop for MenuRenderLoop<F
             });
 
         if reset_layout {
-            if let Some(path) = INI_PATH.get() {
-                let reset = |k| (k, "-1".to_string());
-                config::set_values(path, &[reset(KEY_X), reset(KEY_Y), reset(KEY_W), reset(KEY_H)]);
-            }
+            let reset = |k| (k, "-1".to_string());
+            write_values(&[reset(KEY_X), reset(KEY_Y), reset(KEY_W), reset(KEY_H)]);
             self.relayout = true;
             self.layout_saved = None;
             self.layout_seen = None;
@@ -506,7 +535,7 @@ static SET_CURSOR_POS_ORIG: AtomicUsize = AtomicUsize::new(0);
 static CLIP_CURSOR_ORIG: AtomicUsize = AtomicUsize::new(0);
 
 unsafe extern "system" fn set_cursor_pos_hook(x: i32, y: i32) -> i32 {
-    if MENU_OPEN.load(Ordering::Relaxed) {
+    if MENU_OPEN.load(Ordering::Relaxed) || input_block::extension_unpins_cursor() {
         return 1;
     }
     let orig = SET_CURSOR_POS_ORIG.load(Ordering::Relaxed);
@@ -514,7 +543,8 @@ unsafe extern "system" fn set_cursor_pos_hook(x: i32, y: i32) -> i32 {
 }
 
 unsafe extern "system" fn clip_cursor_hook(rect: *const Rect) -> i32 {
-    let rect = if MENU_OPEN.load(Ordering::Relaxed) { std::ptr::null() } else { rect };
+    let unpin = MENU_OPEN.load(Ordering::Relaxed) || input_block::extension_unpins_cursor();
+    let rect = if unpin { std::ptr::null() } else { rect };
     let orig = CLIP_CURSOR_ORIG.load(Ordering::Relaxed);
     unsafe { std::mem::transmute::<usize, ClipCursorFn>(orig)(rect) }
 }
@@ -570,6 +600,19 @@ fn hook_user32(name: &str, detour: *mut std::ffi::c_void, orig_slot: &AtomicUsiz
     }
 }
 
+/// Installs the cursor and input hooks (`ClipCursor`, `SetCursorPos`, the game's mouse poll,
+/// DirectInput reads) once; later calls do nothing. [`install`] does it after the DX12 hooks, a
+/// mod that needs the [`InputExtension`] at once can call it earlier.
+pub fn install_input_hooks() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        // Already initialized (by `Hudhook::builder`, or by an earlier call) is fine.
+        let _ = unsafe { hudhook::mh::MH_Initialize() };
+        install_cursor_hooks();
+        input_block::install();
+    });
+}
+
 fn install_cursor_hooks() {
     let set_pos = hook_user32("SetCursorPos", set_cursor_pos_hook as *mut std::ffi::c_void, &SET_CURSOR_POS_ORIG);
     let clip = hook_user32("ClipCursor", clip_cursor_hook as *mut std::ffi::c_void, &CLIP_CURSOR_ORIG);
@@ -612,8 +655,7 @@ where
     match Hudhook::builder().with::<ImguiDx12Hooks>(loop_state).build().apply() {
         Ok(()) => {
             logger::log("Menu: DX12 hooks applied");
-            install_cursor_hooks();
-            input_block::install();
+            install_input_hooks();
         }
         Err(e) => logger::error(&format!("Menu: DX12 hooks failed ({e:?}), menu unavailable")),
     }

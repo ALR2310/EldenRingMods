@@ -10,11 +10,11 @@
 //!    blocks fast travel inside a dungeon/cave).
 
 use common::task;
-use common::{config, logger, memscan};
+use common::{logger, memscan};
 use eldenring::cs::CSTaskGroupIndex;
 use eldenring::fd4::FD4TaskData;
 
-use crate::patch;
+use crate::{config, patch};
 
 const FEATURE: &str = "MapAnywhere";
 
@@ -46,8 +46,8 @@ fn resolve_field_area_slot() -> Option<usize> {
 }
 
 pub fn run() {
-    if !config::get_bool("MapAnywhere", false) {
-        logger::log("MapAnywhere=false - skipping at startup.");
+    if !config::get().map_anywhere.enabled {
+        logger::log("MapAnywhere.Enabled = false - skipping at startup.");
         return;
     }
 
