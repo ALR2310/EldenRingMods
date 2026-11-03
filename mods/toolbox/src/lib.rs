@@ -4,6 +4,7 @@ mod buildup;
 mod config;
 mod input;
 mod map_anywhere;
+mod minimize;
 mod patch;
 mod resize;
 mod speffect;
@@ -47,6 +48,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         std::thread::spawn(buildup::run);
         std::thread::spawn(resize::run);
         std::thread::spawn(taskbar::run);
+        std::thread::spawn(minimize::run);
         if startup.input_bridge.enabled {
             let dir = dir.clone();
             std::thread::spawn(move || input::run(&dir));
