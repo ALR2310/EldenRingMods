@@ -39,6 +39,8 @@ pub struct General {
     #[serde(deserialize_with = "common::toml_config::key_name")]
     pub toggle_key: String,
     pub load_delay: u32,
+    #[serde(deserialize_with = "common::toml_config::key_name")]
+    pub drag_key: String,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
@@ -65,6 +67,8 @@ pub struct Player {
 pub struct Layout {
     pub offset_x: i32,
     pub offset_y: i32,
+    pub target_offset_x: i32,
+    pub target_offset_y: i32,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
@@ -254,6 +258,13 @@ mod tests {
     fn the_log_is_on_and_the_map_probe_is_off_by_default() {
         let logging = template().logging;
         assert!(logging.log_file && !logging.map_probe);
+    }
+
+    #[test]
+    fn the_drag_key_is_f7_and_the_target_starts_under_the_minimap() {
+        let template = template();
+        assert_eq!(common::input::parse_virtual_key(&template.general.drag_key, 0), 0x76);
+        assert_eq!((template.layout.target_offset_x, template.layout.target_offset_y), (0, 0));
     }
 
     #[test]

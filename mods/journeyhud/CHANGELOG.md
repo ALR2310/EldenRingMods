@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Added a drag mode (F7 by default) to move the minimap and the target bar with the mouse.
 - Fixed the minimap being blank at the Mistwood after defeating Radahn.
 - Fixed the minimap being blank at Crumbling Farum Azula.
 - Fixed the option to hide the minimap in caves also affecting areas that are not caves.

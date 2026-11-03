@@ -13,7 +13,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 aes = "0.8"
-common = { path = "../../shared" }
+# `overlay`: the cursor and mouse-block hooks of the drag mode (`src/drag.rs`), not the menu.
+common = { path = "../../shared", features = ["overlay"] }
 eldenring.workspace = true
 flate2 = "1"
 fromsoftware-shared.workspace = true
