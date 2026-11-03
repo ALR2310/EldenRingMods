@@ -3,7 +3,7 @@
 //! from `Width` / `Height`. All sizes are of the client area (the game image),
 //! not the outer window; `frame` is the outer size minus the client size.
 
-use common::config;
+use crate::config;
 
 #[repr(C)]
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
@@ -33,10 +33,12 @@ pub struct Limits {
 
 impl Limits {
     pub fn from_config() -> Self {
-        let aspect_w = config::get_int("AspectWidth", 16) as i64;
-        let aspect_h = config::get_int("AspectHeight", 9) as i64;
+        let config = config::get();
+        let resize = &config.window_resize;
+        let aspect_w = i64::from(resize.aspect_width);
+        let aspect_h = i64::from(resize.aspect_height);
         Self {
-            min: (config::get_int("MinWidth", 160).max(1), config::get_int("MinHeight", 90).max(1)),
+            min: (resize.min_width.max(1), resize.min_height.max(1)),
             aspect: (aspect_w > 0 && aspect_h > 0).then_some((aspect_w, aspect_h)),
         }
     }

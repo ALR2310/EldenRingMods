@@ -1,13 +1,13 @@
-"""MCP server for the InputBridge mod: lets an agent play Elden Ring while the
+"""MCP server for the Toolbox mod (its input bridge): lets an agent play Elden Ring while the
 game window sits in the background and the user keeps working.
 
-Input goes through the mod's command file (`InputBridge.cmd` in the game's
+Input goes through the mod's command file (`Toolbox.cmd` in the game's
 `mod` folder, consumed by the mod within ~10 ms). Screenshots capture the game window
 without focusing it (`PrintWindow`). Needs the `mcp` and `pillow` packages.
 
-    python mods/inputbridge/mcp/server.py
+    python mods/toolbox/mcp/server.py
 
-Configuration: the game's `mod` folder (where InputBridge.dll lives) comes from the
+Configuration: the game's `mod` folder (where Toolbox.dll lives) comes from the
 `ER_MOD_DIR` environment variable, or from an `ER_MOD_DIR=` line in the repo's `.env`
 (git-ignored, see `.env.example`). There is no default: it is specific to each machine.
 """
@@ -44,7 +44,7 @@ def _mod_dir() -> Path | None:
 MOD_DIR = _mod_dir()
 WINDOW_TITLE = "ELDEN RING"
 
-# Key names the mod understands (mods/inputbridge/src/keys.rs).
+# Key names the mod understands (mods/toolbox/src/input/keys.rs).
 KEYS = set("abcdefghijklmnopqrstuvwxyz0123456789") | {
     "esc", "escape", "tab", "enter", "return", "ctrl", "lctrl", "shift", "lshift",
     "alt", "lalt", "space", "up", "down", "left", "right",
@@ -79,11 +79,11 @@ def _send(*lines: str) -> str:
     first, otherwise the rename would overwrite a command the mod has not read."""
     if MOD_DIR is None or not MOD_DIR.is_dir():
         return f"error: mod folder not found ({MOD_DIR}); set ER_MOD_DIR to the game's mod folder"
-    cmd = MOD_DIR / "InputBridge.cmd"
+    cmd = MOD_DIR / "Toolbox.cmd"
     deadline = time.monotonic() + 2.0
     while cmd.exists() and time.monotonic() < deadline:
         time.sleep(0.01)
-    tmp = MOD_DIR / "InputBridge.tmp"
+    tmp = MOD_DIR / "Toolbox.tmp"
     tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
     os.replace(tmp, cmd)
     return "ok: " + "; ".join(lines)

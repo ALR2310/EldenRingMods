@@ -1,4 +1,4 @@
-//! Command file `InputBridge.cmd` next to the DLL: the poller consumes it
+//! Command file `Toolbox.cmd` next to the DLL: the poller consumes it
 //! (reads, then deletes) and applies one command per line:
 //!
 //!   down <key> | up <key> | press <key> [seconds] | release_all
@@ -16,11 +16,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use common::logger;
 
-use crate::dinput::{
+use super::dinput::{
     KEYS, MOUSE_BUTTONS, MOUSE_DX_ONCE, MOUSE_DX_RATE, MOUSE_DY_ONCE, MOUSE_DY_RATE, MOUSE_DZ_ONCE,
 };
-use crate::gate;
-use crate::keys::dik;
+use super::gate;
+use super::keys::dik;
 
 /// Unix ms at which a timed key goes up again; 0 = not timed.
 static EXPIRY: [AtomicU64; 256] = [const { AtomicU64::new(0) }; 256];
@@ -153,10 +153,10 @@ fn expire(now: u64) {
 }
 
 pub fn run(dir: &str, gate_ready: bool) {
-    let path = format!("{dir}\\InputBridge.cmd");
+    let path = format!("{dir}\\Toolbox.cmd");
     loop {
         std::thread::sleep(Duration::from_millis(10));
-        crate::focus::refresh();
+        super::focus::refresh();
         if gate_ready {
             gate::apply();
         }

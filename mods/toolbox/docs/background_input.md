@@ -26,7 +26,7 @@ Tìm cửa sổ game bằng `EnumWindows` + `GetWindowTextW` làm game crash lú
 
 ## Giao thức thử
 
-Ghi `InputBridge.cmd` (ghi tên tạm rồi đổi tên) cạnh DLL, mod đọc rồi xoá: `down <phím>`, `up <phím>`, `press <phím> [giây]`, `release_all`; chuột: `mouse <dx> <dy>`, `look <dx> <dy> <giây>` (dịch mỗi khung, `look 6 0 1` xoay camera khoảng 25-30 độ), `mdown`/`mup`/`mclick <left|right|middle> [giây]`, `wheel <n>`. Mã phím là DIK (`src/keys.rs`). Chuột chèn vào `DIMOUSESTATE`/`DIMOUSESTATE2` (lX, lY, lZ rồi từng byte nút) trong cùng hook `GetDeviceState`. Một số thao tác có hiệu ứng chậm vài giây (bản đồ), `look` ảnh sau 3-5 giây. Log `InputBridge.log` có dòng thống kê mỗi 5 giây: `fg` (foreground thật), `gate=active/pad/kb/mouse`, số lần đọc và lỗi của từng thiết bị.
+Ghi `Toolbox.cmd` (ghi tên tạm rồi đổi tên) cạnh DLL, mod đọc rồi xoá: `down <phím>`, `up <phím>`, `press <phím> [giây]`, `release_all`; chuột: `mouse <dx> <dy>`, `look <dx> <dy> <giây>` (dịch mỗi khung, `look 6 0 1` xoay camera khoảng 25-30 độ), `mdown`/`mup`/`mclick <left|right|middle> [giây]`, `wheel <n>`. Mã phím là DIK (`src/input/keys.rs`). Chuột chèn vào `DIMOUSESTATE`/`DIMOUSESTATE2` (lX, lY, lZ rồi từng byte nút) trong cùng hook `GetDeviceState`. Một số thao tác có hiệu ứng chậm vài giây (bản đồ), `look` ảnh sau 3-5 giây. Log `Toolbox.log` có dòng thống kê mỗi 5 giây: `fg` (foreground thật), `gate=active/pad/kb/mouse`, số lần đọc và lỗi của từng thiết bị.
 
 ## Chưa biết / việc tiếp
 

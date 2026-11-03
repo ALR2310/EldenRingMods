@@ -20,7 +20,7 @@ the same noise, so either pair works.
 
 What's in both runs (not Seamless): Arxan's run-time code changes and the
 patches of the mods that were loaded (SpiritMultiplier, CameraFix,
-WindowResize). Subtract the offline run to get Seamless only - match by RVA
+the window resize). Subtract the offline run to get Seamless only - match by RVA
 with a little slack (`abs(rva - offline_rva) < 16` was used).
 
 ## Found with it

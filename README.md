@@ -41,8 +41,6 @@ Seamless Co-op và các bản mod lớn như Convergence và Reforged.
 | [**SpeedMultiplier**](mods/speedmultiplier)   | Tăng tốc di chuyển, tấn công và thi triển phép                          | [11173](https://www.nexusmods.com/eldenring/mods/11173) |
 | [**SpiritMultiplier**](mods/spiritmultiplier) | Nhân số linh hồn (spirit ash) triệu hồi, vượt trần mặc định             | [11168](https://www.nexusmods.com/eldenring/mods/11168) |
 | [**WeightMultiplier**](mods/weightmultiplier) | Nhân hệ số Trọng Tải                                                    | [10549](https://www.nexusmods.com/eldenring/mods/10549) |
-| [**WindowResize**](mods/windowresize)         | Kéo viền để đổi kích thước cửa sổ Windowed                              | nội bộ                                                  |
-| [**InputBridge**](mods/inputbridge)           | Gửi phím vào game đang ở nền, để agent kiểm tra mod tự động            | nội bộ                                                  |
 | [**Toolbox**](mods/toolbox)                   | Công cụ nhỏ để thử: mở bản đồ và gọi Torrent mọi nơi, GUI (`F8`) chỉnh buildup | nội bộ                                                  |
 | [**SomeTweaks**](mods/sometweaks)             | Gói QoL thử nghiệm, đã ngừng phát triển                                 | không đăng                                              |
 

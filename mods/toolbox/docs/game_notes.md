@@ -15,7 +15,7 @@
 
 - 2026-10-27 [observed] Từ màn hình tiêu đề vào world: `press e` (phím bất kỳ, ra hộp thoại cảnh báo), `press e` (đóng hộp thoại, ra menu chính với Continue), `press e` (Continue).
 - 2026-10-27 [user] Tải nhân vật vào world mất khoảng 5 đến 10 giây sau khi chọn Continue.
-- 2026-10-27 [observed] Game phải do người dùng bật offline (không Easy Anti-Cheat), và `InputBridge.dll` phải có trong `external_dlls` của `config_eldenring.toml`. Agent không tự bật được game.
+- 2026-10-27 [observed] Game phải do người dùng bật offline (không Easy Anti-Cheat), và `Toolbox.dll` phải có trong `external_dlls` của `config_eldenring.toml`. Agent không tự bật được game.
 
 ## Thời gian
 

@@ -41,7 +41,7 @@ không địa chỉ hay dump ở lần chạy thường, lỗi kèm lý do. Đ�
 và bỏ sót phần còn lại, nên danh sách này để lần sau không quên:
 
 - 2026-10-16: autoregen, dropmultiplier, infiniteailment, risearcher, speedmultiplier, spiritmultiplier.
-- 2026-10-22: weightmultiplier, runemultiplier, passiverunes, soulsteleport, fasterrevival, animcancel, windowresize.
+- 2026-10-22: weightmultiplier, runemultiplier, passiverunes, soulsteleport, fasterrevival, animcancel, toolbox.
 - Không áp: sometweaks (đã bỏ).
 
 Mod mới hoặc dòng log mới viết theo quy ước ngay từ đầu, rồi ghi mod vào danh sách này. Dòng
