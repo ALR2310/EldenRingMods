@@ -234,7 +234,7 @@ Các ô số dưới đây là **slider native** khi host có API 1.2; host cũ 
 
 ## Không có menu
 
-FasterRevival (không có thiết lập đáng chỉnh), SoulsTeleport (đã có giao diện riêng), SomeTweaks (đã dừng), WindowResize (mod nội bộ, không đăng).
+FasterRevival (không có thiết lập đáng chỉnh), SoulsTeleport (đã có giao diện riêng), SomeTweaks (đã dừng), Toolbox (mod nội bộ, không đăng).
 
 ## Ghi chú kỹ thuật
 

@@ -11,9 +11,11 @@ use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::time::{Duration, Instant};
 
-use common::{config, logger};
+use common::logger;
 
-use crate::geometry::{self, Limits, Rect};
+use crate::config;
+
+use super::geometry::{self, Limits, Rect};
 
 type Hwnd = *mut c_void;
 
@@ -74,6 +76,7 @@ const SWP_FRAMECHANGED: u32 = 0x0020;
 
 const DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2: isize = -4;
 
+const WM_SETICON: u32 = 0x0080;
 const WM_SETCURSOR: u32 = 0x0020;
 const WM_GETMINMAXINFO: u32 = 0x0024;
 const WM_SIZING: u32 = 0x0214;
@@ -142,7 +145,7 @@ unsafe extern "system" fn find_callback(hwnd: Hwnd, out: isize) -> i32 {
     1
 }
 
-fn find_game_window() -> Option<Hwnd> {
+pub fn find_game_window() -> Option<Hwnd> {
     let mut found: Hwnd = null_mut();
     unsafe { EnumWindows(find_callback, &mut found as *mut Hwnd as isize) };
     (!found.is_null()).then_some(found)
@@ -168,7 +171,7 @@ fn sync_frame(hwnd: Hwnd) {
     let style = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) } as u32;
     let windowed = style & WS_CAPTION == WS_CAPTION;
     let has_frame = style & WS_THICKFRAME != 0;
-    let want = windowed && config::get_bool("Resizable", true);
+    let want = windowed && config::get().window_resize.resizable;
 
     if !windowed {
         FRAME_ADDED.store(false, Ordering::SeqCst);
@@ -231,7 +234,10 @@ fn apply_start_size(hwnd: Hwnd) {
         GetWindowRect(hwnd, &mut window);
     }
     let current = (client.right - client.left, client.bottom - client.top);
-    let (width, height) = (config::get_int("Width", 0), config::get_int("Height", 0));
+    let (width, height) = {
+        let config = config::get();
+        (config.window_resize.width, config.window_resize.height)
+    };
     let Some((w, h)) = geometry::start_client_size(width, height, current, &Limits::from_config()) else {
         return;
     };
@@ -250,6 +256,12 @@ fn apply_start_size(hwnd: Hwnd) {
 
 unsafe extern "system" fn wnd_proc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize {
     let orig = ORIG_WNDPROC.load(Ordering::SeqCst);
+    // `[Taskbar] Icon`: whatever icon the game sets is swapped for the configured one.
+    if msg == WM_SETICON
+        && let Some(icon) = crate::taskbar::override_icon()
+    {
+        return unsafe { CallWindowProcW(orig, hwnd, msg, wparam, icon) };
+    }
     if FRAME_ADDED.load(Ordering::SeqCst) {
         match msg {
             WM_ENTERSIZEMOVE => USER_RESIZED.store(true, Ordering::SeqCst),

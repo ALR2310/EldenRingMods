@@ -3,13 +3,13 @@
 //! places (`0x2671EB0` has four callers), so the user32 call is hooked to
 //! return the game's window. A game that thinks it is focused also grabs the
 //! cursor, so `ClipCursor` and `SetCursorPos` are neutralized while the window
-//! is not really in front. `docs/background_input.md`.
+//! is not really in front (by the overlay's hooks, see `unpin_cursor`). `docs/background_input.md`.
 
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering};
 use std::time::Duration;
 
-use hudhook::mh::{MH_ApplyQueued, MH_Initialize, MhHook};
+use common::overlay::mh::{MH_ApplyQueued, MH_Initialize, MhHook};
 
 use common::logger;
 
@@ -49,13 +49,9 @@ pub fn refresh() {
 }
 
 static ORIG_GET_FOREGROUND: AtomicUsize = AtomicUsize::new(0);
-static ORIG_CLIP_CURSOR: AtomicUsize = AtomicUsize::new(0);
-static ORIG_SET_CURSOR_POS: AtomicUsize = AtomicUsize::new(0);
 static ORIG_XINPUT_GET_STATE: AtomicUsize = AtomicUsize::new(0);
 
 type GetForegroundFn = unsafe extern "system" fn() -> *mut c_void;
-type ClipCursorFn = unsafe extern "system" fn(*const c_void) -> i32;
-type SetCursorPosFn = unsafe extern "system" fn(i32, i32) -> i32;
 type XInputGetStateFn = unsafe extern "system" fn(u32, *mut u8) -> u32;
 
 unsafe extern "system" fn find_cb(hwnd: *mut c_void, _: isize) -> i32 {
@@ -113,20 +109,11 @@ unsafe extern "system" fn get_foreground_hook() -> *mut c_void {
     real
 }
 
-unsafe extern "system" fn clip_cursor_hook(rect: *const c_void) -> i32 {
-    let orig = unsafe { std::mem::transmute::<usize, ClipCursorFn>(ORIG_CLIP_CURSOR.load(Ordering::Relaxed)) };
-    if ENABLED.load(Ordering::Relaxed) && !game_is_really_foreground() {
-        return unsafe { orig(std::ptr::null()) };
-    }
-    unsafe { orig(rect) }
-}
-
-unsafe extern "system" fn set_cursor_pos_hook(x: i32, y: i32) -> i32 {
-    let orig = unsafe { std::mem::transmute::<usize, SetCursorPosFn>(ORIG_SET_CURSOR_POS.load(Ordering::Relaxed)) };
-    if ENABLED.load(Ordering::Relaxed) && !game_is_really_foreground() {
-        return 1;
-    }
-    unsafe { orig(x, y) }
+/// Whether the overlay's `ClipCursor` / `SetCursorPos` hooks should neutralize the calls: a game
+/// that thinks it is in front grabs the cursor, so while the window is not really in front it
+/// must not (`common::overlay::InputExtension`).
+pub fn unpin_cursor() -> bool {
+    ENABLED.load(Ordering::Relaxed) && !game_is_really_foreground()
 }
 
 /// A pad plugged in while the game is in the background must not drive the
@@ -134,7 +121,7 @@ unsafe extern "system" fn set_cursor_pos_hook(x: i32, y: i32) -> i32 {
 unsafe extern "system" fn xinput_get_state_hook(index: u32, state: *mut u8) -> u32 {
     let orig = unsafe { std::mem::transmute::<usize, XInputGetStateFn>(ORIG_XINPUT_GET_STATE.load(Ordering::Relaxed)) };
     let ret = unsafe { orig(index, state) };
-    if ret == 0 && !state.is_null() && crate::dinput::ISOLATE.load(Ordering::Relaxed) && !IN_FRONT.load(Ordering::Relaxed) {
+    if ret == 0 && !state.is_null() && super::dinput::ISOLATE.load(Ordering::Relaxed) && !IN_FRONT.load(Ordering::Relaxed) {
         unsafe { std::ptr::write_bytes(state.add(4), 0, 12) };
     }
     ret
@@ -160,7 +147,7 @@ fn hook(module: &[u8], name: &[u8], detour: *mut c_void, orig: &AtomicUsize) -> 
     }
 }
 
-/// Waits for the game window (up to 60 s), then hooks the three calls.
+/// Waits for the game window (up to 60 s), then hooks the two calls.
 pub fn install() {
     if !find_game_window(Duration::from_secs(60)) {
         logger::error("Focus: game window not found");
@@ -168,8 +155,6 @@ pub fn install() {
     }
     let _ = unsafe { MH_Initialize() };
     let ok = hook(b"user32.dll\0", b"GetForegroundWindow\0", get_foreground_hook as *mut c_void, &ORIG_GET_FOREGROUND)
-        && hook(b"user32.dll\0", b"ClipCursor\0", clip_cursor_hook as *mut c_void, &ORIG_CLIP_CURSOR)
-        && hook(b"user32.dll\0", b"SetCursorPos\0", set_cursor_pos_hook as *mut c_void, &ORIG_SET_CURSOR_POS)
         && hook(b"xinput1_4.dll\0", b"XInputGetState\0", xinput_get_state_hook as *mut c_void, &ORIG_XINPUT_GET_STATE);
     let applied = unsafe { MH_ApplyQueued() }.ok().is_ok();
     if ok && applied {

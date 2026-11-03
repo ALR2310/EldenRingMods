@@ -33,11 +33,11 @@ use std::sync::Mutex;
 
 use common::input::{is_key_pressed, parse_virtual_key};
 use common::task;
-use common::{config, logger, overlay, player};
+use common::{logger, overlay, player};
 use eldenring::cs::CSTaskGroupIndex;
 use eldenring::fd4::FD4TaskData;
 
-use crate::{patch, speffect};
+use crate::{config, patch, speffect};
 
 const MODULE_CONTAINER_OFFSET: usize = 0x190;
 const RESIST_MODULE_SLOT: usize = 0x20;
@@ -142,7 +142,7 @@ fn apply_bar(player: *const u8, index: usize) {
     let max_ptr = unsafe { module.add(bar.max) } as *mut i32;
     let max = unsafe { std::ptr::read_volatile(max_ptr) };
     let before = unsafe { std::ptr::read_volatile(cur) };
-    let amount = config::get_int("BuildupAmount", 0);
+    let amount = config::get().buildup.amount;
     let after = if amount <= 0 { 0 } else { (before - amount).max(0) };
 
     if after == 0 {
@@ -238,7 +238,7 @@ pub fn run() {
     let cs_task = task::wait_for_cs_task();
     task::run_recurring_safe(cs_task, "Buildup", CSTaskGroupIndex::FrameBegin, move |_: &FD4TaskData| {
         // Menu toggle hotkey (default F8).
-        let menu_vk = parse_virtual_key(&config::get_string("MenuKey", "F8"), VK_F8);
+        let menu_vk = parse_virtual_key(&config::get().menu.key, VK_F8);
         if is_key_pressed(menu_vk) {
             overlay::toggle();
         }

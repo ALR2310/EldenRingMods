@@ -50,7 +50,7 @@ Chi tiết từng mục: `docs/cleanup_verify.md`. Chỉ build và unit test, ch
 - [ ] [verify] RiseArcher: buff Bow / Crossbow / Ballista / đạn áp đúng, reload và menu không cộng dồn, cảnh báo ID đạn không tìm thấy, log mới
 - [ ] [verify] RuneMultiplier: hook cài được (log `Hook: installed`), nhân đúng rune nhận được, không nhân khoản trừ, reload đổi hệ số, mod khác dùng AddSoul không xung đột
 - [ ] [verify] WeightMultiplier: hook cài được, Mode 0 (nhân) và Mode 1 (cố định), đổi Mode khi reload và từ menu, phát hiện hook của mod trọng lượng khác
-- [ ] [verify] WindowResize: viền kéo, mũi tên kéo, khoá tỉ lệ, kích thước nhỏ nhất, kích thước khởi động, kéo cạnh và góc
+- [ ] [verify] Toolbox, resize cửa sổ: viền kéo, mũi tên kéo, khoá tỉ lệ, kích thước nhỏ nhất, kích thước khởi động, kéo cạnh và góc
 - [ ] [verify] SpeedMultiplier: tốc độ người chơi theo nhóm, Torrent, spirit, kẻ địch, nạn nhân chí mạng, [[Override]], Seamless (stub), probe, log mới
 - [ ] [verify] SoulsTeleport: WHERE / HERE giữa hai máy, teleport tới đồng đội, từ chối khi thù địch, chặn gói giả người gửi, menu và chặn chuột
 - [ ] [verify] SpiritMultiplier: [verify] spiritmultiplier: sau dọn code, thử trong game (chi tiết docs/cleanup_verify.md)

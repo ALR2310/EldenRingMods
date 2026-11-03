@@ -22,7 +22,8 @@ hết vào nhánh `mod/` của mod.
   `[package.metadata.winresource]` của mọi mod) làm và commit trên `main`, không
   rải lên từng nhánh `mod/` (người dùng, 2026-10-27). Mod chỉ có trên nhánh của
   nó (chưa vào `main`) thì sửa trên nhánh đó.
-- **Ngoại lệ: InputBridge** (người dùng, 2026-10-27): cải tiến `inputbridge` làm
+- **Ngoại lệ: input bridge** (người dùng, 2026-10-27; nay là phần
+  `mods/toolbox/src/input/` của `toolbox`): cải tiến nó làm
   thẳng trong phiên đang làm mod khác, không cần chuyển nhánh.
 - Không tự merge, xoá hay đổi tên nhánh `mod/...`; không tự commit khi chưa được
   kiểm (xem mục "Quy tắc code và quy trình thử" bên dưới). Nhánh `shared/...` và
@@ -44,8 +45,8 @@ hết vào nhánh `mod/` của mod.
 - **Chơi game qua MCP `eldenring-input`:** gọi `notes()` trước mỗi phiên; khi bị
   người dùng sửa phím hay thử ra điều mới (thời gian, quy trình) thì `add_note`
   ngay (source `user` / `observed`), ghi sai thì sửa thẳng file, không thêm dòng
-  mâu thuẫn. Sổ tay nằm ở `mods/inputbridge/docs/game_notes.md` (nhánh
-  `mod/inputbridge`). Phím của người dùng: Space = nhảy, Shift = lăn (2026-10-27
+  mâu thuẫn. Sổ tay nằm ở `mods/toolbox/docs/game_notes.md` (nhánh
+  `mod/toolbox`). Phím của người dùng: Space = nhảy, Shift = lăn (2026-10-27
   từng nhầm Space là lăn).
 - **Không commit khi chưa được kiểm:** không commit tính năng hay bản sửa mà
   người dùng chưa thử và xác nhận chạy trong game, trừ khi họ yêu cầu commit
@@ -78,8 +79,8 @@ hết vào nhánh `mod/` của mod.
 - **Mod đã bỏ:** `sometweaks` (2026-09-29, không có kế hoạch). Khi chuyển tính năng
   từ SomeTweaks sang mod khác thì sao chép và cải tiến ở mod đích; không đề xuất
   sửa hay refactor SomeTweaks, và "SomeTweaks cũng dùng" không phải lý do đưa code
-  lên `common`. `windowresize` chỉ dùng nội bộ (2026-10-07): không đề xuất phát
-  hành, không có CHANGELOG.
+  lên `common`. `toolbox` chỉ dùng nội
+  bộ (gồm input bridge và resize cửa sổ): không đề xuất phát hành, không có CHANGELOG.
 - **Tài liệu dùng chung:** viết trang Nexus, changelog, gọi API Nexus, prompt logo:
   `docs/nexus.md`. Phân tích dump crash: `docs/crash_dump_analysis.md`. Cổng "đã
   vào game", đọc/ghi param an toàn, hot reload, log riêng tư: `shared/docs/`.
@@ -87,7 +88,7 @@ hết vào nhánh `mod/` của mod.
 ## Mod nội bộ và mod public: `[package.metadata.mod] audience`
 
 Mỗi mod khai báo trong `Cargo.toml` của nó `[package.metadata.mod] audience =
-"internal"` (dùng nội bộ, hiện: `windowresize`, `inputbridge`, `toolbox`) hoặc
+"internal"` (dùng nội bộ, hiện: `toolbox`) hoặc
 `"public"` (lên Nexus). Mod `internal` không CHANGELOG, không Nexus ID, không phát
 hành, không có trên VirusTotal; chỉ cần README, HISTORY, docs. Mod mới phải khai
 nhãn này. Không tách thư mục (người dùng, 2026-10-31, chỉ gắn nhãn cho nhẹ).

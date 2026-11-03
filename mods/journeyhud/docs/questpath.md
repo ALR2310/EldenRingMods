@@ -12,7 +12,7 @@ Báo cáo: YuriElaris (Nexus, 2026-11-01): JourneyHUD + QuestPath làm game tho�
 
 ## Tái hiện ở máy ta (2026-11-02)
 
-Profile ME3 `TestMod` chỉ bật JourneyHUD, QuestPath, WindowResize (không delay, không ERSS-FG) thì crash lặp lại mọi lần: `Exception: stack overflow at GameOverlayRenderer64.dll+0xDE197`, vòng đệ quy nằm trong Steam overlay. Dòng `outermost:` của `crash.rs` cho thấy thread tràn stack do JourneyHUD tạo ra (`JourneyHUD.dll+0x133235` rồi `+0x73677`, `+0x15059`, `+0x1AC98B`, `+0x1AC722`, sau đó vào `ntdll`), cùng với việc log không có `Overlay: DX12 hooks applied`: đó là thread đang cài hook DX12. Các RVA chưa được dịch ra tên hàm (không có công cụ đọc PDB). Cùng build chạy bình thường trên ME2.
+Profile ME3 `TestMod` chỉ bật JourneyHUD, QuestPath, WindowResize (nay gộp vào Toolbox; không delay, không ERSS-FG) thì crash lặp lại mọi lần: `Exception: stack overflow at GameOverlayRenderer64.dll+0xDE197`, vòng đệ quy nằm trong Steam overlay. Dòng `outermost:` của `crash.rs` cho thấy thread tràn stack do JourneyHUD tạo ra (`JourneyHUD.dll+0x133235` rồi `+0x73677`, `+0x15059`, `+0x1AC98B`, `+0x1AC722`, sau đó vào `ntdll`), cùng với việc log không có `Overlay: DX12 hooks applied`: đó là thread đang cài hook DX12. Các RVA chưa được dịch ra tên hàm (không có công cụ đọc PDB). Cùng build chạy bình thường trên ME2.
 
 ## Nguyên nhân (suy đoán, chưa chứng minh)
 
