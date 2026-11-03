@@ -11,11 +11,11 @@
 //!    `ChrInsExt::apply_speffect`, which panics on 2.7.2.0.
 
 use common::task;
-use common::{config, logger, player};
+use common::{logger, player};
 use eldenring::cs::CSTaskGroupIndex;
 use eldenring::fd4::FD4TaskData;
 
-use crate::{patch, speffect};
+use crate::{config, patch, speffect};
 
 const FEATURE: &str = "TorrentAnywhere";
 const REMOVE_FORCED_DISMOUNT_SPEFFECT: i32 = 19996;
@@ -38,8 +38,8 @@ const ABYSSAL_DISMOUNT_SKIP_PATTERN: &str =
 const ABYSSAL_JZ_OFFSET: usize = 15;
 
 pub fn run() {
-    if !config::get_bool("TorrentAnywhere", false) {
-        logger::log("TorrentAnywhere=false - skipping at startup.");
+    if !config::get().torrent_anywhere.enabled {
+        logger::log("TorrentAnywhere.Enabled = false - skipping at startup.");
         return;
     }
 

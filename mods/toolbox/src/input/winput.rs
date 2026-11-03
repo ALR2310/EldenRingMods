@@ -8,12 +8,12 @@
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU8, AtomicUsize, Ordering};
 
-use hudhook::mh::{MH_ApplyQueued, MH_Initialize, MhHook};
+use common::overlay::mh::{MH_ApplyQueued, MH_Initialize, MhHook};
 
 use common::logger;
 
-use crate::dinput::{ISOLATE, KEYS, MOUSE_BUTTONS};
-use crate::focus::{self, IN_FRONT};
+use super::dinput::{ISOLATE, KEYS, MOUSE_BUTTONS};
+use super::focus::{self, IN_FRONT};
 
 #[repr(C)]
 struct Point {

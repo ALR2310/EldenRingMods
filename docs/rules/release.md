@@ -26,7 +26,7 @@ và nằm trong `dependsOn` của task `Cargo: Build All (Release)`. Khi
 Sau khi sửa, kiểm tra file vẫn là JSON hợp lệ và số task build riêng
 bằng đúng số thư mục trong `mods/`. Không cần hỏi lại người dùng.
 Người dùng yêu cầu (2026-09-30) sau khi phát hiện thiếu task của
-FasterRevival, SpeedMultiplier, SpiritMultiplier, WindowResize.
+FasterRevival, SpeedMultiplier, SpiritMultiplier.
 
 ## Đối chiếu changelog thật trên Nexus Mods trước khi chốt version trong `CHANGELOG.md`
 
@@ -62,7 +62,7 @@ Mod ID theo từng mod trong workspace này (game domain luôn là `eldenring`):
 - `animcancel` → 11328 (Anim Cancel)
 - `autopickup` → 11470 (Auto Pickup)
 - `journeyhud` → 11543 (Journey HUD)
-- `windowresize` → **không đăng lên Nexus, dùng nội bộ (quyết định 2026-10-07)**
+- `toolbox` → **không đăng lên Nexus, dùng nội bộ (quyết định 2026-10-07)**
 
 Quét một file bằng VirusTotal (dùng thủ công, không nằm trong quy trình
 phát hành): `python scripts/vt-scan.py <zip>` (khoá `VT_API_KEY` trong `.env`,

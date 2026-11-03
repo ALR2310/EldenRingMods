@@ -3,16 +3,17 @@
 //! - Click a button for any of the 7 status buildup bars (Poison, Scarlet Rot,
 //!   Bleed, Death Blight, Frostbite, Sleep, Madness) to trigger/add buildup
 //!   immediately, or clear individual / all bars, and adjust `BuildupAmount`
-//!   live (saved to `Toolbox.ini`).
-//! - Toggle `MapAnywhere` and `TorrentAnywhere` in `Toolbox.ini` (startup code
+//!   live (saved to `Toolbox.toml`).
+//! - Toggle `MapAnywhere` and `TorrentAnywhere` in `Toolbox.toml` (startup code
 //!   patches, so a note reminds you to restart when changed).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use common::config;
+use common::logger;
 use common::overlay::{self, GOLD, GOLD_DIM, TEXT_MUTED, Ui, WindowConfig};
 
 use crate::buildup::{self, BARS, GuiAction};
+use crate::config;
 
 const WINDOW_SIZE_AT_1080P: [f32; 2] = [460.0, 560.0];
 const WINDOW_POS_AT_1080P: [f32; 2] = [70.0, 70.0];
@@ -36,14 +37,14 @@ fn draw_body(ui: &Ui) {
     }
 
     // BuildupAmount slider (0 = instant full bar, or step points).
-    let mut amount = config::get_int("BuildupAmount", 0).clamp(0, 1000);
+    let mut amount = config::get().buildup.amount.clamp(0, 1000);
     ui.set_next_item_width(-140.0);
     if ui
         .slider_config("Amount (0 = Full)", 0, 500)
         .display_format(if amount <= 0 { "Full bar (instant)" } else { "%d pts" })
         .build(&mut amount)
     {
-        overlay::save_ini_values(&[("BuildupAmount", amount.to_string())]);
+        config::save(&[("Buildup.Amount", amount.to_string())]);
     }
 
     let _disabled = ui.begin_disabled(!snap.in_game);
@@ -81,15 +82,15 @@ fn draw_body(ui: &Ui) {
     ui.spacing();
     ui.separator();
     ui.spacing();
-    ui.text_colored(GOLD, "Patches (saved to Toolbox.ini)");
+    ui.text_colored(GOLD, "Patches (saved to Toolbox.toml)");
 
-    let mut map_on = config::get_bool("MapAnywhere", true);
+    let mut map_on = config::get().map_anywhere.enabled;
     if ui.checkbox("Map & Fast Travel Anywhere (boss / caves)", &mut map_on) {
-        overlay::save_ini_values(&[("MapAnywhere", map_on.to_string())]);
+        config::save(&[("MapAnywhere.Enabled", map_on.to_string())]);
     }
-    let mut torrent_on = config::get_bool("TorrentAnywhere", true);
+    let mut torrent_on = config::get().torrent_anywhere.enabled;
     if ui.checkbox("Summon Torrent Anywhere", &mut torrent_on) {
-        overlay::save_ini_values(&[("TorrentAnywhere", torrent_on.to_string())]);
+        config::save(&[("TorrentAnywhere.Enabled", torrent_on.to_string())]);
     }
 
     let need_restart = map_on != MAP_PATCHED_AT_START.load(Ordering::Relaxed)
@@ -106,8 +107,16 @@ fn draw_body(ui: &Ui) {
     }
 }
 
-pub fn install(ini_path: String) {
-    overlay::set_ini_path(ini_path);
+/// Hooks the overlay after `General.LoadDelay` ms. Other overlay mods hook the game's DX12 swap
+/// chain too; holding this back keeps the hooks from overlapping (`overlay::install` has its
+/// own wait and lock on top). Blocks this thread, so call it on its own.
+pub fn install() {
+    overlay::set_store(config::overlay_store());
+    let delay = config::get().general.load_delay;
+    if delay > 0 {
+        logger::log(&format!("Menu: waiting {delay} ms before hooking"));
+        std::thread::sleep(std::time::Duration::from_millis(u64::from(delay)));
+    }
     overlay::install(
         WindowConfig {
             title: "Toolbox",

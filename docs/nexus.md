@@ -12,7 +12,7 @@ Khung mẫu cho mod mới: `docs/nexus_page.bbcode`. Trang được dán tay lê
 - Dòng Disclaimer: cùng kỹ thuật nhưng đỏ sang san hô (`#D93A2B` hai đầu, `#FF9C8C` ở giữa) để vẫn đọc ra là cảnh báo và khác tiêu đề vàng.
 - Mục Support (luôn là mục cuối): câu "If you enjoy this mod and want to support my work, you can buy me a coffee via Ko-fi or PayPal! Any donation is greatly appreciated.", hai từ Ko-fi và PayPal là link (dự phòng khi ảnh hỏng), rồi nút Ko-fi `[img width=203]` và logo PayPal `PP_logo_h_200x51.png` cạnh nhau. Ko-fi `https://ko-fi.com/alr2310`, PayPal `https://www.paypal.com/paypalme/alr2310` (`ko-fi.com/L7S227ME2P` là link cũ, đã thay).
 - Chú thích dưới gif demo: `[size=3][b][color=#5DADE2]...`. Nexus nhận `[img width=N]`.
-- `windowresize` (nội bộ, không đăng) không áp dụng.
+- `toolbox` (nội bộ, không đăng) không áp dụng.
 
 **Từ ngữ:**
 

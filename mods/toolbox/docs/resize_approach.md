@@ -1,7 +1,7 @@
-# WindowResize: vì sao chỉ cần `WS_THICKFRAME` và subclass WndProc
+# Resize cửa sổ (Toolbox): vì sao chỉ cần `WS_THICKFRAME` và subclass WndProc
 
 **Status 2026-09-29: HOÀN THÀNH, đã xác nhận trong game (kéo resize hoạt động
-như mong đợi).** Code: `mods/windowresize/src/window.rs`. Không cần dịch
+như mong đợi).** Code: `mods/toolbox/src/resize/window.rs`. Không cần dịch
 ngược: mod chỉ dùng Win32, không AOB/RVA, không đụng struct của game, nên
 không vỡ khi game cập nhật.
 
