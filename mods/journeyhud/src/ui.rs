@@ -6,12 +6,14 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use hudhook::hooks::dx12::ImguiDx12Hooks;
-use hudhook::imgui::{Context, DrawListMut, Ui};
-use hudhook::{Hudhook, ImguiRenderLoop, RenderContext};
+use hudhook::imgui::{Context, DrawListMut, Io, Ui};
+use hudhook::windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+use hudhook::{BeforeWndProc, Hudhook, ImguiRenderLoop, MessageFilter, RenderContext};
 
 use common::{input, logger};
 
 use crate::config;
+use crate::drag::Drag;
 use crate::map::layer::{Icon, MapLayer};
 use crate::radar::{self, Snapshot as RadarSnapshot};
 use crate::radar_ui::{self, Placement, Radar};
@@ -158,6 +160,8 @@ struct HudRenderLoop {
     /// swap chain's colour space.
     hdr_logged: Option<hudhook::color::Status>,
     radar: Radar,
+    /// The mode that frees the mouse to drag the minimap and the target bar (`drag.rs`).
+    drag: Drag,
     /// The world map under the minimap; `None` until the player is in the world (see
     /// `before_render`) and when the game folder is unknown.
     map: Option<MapLayer>,
@@ -226,6 +230,7 @@ impl ImguiRenderLoop for HudRenderLoop {
         ctx: &mut Context,
         render_context: &'a mut dyn RenderContext,
     ) {
+        self.drag.before_render(ctx);
         let [w, h] = ctx.io().display_size;
         self.area = game_area(w, h);
         self.s = self.area[3] / BASE_HEIGHT * settings::scale();
@@ -264,7 +269,12 @@ impl ImguiRenderLoop for HudRenderLoop {
         if toggle != 0 && input::is_key_pressed(toggle) {
             settings::toggle_hidden();
         }
-        let hidden = settings::hidden();
+        let drag_key = settings::drag_key();
+        if drag_key != 0 && input::is_key_pressed(drag_key) {
+            self.drag.toggle();
+        }
+        // The drag mode shows the minimap and the bar whatever the toggle key did.
+        let hidden = settings::hidden() && !self.drag.on();
         if settings::minimap_enabled() && !hidden {
             for (keys, zoom_in) in [
                 (settings::zoom_in_keys(), true),
@@ -313,7 +323,6 @@ impl ImguiRenderLoop for HudRenderLoop {
         self.icons_alpha += (icons_wanted - self.icons_alpha) * (dt * FADE_RATE).min(1.0);
         let layout = Layout {
             area: self.area,
-            offset: settings::offset(),
             width: settings::width(),
             s: self.s,
             show_numbers: settings::show_numbers(),
@@ -322,6 +331,9 @@ impl ImguiRenderLoop for HudRenderLoop {
         };
         if self.panel_alpha > 0.01 && settings::effects_player() {
             draw_icon_times(ui, &target::own_effects_now(), self.icons_alpha, &layout);
+        }
+        if self.drag.on() {
+            self.drag.render(ui, self.area, target_rect(&self.area, self.s, layout.width));
         }
         let Some(target) = target::current() else {
             self.trail.id = 0;
@@ -339,6 +351,36 @@ impl ImguiRenderLoop for HudRenderLoop {
             draw_target(ui, &target, [&self.trail, &self.poise_trail], &layout);
         }
     }
+
+    fn before_wnd_proc(&self, _hwnd: HWND, umsg: u32, _wparam: WPARAM, _lparam: LPARAM) -> BeforeWndProc {
+        if common::overlay::blocks_window_message(umsg) {
+            BeforeWndProc::Break
+        } else {
+            BeforeWndProc::Continue
+        }
+    }
+
+    fn message_filter(&self, _io: &Io) -> MessageFilter {
+        if common::overlay::is_open() {
+            MessageFilter::InputAll
+        } else {
+            MessageFilter::empty()
+        }
+    }
+}
+
+/// Where the target bar is: `[x, y, width, height]` of its two bars, under the minimap (the
+/// column's offsets, then the bar's own) with `s` the size scale and `width` the setting. The
+/// column's offsets follow the screen only; `s` also holds the player's size setting, which
+/// resizes the bar, not where it sits.
+fn target_rect(area: &[f32; 4], s: f32, width: f32) -> [f32; 4] {
+    let res = area[3] / BASE_HEIGHT;
+    let [offset_x, offset_y] = settings::offset();
+    let [target_x, target_y] = settings::target_offset();
+    let right = area[0] + area[2] - (offset_x + target_x) * res;
+    // It only takes the minimap's room when the minimap hides while the bar is where it started.
+    let y = area[1] + (offset_y + target_y) * res + radar_ui::column_height(res, target_x == 0.0 && target_y == 0.0);
+    [right - width * s, y, width * s, (HP_HEIGHT + BAR_GAP + POISE_HEIGHT) * s]
 }
 
 /// The largest 16:9 rectangle centered in a `w` x `h` display: `[x, y, w, h]`.
@@ -354,7 +396,6 @@ fn game_area(w: f32, h: f32) -> [f32; 4] {
 
 struct Layout<'a> {
     area: [f32; 4],
-    offset: [f32; 2],
     width: f32,
     s: f32,
     show_numbers: bool,
@@ -385,10 +426,8 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
     let s = layout.s;
     // The column's offsets follow the screen only; `s` also holds the player's
     // size setting, which resizes the bar, not where it sits.
-    let res = layout.area[3] / BASE_HEIGHT;
-    let right = layout.area[0] + layout.area[2] - layout.offset[0] * res;
-    let left = right - layout.width * s;
-    let y = layout.area[1] + layout.offset[1] * res + radar_ui::column_height(res);
+    let [left, y, width, _] = target_rect(&layout.area, s, layout.width);
+    let right = left + width;
 
     let draw = ui.get_foreground_draw_list();
     let label = format!("{} / {}", target.hp, target.max_hp);

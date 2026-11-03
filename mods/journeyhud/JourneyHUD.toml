@@ -15,12 +15,17 @@ LoadDelay = 5000
 # Key that hides and shows the minimap and the target panel (empty = no key).
 ToggleKey = "F6"
 
+# Key that hides and shows the minimap and the target panel (empty = no key).
+DragKey = "F7"
+
 
 [Layout]
 # Position of the minimap and target bar, from the top-right corner of the
 # screen, in pixels at 1080p.
 OffsetX = 48            # distance from the right edge; negative moves right
 OffsetY = 47            # distance from the top edge
+TargetOffsetX = 0       # moves the target bar from its place under the minimap, same directions as
+TargetOffsetY = 0       # OffsetX and OffsetY (dragging sets these); a moved bar no longer slides up
 
 
 [Target]
@@ -64,10 +69,11 @@ Beacons = true          # beacons you placed on the world map
 MapForGoblins = true    # markers of the Map for Goblins DLL, when it is loaded
 CoopPlayers = true      # co-op partners (Seamless Co-op included)
 Spirits = true          # your summoned spirits
+Enemies = false         # hostile enemies near you, as red dots
 
 
 [Minimap.Hide]
-InCaves = false         # caves, catacombs and dungeons
+InCaves = false         # caves, catacombs and tunnels
 InBossFights = false    # while a boss health bar is on screen
 
 
@@ -81,3 +87,9 @@ HDRGamma = 1.0          # above 1.0 darkens dim colours, below 1.0 lifts them (0
 [Logging]
 # Write a log file next to the DLL, for troubleshooting.
 LogFile = true
+
+# Log the block you are in and the map tiles that are missing, for a blank minimap.
+MapProbe = false
+
+# Log how many hostile enemies the minimap sees.
+EnemyProbe = false

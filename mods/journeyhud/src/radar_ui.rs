@@ -71,13 +71,16 @@ const COLLAPSE_RATE: f32 = 8.0;
 /// Height the minimap takes at the top of the right-hand column, gap included,
 /// for the target bar to sit under it. Follows the setting, not the fade, so the bar
 /// does not jump when the minimap hides for a menu or a loading screen; a minimap hidden by
-/// the cave or boss option gives its room to the bar, which slides up.
-pub fn column_height(res: f32) -> f32 {
+/// the cave or boss option gives its room to the bar, which slides up, but only when `slides`
+/// (the bar is still where it started under the minimap, see `ui::target_rect`).
+pub fn column_height(res: f32, slides: bool) -> f32 {
     if !settings::minimap_enabled() {
         return 0.0;
     }
     let below = if settings::minimap_clock() { CLOCK_ROW + CLOCK_GAP + TEXT_GAP } else { COLUMN_GAP };
-    let open = 1.0 - f32::from_bits(COLLAPSED.load(Ordering::Relaxed));
+    // In the drag mode, and for a bar the player moved away from under the minimap (`slides`
+    // false), the bar stays where it would be with the minimap showing.
+    let open = if slides && !settings::dragging() { 1.0 - f32::from_bits(COLLAPSED.load(Ordering::Relaxed)) } else { 1.0 };
     (2.0 * settings::minimap_size() * settings::minimap_scale() + below) * res * open
 }
 
@@ -111,6 +114,14 @@ impl Default for Radar {
     fn default() -> Self {
         Radar { alpha: 0.0, yaw: None, camera: ([1.0, 0.0], [0.0, 1.0]), in_control: false, collapsed: 0.0, trail: VecDeque::new(), trail_space: 0 }
     }
+}
+
+/// The minimap's centre and radius on the screen, for the 16:9 picture `area` (`[x, y, w, h]`).
+pub fn circle(area: &[f32; 4]) -> ([f32; 2], f32) {
+    let res = area[3] / 1080.0;
+    let radius = settings::minimap_size() * res * settings::minimap_scale();
+    let [offset_x, offset_y] = settings::offset();
+    ([area[0] + area[2] - offset_x * res - radius, area[1] + offset_y * res + radius], radius)
 }
 
 /// Where the radar sits and how big it is on this screen.
@@ -184,12 +195,7 @@ impl Radar {
         // `res` follows the screen only (where the column sits); `s` also holds the scale setting.
         let res = placement.area[3] / 1080.0;
         let s = res * settings::minimap_scale();
-        let radius = settings::minimap_size() * s;
-        let [offset_x, offset_y] = settings::offset();
-        let center = [
-            placement.area[0] + placement.area[2] - offset_x * res - radius,
-            placement.area[1] + offset_y * res + radius,
-        ];
+        let (center, radius) = circle(&placement.area);
         let draw = ui.get_foreground_draw_list();
         let view = View {
             radar: self,
@@ -491,7 +497,14 @@ impl View<'_> {
     }
 
     fn draw_marks(&self, draw: &DrawListMut<'_>, snapshot: &Snapshot) {
-        // Spirits first so a partner or the enemy sits on top of them.
+        // The enemies' dots first, under everything else, and only inside the minimap.
+        for &offset in &snapshot.enemies {
+            if let Some((at, _)) = self.place(offset, false) {
+                let [r, g, b, _] = ENEMY;
+                draw.add_circle(at, 3.0 * self.m, self.color([r, g, b, 0.8])).filled(true).num_segments(12).build();
+            }
+        }
+        // Spirits next so a partner or the enemy sits on top of them.
         self.draw_dots(draw, &snapshot.spirits, Icon::Spirit, SPIRIT, 4.5, false);
         self.draw_dots(draw, &snapshot.partners, Icon::Partner, PARTNER, 6.5, true);
         if let Some((at, inside)) = snapshot.target.and_then(|offset| self.place(offset, true)) {

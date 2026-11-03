@@ -28,6 +28,12 @@ static PLAYER_SCALE: AtomicU32 = AtomicU32::new(0x3F33_3333);
 static WIDTH: AtomicI32 = AtomicI32::new(250);
 static OFFSET_X: AtomicI32 = AtomicI32::new(48);
 static OFFSET_Y: AtomicI32 = AtomicI32::new(47);
+/// Where the target bar is moved from its place under the minimap, same directions as the offsets.
+static TARGET_OFFSET_X: AtomicI32 = AtomicI32::new(0);
+static TARGET_OFFSET_Y: AtomicI32 = AtomicI32::new(0);
+/// The key that starts and ends the drag mode (0: none), and whether the mode is on (`drag.rs`).
+static DRAG_KEY: AtomicI32 = AtomicI32::new(0);
+static DRAGGING: AtomicBool = AtomicBool::new(false);
 /// `f32` bits.
 static SCALE: AtomicU32 = AtomicU32::new(0x3F80_0000);
 /// `f32` bits.
@@ -46,6 +52,7 @@ static MINIMAP_FULL_MAP: AtomicBool = AtomicBool::new(true);
 static MINIMAP_GOBLINS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_COOP: AtomicBool = AtomicBool::new(true);
 static MINIMAP_SPIRITS: AtomicBool = AtomicBool::new(true);
+static MINIMAP_ENEMIES: AtomicBool = AtomicBool::new(false);
 static MINIMAP_HIDE_IN_CAVES: AtomicBool = AtomicBool::new(false);
 static MINIMAP_HIDE_IN_BOSS_FIGHTS: AtomicBool = AtomicBool::new(false);
 static MINIMAP_RANGE: AtomicI32 = AtomicI32::new(100);
@@ -57,6 +64,10 @@ static MINIMAP_SIZE: AtomicI32 = AtomicI32::new(125);
 /// hidden now. A reload keeps the hidden state: it is the player's, not the file's.
 static TOGGLE_KEY: AtomicI32 = AtomicI32::new(0);
 static HIDDEN: AtomicBool = AtomicBool::new(false);
+/// `Logging.MapProbe`: extra diagnostic lines in the log, for tracking down a map problem.
+static MAP_PROBE: AtomicBool = AtomicBool::new(false);
+/// `Logging.EnemyProbe`: how many hostile enemies the minimap sees, in the log.
+static ENEMY_PROBE: AtomicBool = AtomicBool::new(false);
 
 /// Takes every setting from the loaded config.
 pub fn load(config: &Config) {
@@ -71,6 +82,9 @@ pub fn load(config: &Config) {
     set_width(f64::from(target.width));
     set_offset_x(f64::from(config.layout.offset_x));
     set_offset_y(f64::from(config.layout.offset_y));
+    set_target_offset_x(f64::from(config.layout.target_offset_x));
+    set_target_offset_y(f64::from(config.layout.target_offset_y));
+    DRAG_KEY.store(parse_virtual_key(&config.general.drag_key, 0), Ordering::Relaxed);
     set_scale(target.scale);
     set_minimap_enabled(minimap.enabled as u8);
     set_minimap_map(minimap.layers.map as u8);
@@ -90,6 +104,9 @@ pub fn load(config: &Config) {
     set_minimap_hide_in_boss_fights(minimap.hide.in_boss_fights as u8);
     set_minimap_range(f64::from(minimap.range));
     TOGGLE_KEY.store(parse_virtual_key(&config.general.toggle_key, 0), Ordering::Relaxed);
+    MAP_PROBE.store(config.logging.map_probe, Ordering::Relaxed);
+    ENEMY_PROBE.store(config.logging.enemy_probe, Ordering::Relaxed);
+    set_minimap_enemies(minimap.layers.enemies as u8);
     store_keys(&ZOOM_IN_KEYS, &minimap.zoom_in_key);
     store_keys(&ZOOM_OUT_KEYS, &minimap.zoom_out_key);
     set_minimap_size(f64::from(minimap.size));
@@ -138,6 +155,25 @@ pub fn width() -> f32 {
 /// the top-right corner of the game's picture, in pixels at 1080p.
 pub fn offset() -> [f32; 2] {
     [OFFSET_X.load(Ordering::Relaxed) as f32, OFFSET_Y.load(Ordering::Relaxed) as f32]
+}
+
+/// Where the target bar is moved from its place under the minimap (`TargetOffsetX/Y`).
+pub fn target_offset() -> [f32; 2] {
+    [TARGET_OFFSET_X.load(Ordering::Relaxed) as f32, TARGET_OFFSET_Y.load(Ordering::Relaxed) as f32]
+}
+
+/// The key that starts and ends the drag mode (0 = none).
+pub fn drag_key() -> i32 {
+    DRAG_KEY.load(Ordering::Relaxed)
+}
+
+/// Whether the drag mode is on: the minimap and the bar show whatever the game is doing.
+pub fn dragging() -> bool {
+    DRAGGING.load(Ordering::Relaxed)
+}
+
+pub fn set_dragging(on: bool) {
+    DRAGGING.store(on, Ordering::Relaxed);
 }
 
 /// Size multiplier of the minimap.
@@ -213,6 +249,11 @@ pub fn minimap_coop() -> bool {
     MINIMAP_COOP.load(Ordering::Relaxed)
 }
 
+/// Whether the hostile enemies near the player are marked with red dots.
+pub fn minimap_enemies() -> bool {
+    MINIMAP_ENEMIES.load(Ordering::Relaxed)
+}
+
 /// Whether the player's summoned spirits are marked.
 pub fn minimap_spirits() -> bool {
     MINIMAP_SPIRITS.load(Ordering::Relaxed)
@@ -236,6 +277,16 @@ pub fn minimap_range() -> f32 {
 /// The virtual-key codes that zoom in (0 = unused).
 pub fn toggle_key() -> i32 {
     TOGGLE_KEY.load(Ordering::Relaxed)
+}
+
+/// Whether to log how many hostile enemies the minimap sees (`Logging.EnemyProbe`).
+pub fn enemy_probe() -> bool {
+    ENEMY_PROBE.load(Ordering::Relaxed)
+}
+
+/// Whether to write the extra diagnostic lines about the map (`Logging.MapProbe`).
+pub fn map_probe() -> bool {
+    MAP_PROBE.load(Ordering::Relaxed)
 }
 
 /// Whether the minimap and the target panel are hidden by the toggle key.
@@ -323,6 +374,14 @@ pub fn set_offset_y(value: f64) {
     OFFSET_Y.store(value.round().clamp(0.0, 400.0) as i32, Ordering::Relaxed);
 }
 
+pub fn set_target_offset_x(value: f64) {
+    TARGET_OFFSET_X.store(value.round().clamp(-400.0, 400.0) as i32, Ordering::Relaxed);
+}
+
+pub fn set_target_offset_y(value: f64) {
+    TARGET_OFFSET_Y.store(value.round().clamp(-400.0, 400.0) as i32, Ordering::Relaxed);
+}
+
 pub fn set_minimap_scale(value: f64) {
     MINIMAP_SCALE.store((value as f32).clamp(0.5, 3.0).to_bits(), Ordering::Relaxed);
 }
@@ -381,6 +440,10 @@ pub fn set_minimap_goblins(value: u8) {
 
 pub fn set_minimap_coop(value: u8) {
     MINIMAP_COOP.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_minimap_enemies(value: u8) {
+    MINIMAP_ENEMIES.store(value != 0, Ordering::Relaxed);
 }
 
 pub fn set_minimap_spirits(value: u8) {

@@ -1,6 +1,8 @@
 #![allow(non_snake_case)] // crate name is "JourneyHUD" to control the output DLL's filename
 
 mod config;
+mod drag;
+mod enemies;
 mod map;
 mod menu;
 mod radar;

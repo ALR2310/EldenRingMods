@@ -86,6 +86,10 @@
     "label": "Spirits",
     "help": "Mark your summoned spirits on the minimap."
   },
+  "minimap_enemies": {
+    "label": "Enemies",
+    "help": "Mark the hostile enemies near you as red dots on the minimap."
+  },
   "minimap_full_map": {
     "label": "Full map",
     "help": "Show the whole world map. Off shows only what your map fragments reveal."
@@ -112,7 +116,7 @@
   },
   "minimap_hide_caves": {
     "label": "Hide in caves",
-    "help": "Hide the minimap in caves, catacombs and other dungeons."
+    "help": "Hide the minimap in caves, catacombs and tunnels."
   },
   "minimap_hide_boss": {
     "label": "Hide in boss fights",

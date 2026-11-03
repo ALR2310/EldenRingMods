@@ -124,6 +124,7 @@ fn serve(
     )?);
     let mut bdt = archive::open(game_dir, "/menu/71_maptile.tpfbdt")?;
     let mut decoded: HashMap<(MapId, [i32; 2], u32), Vec<u8>> = HashMap::new();
+    let mut missing_logged = 0;
 
     while let Ok(mut request) = requests.recv() {
         // Only the newest request matters once the player has moved on.
@@ -152,7 +153,14 @@ fn serve(
                             .read_at(entry.offset, entry.size)
                             .and_then(|dcx| decode_tile(&oodle, &dcx))
                             .unwrap_or_else(|_| EMPTY.repeat(TILE * TILE)),
-                        None => EMPTY.repeat(TILE * TILE),
+                        None => {
+                            // Shown as unexplored; with `Logging.MapProbe` logged (a few times) to tell a missing tile from a window never asked for.
+                            if missing_logged < 20 && crate::settings::map_probe() {
+                                missing_logged += 1;
+                                logger::log(&format!("Map: no tile for {map:?} cell {cell:?} variant {variant:#x}"));
+                            }
+                            EMPTY.repeat(TILE * TILE)
+                        }
                     }),
                 };
                 // Cells stack northwards, image rows go southwards.

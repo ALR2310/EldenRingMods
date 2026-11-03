@@ -383,6 +383,10 @@
       {
         "version": "1.1.0",
         "commit": "053cdcffb15e89ec30ed85b9483bb4005afbdf93"
+      },
+      {
+        "version": "1.2.0",
+        "commit": "7192d6bacf7dd00c1c6a383c71104b8439af9467"
       }
     ],
     "modFileId": "8285250"
