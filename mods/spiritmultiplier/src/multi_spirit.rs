@@ -366,6 +366,9 @@ fn build_canuse_cost_stub(enabled: u64, get_buddy_state: u64, cost: u64) -> Vec<
     c
 }
 
+/// Calls of [disappear_all_hook] (the dismiss-request branch); read by `PersistProbe`.
+pub(crate) static DISAPPEAR_HOOK_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// Patch 6, called by its stub in place of `DisappearAll(mgr)` for the
 /// dismiss-request call: 1 = handled here, 0 = let the stub run the real
 /// `DisappearAll` (vanilla: dismiss everything).
@@ -375,6 +378,7 @@ fn build_canuse_cost_stub(enabled: u64, get_buddy_state: u64, cost: u64) -> Vec<
 /// `disappear_requested` raised for the duration of the real call, so it
 /// skips them, then it is lowered again.
 unsafe extern "system" fn disappear_all_hook(manager: *mut SummonBuddyManager) -> u8 {
+    DISAPPEAR_HOOK_CALLS.fetch_add(1, Ordering::Relaxed);
     if ENABLED.load(Ordering::Relaxed) == 0 || !unsafe { (*manager).disappear_requested } {
         return 0;
     }

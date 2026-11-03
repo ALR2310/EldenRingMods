@@ -1146,7 +1146,7 @@ checksum = "3763264f6b73151db08c50ff20d7d8a0b8796e021cdea7ceedad07b80155fa0e"
 
 [[package]]
 name = "spiritmultiplier"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "common",
  "eldenring",
