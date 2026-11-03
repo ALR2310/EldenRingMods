@@ -46,7 +46,6 @@ Chi tiết: `mods/journeyhud/docs/design.md`
 - [ ] [research] JourneyHUD: kẻ địch xung quanh trên minimap, đầu chuỗi beacon trên 2.6.2.0 đến 2.7.1.0 (`docs/map.md`)
 - [ ] [verify] JourneyHUD: nền bản đồ ở Finger Birthing Grounds (DLC) sau quy tắc điểm gốc cho dungeon legacy; Farum Azula và Haligtree đã đúng (`mods/journeyhud/docs/map.md`)
 - [ ] Phát hành JourneyHUD bản sửa lỗi bản đồ (3 bullet ở `[Unreleased]`), rồi báo Ver3ion trên Nexus (Mistwood, Farum Azula, InCaves) và dán lại trang mô tả
-- [chờ phản hồi] JourneyHUD: HDR bản 1.1.0 (liziai996, 2026-11-01): nhờ thử `HDRMode = "Auto"`, còn sáng thì chỉnh `HDRBrightness` / `HDRGamma` (`mods/journeyhud/docs/hdr.md`)
 
 ## NoFallDamage
 
