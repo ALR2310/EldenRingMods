@@ -67,7 +67,7 @@ Spirits = true          # your summoned spirits
 
 
 [Minimap.Hide]
-InCaves = false         # caves, catacombs and dungeons
+InCaves = false         # caves, catacombs and tunnels
 InBossFights = false    # while a boss health bar is on screen
 
 
@@ -81,3 +81,6 @@ HDRGamma = 1.0          # above 1.0 darkens dim colours, below 1.0 lifts them (0
 [Logging]
 # Write a log file next to the DLL, for troubleshooting.
 LogFile = true
+
+# Log the block you are in and the map tiles that are missing, for a blank minimap.
+MapProbe = false

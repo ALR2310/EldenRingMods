@@ -57,6 +57,8 @@ static MINIMAP_SIZE: AtomicI32 = AtomicI32::new(125);
 /// hidden now. A reload keeps the hidden state: it is the player's, not the file's.
 static TOGGLE_KEY: AtomicI32 = AtomicI32::new(0);
 static HIDDEN: AtomicBool = AtomicBool::new(false);
+/// `Logging.MapProbe`: extra diagnostic lines in the log, for tracking down a map problem.
+static MAP_PROBE: AtomicBool = AtomicBool::new(false);
 
 /// Takes every setting from the loaded config.
 pub fn load(config: &Config) {
@@ -90,6 +92,7 @@ pub fn load(config: &Config) {
     set_minimap_hide_in_boss_fights(minimap.hide.in_boss_fights as u8);
     set_minimap_range(f64::from(minimap.range));
     TOGGLE_KEY.store(parse_virtual_key(&config.general.toggle_key, 0), Ordering::Relaxed);
+    MAP_PROBE.store(config.logging.map_probe, Ordering::Relaxed);
     store_keys(&ZOOM_IN_KEYS, &minimap.zoom_in_key);
     store_keys(&ZOOM_OUT_KEYS, &minimap.zoom_out_key);
     set_minimap_size(f64::from(minimap.size));
@@ -236,6 +239,11 @@ pub fn minimap_range() -> f32 {
 /// The virtual-key codes that zoom in (0 = unused).
 pub fn toggle_key() -> i32 {
     TOGGLE_KEY.load(Ordering::Relaxed)
+}
+
+/// Whether to write the extra diagnostic lines about the map (`Logging.MapProbe`).
+pub fn map_probe() -> bool {
+    MAP_PROBE.load(Ordering::Relaxed)
 }
 
 /// Whether the minimap and the target panel are hidden by the toggle key.

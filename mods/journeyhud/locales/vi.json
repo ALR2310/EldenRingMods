@@ -112,7 +112,7 @@
   },
   "minimap_hide_caves": {
     "label": "Ẩn trong hang",
-    "help": "Ẩn minimap khi ở trong hang, hầm mộ và các dungeon khác."
+    "help": "Ẩn minimap khi ở trong hang, hầm mộ và đường hầm."
   },
   "minimap_hide_boss": {
     "label": "Ẩn khi đánh boss",

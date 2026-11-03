@@ -112,7 +112,7 @@
   },
   "minimap_hide_caves": {
     "label": "Hide in caves",
-    "help": "Hide the minimap in caves, catacombs and other dungeons."
+    "help": "Hide the minimap in caves, catacombs and tunnels."
   },
   "minimap_hide_boss": {
     "label": "Hide in boss fights",
