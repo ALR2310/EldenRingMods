@@ -14,6 +14,7 @@
 //! `shared/docs/overlay.md`.
 
 use std::ffi::c_void;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use hudhook::mh::{MH_ApplyQueued, MhHook};
@@ -99,6 +100,32 @@ unsafe fn vtable_fn(obj: *mut c_void, slot: usize) -> usize {
     unsafe { *(*(obj as *const *const usize)).add(slot) }
 }
 
+/// Lets a mod that also works on the game's input (Toolbox's input bridge) share these hooks:
+/// a second `MhHook` on the same DirectInput / `user32` function would fail, so the mod hands
+/// over its logic instead and the hooks here call it.
+#[derive(Clone, Copy)]
+pub struct InputExtension {
+    /// Called after every `GetDeviceState` (`size` = the device's state size, `data` the buffer,
+    /// `hr` the result); returns the result to give the game. May edit `data`.
+    pub device_state: fn(size: u32, data: *mut c_void, hr: i32) -> i32,
+    /// Same for `GetDeviceData` (buffered reads): `in_out` is the event count.
+    pub device_data: fn(obj_size: u32, data: *mut c_void, in_out: *mut u32, flags: u32, hr: i32) -> i32,
+    /// Whether `ClipCursor` / `SetCursorPos` should be neutralized, as they are while the menu is open.
+    pub unpin_cursor: fn() -> bool,
+}
+
+static EXTENSION: OnceLock<InputExtension> = OnceLock::new();
+
+/// Registers the extension; call before [`super::install_input_hooks`].
+pub fn set_extension(extension: InputExtension) {
+    let _ = EXTENSION.set(extension);
+}
+
+/// `unpin_cursor` of the extension, `false` without one.
+pub(super) fn extension_unpins_cursor() -> bool {
+    EXTENSION.get().is_some_and(|e| (e.unpin_cursor)())
+}
+
 fn menu_open() -> bool {
     MENU_OPEN.load(Ordering::Relaxed)
 }
@@ -119,7 +146,10 @@ macro_rules! state_hook {
     ($name:ident, $i:expr) => {
         unsafe extern "system" fn $name(this: *mut c_void, size: u32, data: *mut c_void) -> i32 {
             let orig = unsafe { std::mem::transmute::<usize, GetDeviceStateFn>(STATE_ORIGS[$i].load(Ordering::Relaxed)) };
-            let hr = unsafe { orig(this, size, data) };
+            let mut hr = unsafe { orig(this, size, data) };
+            if let Some(ext) = EXTENSION.get() {
+                hr = (ext.device_state)(size, data, hr);
+            }
             if matches!(size, DIMOUSESTATE_SIZE | DIMOUSESTATE2_SIZE) {
                 remember_mouse(this);
                 if hr >= 0 && menu_open() && !data.is_null() {
@@ -145,7 +175,10 @@ macro_rules! data_hook {
             flags: u32,
         ) -> i32 {
             let orig = unsafe { std::mem::transmute::<usize, GetDeviceDataFn>(DATA_ORIGS[$i].load(Ordering::Relaxed)) };
-            let hr = unsafe { orig(this, obj_size, data, in_out, flags) };
+            let mut hr = unsafe { orig(this, obj_size, data, in_out, flags) };
+            if let Some(ext) = EXTENSION.get() {
+                hr = (ext.device_data)(obj_size, data, in_out, flags, hr);
+            }
             if hr >= 0 && menu_open() && !in_out.is_null() && is_mouse(this) {
                 unsafe { *in_out = 0 };
             }

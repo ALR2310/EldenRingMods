@@ -1,6 +1,6 @@
 # toml_config: cấu hình TOML cho mod có danh sách và bảng
 
-**Status 2026-10-13: hoạt động, dùng bởi speedmultiplier và animcancel (các mod còn lại dùng `.ini`, xem `shared/docs/config.md`). Code ở `shared/src/toml_config.rs`, có test cho migration, gộp mẫu và lưu giá trị. Phần riêng của SpeedMultiplier: `mods/speedmultiplier/docs/config_toml.md`.**
+**Status 2026-10-13: hoạt động, dùng bởi speedmultiplier, animcancel, journeyhud và toolbox (các mod còn lại dùng `.ini`, xem `shared/docs/config.md`). Code ở `shared/src/toml_config.rs`, có test cho migration, gộp mẫu và lưu giá trị. Phần riêng của SpeedMultiplier: `mods/speedmultiplier/docs/config_toml.md`.**
 
 ## Vì sao có (2026-10-02)
 
