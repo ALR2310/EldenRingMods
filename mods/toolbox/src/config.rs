@@ -23,6 +23,7 @@ pub struct Config {
     pub input_bridge: InputBridge,
     pub window_resize: WindowResize,
     pub taskbar: Taskbar,
+    pub startup: Startup,
     pub map_anywhere: Toggle,
     pub torrent_anywhere: Toggle,
     pub buildup: Buildup,
@@ -79,6 +80,13 @@ pub struct Taskbar {
     /// `Game`, `Blank` or `Default` (any case), see `taskbar.rs`.
     pub icon: String,
     pub stop_flashing: bool,
+}
+
+#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
+#[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
+pub struct Startup {
+    /// Minimize the game window as it opens, see `minimize.rs`.
+    pub start_minimized: bool,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
