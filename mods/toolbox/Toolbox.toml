@@ -84,6 +84,14 @@ Icon = "Game"
 StopFlashing = true
 
 
+[Startup]
+# Open the game minimized on the taskbar, so it does not jump in front of the window you are
+# working in. Alt-Tab or its taskbar icon brings it back. The game restores its window about
+# 15 s after it starts, so it is minimized again for the first 90 s; if you restore it
+# yourself right after, it stays.
+StartMinimized = true
+
+
 [MapAnywhere]
 # Open the map and fast travel from anywhere: mid-boss-fight and inside
 # caves/dungeons. Code patch applied at startup, restart the game to undo.

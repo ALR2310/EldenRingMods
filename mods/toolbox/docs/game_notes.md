@@ -11,6 +11,7 @@
 - 2026-10-27 [observed] E: tương tác và xác nhận (đóng hộp thoại, chọn Continue).
 - 2026-10-27 [observed] Chuột trái: tấn công.
 - 2026-10-27 [observed] Bảng phím của bridge ở `mods/toolbox/src/input/keys.txt` (có `-`, `=`/`plus`, phím số, ngoặc, Home/End...). Từ 2026-10-27 bridge cũng hook `GetAsyncKeyState`, nên phím giả tới được cả mod đọc phím kiểu Win32 (phím zoom JourneyHud đã thử: `-` đổi tầm minimap). MCP phải khởi động lại (/mcp) mới nhận danh sách phím và tool mới.
+- 2026-11-03 [observed] Phím F1..F12 và mọi hotkey mod đọc bằng GetAsyncKeyState (ReloadKey F5, DragKey F7...) chỉ tới mod khi Toolbox.dll đủ mới: log Toolbox.log phải có dòng "Win32 input: hooks applied (keys true, cursor true)". Bản Toolbox.dll build trước 2026-11-03 12:12 không có dòng này nên press f6/f7 "ok" nhưng mod không thấy; build lại Toolbox (scripts/build-mod.ps1 -Mod Toolbox) và chép vào thư mục mod. Thử 2026-11-03: sau khi chép bản mới, F7 và F5 đều chạy, kéo thả JourneyHUD bằng mouse_to + mouse_hold + mouse_to + mouse_release chạy được.
 
 ## Quy trình
 
@@ -32,3 +33,7 @@
 
 - 2026-10-27 [observed] Kích thước cửa sổ game thay đổi (320x168, 800x450); `screenshot(max_width=...)` thu nhỏ khung. Cửa sổ nhỏ thì chữ trong menu rất khó đọc.
 - 2026-11-02 [observed] 2026-11-02: MCP chọn cửa sổ theo tiêu đề có chữ "Elden Ring": một tab Chrome tên "Journey HUD at Elden Ring Nexus" bị chụp thay cho game và phím E có thể đã gửi nhầm vào Chrome. Trước khi bấm phím, kiểm tra dòng "Window:" của screenshot là "ELDEN RING™"; nếu là Chrome thì dừng, báo người dùng đóng hoặc đổi tên tab.
+
+## Bản đồ
+
+- 2026-11-03 [user] Đổi bản đồ Lands Between sang Shadow Realm (DLC): mở bản đồ bằng M, đang ở bản đồ thì giữ X khoảng 0.6 giây (press x 0.6); bấm 0.2 giây không ăn. Trong danh sách grace (F) thì Z/X chỉ đổi vùng của danh sách, không đổi bản đồ: phải bấm Q để thoát danh sách về bản đồ rồi mới giữ X. Footer của bản đồ có dòng "X Show Shadow Realm map" / "Show Lands Between map". Danh sách grace chỉ có vùng của bản đồ đang hiển thị.
