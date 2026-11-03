@@ -22,9 +22,12 @@ hết vào nhánh `mod/` của mod.
   `[package.metadata.winresource]` của mọi mod) làm và commit trên `main`, không
   rải lên từng nhánh `mod/` (người dùng, 2026-10-27). Mod chỉ có trên nhánh của
   nó (chưa vào `main`) thì sửa trên nhánh đó.
-- **Ngoại lệ: input bridge** (người dùng, 2026-10-27; nay là phần
-  `mods/toolbox/src/input/` của `toolbox`): cải tiến nó làm
-  thẳng trong phiên đang làm mod khác, không cần chuyển nhánh.
+- **Ngoại lệ: `toolbox`** (người dùng, 2026-10-27 cho input bridge, 2026-11-03
+  mở rộng ra cả mod; input bridge nay là `mods/toolbox/src/input/`): việc của
+  `toolbox` (tính năng, sửa lỗi, tài liệu) làm thẳng trên nhánh đang đứng, kể cả
+  khi đó là nhánh `mod/` của mod khác, không cần chuyển sang `mod/toolbox`,
+  không cần stash. Commit vẫn chỉ gồm file của `toolbox` (`git add` theo đường
+  dẫn), không lẫn file của mod đang làm.
 - Không tự merge, xoá hay đổi tên nhánh `mod/...`; không tự commit khi chưa được
   kiểm (xem mục "Quy tắc code và quy trình thử" bên dưới). Nhánh `shared/...` và
   `infra/...` thì được xoá sau khi đã merge vào `main` (người dùng, 2026-11-02);
