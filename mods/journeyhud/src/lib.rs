@@ -2,6 +2,7 @@
 
 mod config;
 mod drag;
+mod enemies;
 mod map;
 mod menu;
 mod radar;

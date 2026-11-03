@@ -127,6 +127,7 @@ pub struct Layers {
     pub map_for_goblins: bool,
     pub coop_players: bool,
     pub spirits: bool,
+    pub enemies: bool,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
@@ -154,6 +155,8 @@ pub struct Logging {
     pub log_file: bool,
     /// Extra diagnostic lines about the map in the log (see `settings::map_probe`).
     pub map_probe: bool,
+    /// How many hostile enemies the minimap sees, in the log (see `settings::enemy_probe`).
+    pub enemy_probe: bool,
 }
 
 const MIGRATION: Migration = Migration { version_key: "General.ConfigVersion", steps: STEPS, keep: &[] };
@@ -257,7 +260,9 @@ mod tests {
     #[test]
     fn the_log_is_on_and_the_map_probe_is_off_by_default() {
         let logging = template().logging;
-        assert!(logging.log_file && !logging.map_probe);
+        assert!(logging.log_file && !logging.map_probe && !logging.enemy_probe);
+        // The enemy dots are off until the player turns them on.
+        assert!(!template().minimap.layers.enemies);
     }
 
     #[test]

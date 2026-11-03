@@ -497,7 +497,14 @@ impl View<'_> {
     }
 
     fn draw_marks(&self, draw: &DrawListMut<'_>, snapshot: &Snapshot) {
-        // Spirits first so a partner or the enemy sits on top of them.
+        // The enemies' dots first, under everything else, and only inside the minimap.
+        for &offset in &snapshot.enemies {
+            if let Some((at, _)) = self.place(offset, false) {
+                let [r, g, b, _] = ENEMY;
+                draw.add_circle(at, 3.0 * self.m, self.color([r, g, b, 0.8])).filled(true).num_segments(12).build();
+            }
+        }
+        // Spirits next so a partner or the enemy sits on top of them.
         self.draw_dots(draw, &snapshot.spirits, Icon::Spirit, SPIRIT, 4.5, false);
         self.draw_dots(draw, &snapshot.partners, Icon::Partner, PARTNER, 6.5, true);
         if let Some((at, inside)) = snapshot.target.and_then(|offset| self.place(offset, true)) {

@@ -95,6 +95,8 @@ pub struct Snapshot {
     pub deaths: Option<u32>,
     pub partners: Vec<Dot>,
     pub spirits: Vec<Dot>,
+    /// Offsets of the living hostile enemies within reach, but not the locked-on one (`target`).
+    pub enemies: Vec<[f32; 2]>,
     /// Offset of the locked-on enemy.
     pub target: Option<[f32; 2]>,
 }
@@ -189,6 +191,18 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
     if settings::minimap_spirits() {
         common::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| spirits.extend(dot(chr)));
     }
+    let mut enemies = Vec::new();
+    if settings::minimap_enemies() {
+        crate::enemies::for_each(world_chr_man, |chr| {
+            if let Some(dot) = dot(chr) {
+                // The locked-on enemy has its own icon.
+                let locked = target.is_some_and(|at| (at[0] - dot.offset[0]).hypot(at[1] - dot.offset[1]) < 1.5);
+                if !locked {
+                    enemies.push(dot.offset);
+                }
+            }
+        });
+    }
     let clock = unsafe { WorldAreaTime::instance() }.ok().map(|time| [time.clock.hours(), time.clock.minutes()]);
     let deaths = if settings::minimap_deaths() { death_count() } else { None };
     let fragments = if settings::minimap_full_map() { u32::MAX } else { map_fragments(map) };
@@ -229,6 +243,7 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
         deaths,
         partners,
         spirits,
+        enemies,
         target,
     })
 }

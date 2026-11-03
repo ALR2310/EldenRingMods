@@ -45,7 +45,13 @@ for Goblins (`mfg.rs`), khung và mũi tên bằng ảnh (`assets/`).
   thì radar xoay đúng chiều, đồng đội và spirit nằm đúng chỗ.
 - Lọc "cùng khu vực": chỉ lấy nhân vật cùng `block_id.area()` và trong 3 lần tầm radar, vì ở khu khác toạ độ chỉ
   trông gần.
-- Chưa có: kẻ địch xung quanh (ngoài mục tiêu khoá), nền bản đồ, thu phóng bằng phím (tầm chỉnh trong menu/toml).
+- Kẻ địch xung quanh: xem mục "Chấm đỏ kẻ địch" bên dưới (mặc định tắt).
+
+## Chấm đỏ kẻ địch (2026-11-03)
+
+`Minimap.Layers.Enemies` (mặc định `false`, hàng bật tắt trong menu). `src/enemies.rs` duyệt `WorldChrMan::chr_sets` (entry `Active` / `ReadyForActivation`, như `speedmultiplier`) và lấy kẻ địch còn sống (`modules.data.hp > 0`) thoả cả ba: `chr_type` là `Npc` hoặc `Unk7` (boss), `team_type` không thuộc danh sách phe bạn (`NOT_ENEMY_TEAMS`, chép từ `speedmultiplier/src/enemy.rs`, chờ đưa lên `common`) và `NpcParam.threatLv > 0`. `radar.rs` đổi sang offset bằng cùng bộ lọc cùng không gian với đồng đội; kẻ địch đang khoá bỏ khỏi danh sách (đã có icon kiếm riêng). `radar_ui.rs` vẽ chấm đỏ nhỏ (bán kính 3 px nhân cỡ, mờ 0,8) dưới mọi dấu khác, chỉ trong minimap (không ghim viền).
+
+Chỉ đọc `chr_sets`, không đọc `open_field_chr_set` (kiểu chưa được kiểm chứng trong `fromsoftware-rs`). `Logging.EnemyProbe` ghi `Enemies: N hostile in S of C chr_set(s)` mỗi khi số đổi. Thử trong game (2026-11-03, Mistwood, Limgrave, ME2): `29 hostile in 1 of 5 chr_set(s)`, minimap có chấm đỏ. Chưa thử trong hầm, dungeon legacy và DLC, chưa kiểm xem quân địch ngoài trời nào nằm ngoài `chr_sets`.
 
 ## Vệt đường đã đi (2026-10-27)
 
