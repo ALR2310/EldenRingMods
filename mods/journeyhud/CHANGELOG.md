@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-03
+
 - Added a drag mode (F7 by default) to move the minimap and the target bar with the mouse.
 - Added an option to mark the hostile enemies near you as red dots on the minimap (off by default).
 - Fixed the minimap being blank at the Mistwood after defeating Radahn.
