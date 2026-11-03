@@ -7,7 +7,7 @@
 //!   Target panel             -> Target bar on/off, Health numbers on/off, Status buildup on/off, Effects on/off (target, you),
 //!                               Bar length slider, Size stepped, Right margin slider, Top margin slider
 //!   Minimap                  -> Minimap on/off, Map, Graces, Points, Beacons, Map for Goblins,
-//!                               Co-op players, Spirits, Full map, Clock, Deaths, Trail, Compass, Turn with
+//!                               Co-op players, Spirits, Enemies, Full map, Clock, Deaths, Trail, Compass, Turn with
 //!                               camera, Hide in caves, Hide in boss fights (all on/off),
 //!                               Minimap range and size (sliders), Minimap scale (stepped)
 //! ```
@@ -70,6 +70,8 @@ static MINIMAP_COOP: Setting =
     Setting { key: "Minimap.Layers.CoopPlayers", format: erui::format_bool, apply: Some(settings::set_minimap_coop) };
 static MINIMAP_SPIRITS: Setting =
     Setting { key: "Minimap.Layers.Spirits", format: erui::format_bool, apply: Some(settings::set_minimap_spirits) };
+static MINIMAP_ENEMIES: Setting =
+    Setting { key: "Minimap.Layers.Enemies", format: erui::format_bool, apply: Some(settings::set_minimap_enemies) };
 static MINIMAP_ROTATE: Setting =
     Setting { key: "Minimap.Rotate", format: erui::format_bool, apply: Some(settings::set_minimap_rotate) };
 static MINIMAP_HIDE_IN_CAVES: Setting =
@@ -140,6 +142,9 @@ fn build(b: &mut erui::MenuBuilder) -> Result<(), String> {
     b.toggle(minimap, &t("minimap_spirits.label"), &t("minimap_spirits.help"), &MINIMAP_SPIRITS, || {
         config::get().minimap.layers.spirits as u8
     })?;
+    b.toggle(minimap, &t("minimap_enemies.label"), &t("minimap_enemies.help"), &MINIMAP_ENEMIES, || {
+        config::get().minimap.layers.enemies as u8
+    })?;
     b.toggle(minimap, &t("minimap_full_map.label"), &t("minimap_full_map.help"), &MINIMAP_FULL_MAP, || {
         config::get().minimap.full_map as u8
     })?;
@@ -197,7 +202,7 @@ mod tests {
     #[test]
     fn menu_keys_are_in_the_template() {
         let doc: toml::Value = toml::from_str(config::TEMPLATE).unwrap();
-        let settings = [&ENABLED, &SHOW_NUMBERS, &BUILDUP, &EFFECTS_TARGET, &EFFECTS_PLAYER, &MINIMAP, &MINIMAP_MAP, &MINIMAP_GRACES, &MINIMAP_POINTS, &MINIMAP_BEACONS, &MINIMAP_COMPASS, &MINIMAP_CLOCK, &MINIMAP_DEATHS, &MINIMAP_TRAIL, &MINIMAP_GOBLINS, &MINIMAP_FULL_MAP, &MINIMAP_COOP, &MINIMAP_SPIRITS];
+        let settings = [&ENABLED, &SHOW_NUMBERS, &BUILDUP, &EFFECTS_TARGET, &EFFECTS_PLAYER, &MINIMAP, &MINIMAP_MAP, &MINIMAP_GRACES, &MINIMAP_POINTS, &MINIMAP_BEACONS, &MINIMAP_COMPASS, &MINIMAP_CLOCK, &MINIMAP_DEATHS, &MINIMAP_TRAIL, &MINIMAP_GOBLINS, &MINIMAP_FULL_MAP, &MINIMAP_COOP, &MINIMAP_SPIRITS, &MINIMAP_ENEMIES];
         let numbers = [&WIDTH, &SCALE, &PLAYER_SCALE, &OFFSET_X, &OFFSET_Y, &MINIMAP_RANGE, &MINIMAP_SIZE, &MINIMAP_SCALE];
         let keys = settings.iter().map(|s| s.key).chain(numbers.iter().map(|n| n.key));
         for key in keys.chain([MINIMAP_ROTATE.key, MINIMAP_HIDE_IN_CAVES.key, MINIMAP_HIDE_IN_BOSS_FIGHTS.key]) {

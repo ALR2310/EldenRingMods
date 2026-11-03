@@ -5,7 +5,7 @@
 //! used as offsets from the player (all in the same Havok space), so no map
 //! coordinate conversion is needed. Details: `docs/radar.md`.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -95,6 +95,8 @@ pub struct Snapshot {
     pub deaths: Option<u32>,
     pub partners: Vec<Dot>,
     pub spirits: Vec<Dot>,
+    /// Offsets of the living hostile enemies within reach, but not the locked-on one (`target`).
+    pub enemies: Vec<[f32; 2]>,
     /// Offset of the locked-on enemy.
     pub target: Option<[f32; 2]>,
 }
@@ -151,10 +153,9 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
     let hud_visible = fe.as_ref().map_or(true, |fe| fe.hud_state == CSFeManHudState::Default);
     // A boss health bar is on screen while one of its slots names a character.
     let boss_fight = fe.is_some_and(|fe| fe.boss_health_displays.iter().any(|boss| !boss.field_ins_handle.is_empty()));
-    // Catacombs, caves, tunnels and the like: any block outside the overworld, except the
-    // underground (area 12), which has a world map of its own.
+    // Catacombs, caves, tunnels and the like, not the legacy dungeons (see `world::in_cave`).
     let block = player.current_block_id;
-    let in_cave = !block.is_overworld() && block.area() != 12;
+    let in_cave = world::in_cave(block);
 
     // The camera and the physics matrices share axes and scale with the
     // world, so their direction vectors apply to offsets directly.
@@ -163,6 +164,7 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
     let origin = model.3;
     let (position, space, map) =
         world::locate(player.current_block_id, [player.block_position.x, player.block_position.z]);
+    log_block(block, space, map);
     // Beyond this the other character is in some other part of the world
     // whose coordinates only look near.
     let reach = settings::minimap_range() * 3.0;
@@ -188,6 +190,18 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
     let mut spirits = Vec::new();
     if settings::minimap_spirits() {
         common::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| spirits.extend(dot(chr)));
+    }
+    let mut enemies = Vec::new();
+    if settings::minimap_enemies() {
+        crate::enemies::for_each(world_chr_man, |chr| {
+            if let Some(dot) = dot(chr) {
+                // The locked-on enemy has its own icon.
+                let locked = target.is_some_and(|at| (at[0] - dot.offset[0]).hypot(at[1] - dot.offset[1]) < 1.5);
+                if !locked {
+                    enemies.push(dot.offset);
+                }
+            }
+        });
     }
     let clock = unsafe { WorldAreaTime::instance() }.ok().map(|time| [time.clock.hours(), time.clock.minutes()]);
     let deaths = if settings::minimap_deaths() { death_count() } else { None };
@@ -229,8 +243,35 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
         deaths,
         partners,
         spirits,
+        enemies,
         target,
     })
+}
+
+/// With `Logging.MapProbe`: logs the block the player is in and what the map makes of it whenever
+/// that changes (the area and the map, not each tile of the overworld), for working out why the
+/// map is missing somewhere.
+fn log_block(block: eldenring::cs::BlockId, space: i32, map: Option<MapId>) {
+    if !settings::map_probe() {
+        return;
+    }
+    static LAST: AtomicU64 = AtomicU64::new(u64::MAX);
+    let map_code = match map {
+        None => 0u64,
+        Some(MapId::Overworld) => 1,
+        Some(MapId::Underground) => 2,
+        Some(MapId::Shadow) => 3,
+    };
+    let key = u64::from(block.area()) << 40 | (space as u32 as u64) << 8 | map_code;
+    if LAST.swap(key, Ordering::Relaxed) != key {
+        logger::log(&format!(
+            "Map: block m{:02}_{:02}_{:02}_{:02} space {space} map {map:?}",
+            block.area(),
+            block.block(),
+            block.region(),
+            block.index()
+        ));
+    }
 }
 
 /// The map fragments the player has, one bit per fragment of the map they are on, as the map
@@ -260,11 +301,30 @@ fn map_fragments(map: Option<MapId>) -> u32 {
     if !readable {
         return u32::MAX;
     }
-    (0..32)
-        .filter(|&bit| {
-            repo.get::<WorldMapPieceParam>(base + bit)
-                .map(|row| row.open_event_flag_id())
-                .is_some_and(|flag| flag != 0 && flags.virtual_memory_flag.get_flag(flag))
-        })
-        .fold(0, |bits, bit| bits | 1 << bit)
+    let open = |bit: u32| {
+        repo.get::<WorldMapPieceParam>(base + bit)
+            .map(|row| row.open_event_flag_id())
+            .is_some_and(|flag| flag != 0 && flags.virtual_memory_flag.get_flag(flag))
+    };
+    let fragments = (0..32).filter(|&bit| open(bit)).fold(0, |bits, bit| bits | 1 << bit);
+    log_fragments(base, fragments, |bit| repo.get::<WorldMapPieceParam>(base + bit).is_some());
+    fragments
+}
+
+/// With `Logging.MapProbe`: logs the map pieces the player has whenever they change (rows of
+/// `WorldMapPieceParam`, `base` added to each bit), for working out why part of the map shows as
+/// unexplored.
+fn log_fragments(base: u32, fragments: u32, exists: impl Fn(u32) -> bool) {
+    if !settings::map_probe() {
+        return;
+    }
+    static LAST: AtomicU64 = AtomicU64::new(u64::MAX);
+    let key = u64::from(base) << 32 | u64::from(fragments);
+    if LAST.swap(key, Ordering::Relaxed) == key {
+        return;
+    }
+    let rows = |open: bool| {
+        (0..32).filter(|&bit| exists(bit) && (fragments >> bit & 1 == 1) == open).map(|bit| (base + bit).to_string()).collect::<Vec<_>>().join(" ")
+    };
+    logger::log(&format!("Map: piece rows open [{}], not open [{}]", rows(true), rows(false)));
 }

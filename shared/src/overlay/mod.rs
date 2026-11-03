@@ -232,7 +232,22 @@ fn game_window() -> Option<*mut std::ffi::c_void> {
     (pid == unsafe { GetCurrentProcessId() }).then_some(hwnd)
 }
 
-fn feed_mouse(ctx: &mut Context, buttons_down: &mut [bool; 2]) {
+/// Whether the game must not see the window message `umsg`: a mouse message or raw input while
+/// [MENU_OPEN] is set (relative raw-input events would overwrite the absolute cursor position).
+/// For a mod's own `before_wnd_proc`.
+pub fn blocks_window_message(umsg: u32) -> bool {
+    const WM_INPUT: u32 = 0x00FF;
+    const WM_MOUSEFIRST: u32 = 0x0200;
+    const WM_MOUSELAST: u32 = 0x020E;
+    let mouse_msg = umsg == WM_INPUT || (WM_MOUSEFIRST..=WM_MOUSELAST).contains(&umsg);
+    mouse_msg && MENU_OPEN.load(Ordering::Relaxed)
+}
+
+/// Feeds the cursor position (in `display_size` units) and the left and right buttons to ImGui,
+/// and frees the cursor from the game's clip rectangle. For a mod that draws with its own
+/// `ImguiRenderLoop` while it holds [MENU_OPEN] (and [install_input_hooks]); `buttons_down` is
+/// the state of the last call.
+pub fn feed_mouse(ctx: &mut Context, buttons_down: &mut [bool; 2]) {
     let Some(hwnd) = game_window() else {
         return;
     };
@@ -410,11 +425,7 @@ impl<F: FnMut(&Ui) + Send + Sync + 'static> ImguiRenderLoop for MenuRenderLoop<F
     }
 
     fn before_wnd_proc(&self, _hwnd: HWND, umsg: u32, _wparam: WPARAM, _lparam: LPARAM) -> BeforeWndProc {
-        const WM_INPUT: u32 = 0x00FF;
-        const WM_MOUSEFIRST: u32 = 0x0200;
-        const WM_MOUSELAST: u32 = 0x020E;
-        let mouse_msg = umsg == WM_INPUT || (WM_MOUSEFIRST..=WM_MOUSELAST).contains(&umsg);
-        if mouse_msg && MENU_OPEN.load(Ordering::Relaxed) { BeforeWndProc::Break } else { BeforeWndProc::Continue }
+        if blocks_window_message(umsg) { BeforeWndProc::Break } else { BeforeWndProc::Continue }
     }
 
     fn message_filter(&self, _io: &Io) -> MessageFilter {

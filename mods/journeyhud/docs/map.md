@@ -140,6 +140,17 @@ Bản đồ DLC nằm trong cùng archive `/menu/71_maptile.tpfbhd`: `M10` (Land
 - **Gốc toạ độ:** ô (0, 0) của `M10` ứng với tile m61 (28, 24), cùng khung với bản đồ cơ sở (m60). Đây là giả định đầu tiên và người dùng thử trong game thấy minimap DLC khớp, nên không cần chỉnh (đảo trên ảnh chiếm ô x 12..31, z 10..33, tức tile m61 khoảng x 40..59, z 34..57).
 - **`M11`:** chưa dùng; cần biết khối nào của game chọn nó và toạ độ riêng của nó.
 
+## Dungeon legacy và hang (2026-11-03)
+
+- `world::in_cave`: `InCaves` chỉ áp dụng cho hang, catacomb, tunnel (area 30 đến 32, 40 đến 43), không cho tháp Divine (area 34, người dùng bảo 2026-11-03) và không cho legacy dungeon (area 10, 11, 13 đến 16, 18 đến 22, 25, 28, 35; `world::is_legacy_dungeon`, game không có cờ nào cho việc này) và không cho khu ngầm (area 12).
+- Nền bản đồ trong dungeon dùng `WorldMapLegacyConvParam`: hầu hết dungeon có mọi điểm tham chiếu chụm vào một điểm đích hoặc dịch đều nhau, chọn điểm gần người chơi nhất là đúng. Ba dungeon thì các điểm mâu thuẫn nhau (bảng vanilla, khoảng cách trên bản đồ so với bên trong): Farum Azula 2683 m so với 3673 m, Haligtree 661 m so với 0, Finger Birthing Grounds 918 m so với 10.
+- **Farum Azula** (đã đối chiếu với bản đồ trong game, 2026-11-03): bản đồ thế giới vẽ nó thành đảo xoáy nước ở biển phía đông, quanh tile `m60_61_46`, grace của nó nằm trên đảo đó. Ba dòng (ID 10, 11, 132) cho ba nơi khác nhau: dòng 11 (`isBasePoint` = 1, nguồn (-2509.6, -668.0), đích `m60_51_43`) đặt grace Crumbling Beast Grave đúng tile (61.1, 46.2), dòng 10 (không phải điểm gốc) rơi vào tile (48.7, 53.4), dòng 132 (nguồn (0, 0), đích `m60_54_53` (0, 0), điểm gần nhất với người chơi) rơi vào Flame Peak, nên bản đầu hiện núi tuyết. Quy tắc: khi các dòng mâu thuẫn thì dùng dòng điểm gốc đầu tiên theo thứ tự param cho cả dungeon (`legacy_conversion`, hàm `agree`). Haligtree (dòng 18 trước dòng 136) và Finger Birthing Grounds (dòng 1000 trước 1113 đến 1116) cũng đi qua quy tắc này, **chưa đối chiếu với bản đồ trong game**.
+- Một bản trung gian bỏ nền ở mọi legacy dungeon, người dùng thử thấy mất minimap ở Stormveil, Leyndell, Học viện (đã có quy đổi tốt) và ở Farum Azula (bản đồ trong game có nền cho nó): bỏ.
+
+## Block overworld có chỉ số lạ (2026-11-03)
+
+Chữ số cuối của chỉ số block `mAA_XX_ZZ_II` là độ phóng của ô (0 là 256 m, 1 là 512 m, 2 là 1024 m), chữ số hàng chục là biến thể sự kiện. Sau khi đánh Radahn vùng Mistwood nằm ở `m60_44_37_16`: chữ số cuối 6 không phải độ phóng, và bản cũ chặn `.min(2)` thành ô 1024 m nên vị trí rơi vào ô (150, 126) của bản đồ 41x41, không có tile, minimap trống (log `Map: no tile for Overworld cell [149, 125]`). Giờ chữ số cuối quá 2 được coi là ô nhỏ 256 m (`world::locate`); đã thử trong game ở Mistwood, minimap có bản đồ. Giả thuyết ban đầu về mảnh bản đồ (Starfall Crater, `FullMap` tắt) sai, người dùng bật `FullMap`. Log chẩn đoán, **chỉ ghi khi `[Logging] MapProbe = true`** (mặc định tắt, bật lại khi cần tra một lỗi bản đồ): `Map: block ... map ...` khi khu vực đổi, `Map: no tile for ...` khi thiếu tile, `Map: piece rows ...` khi tập mảnh đổi (chỉ khi `FullMap` tắt).
+
 ## Việc chưa làm
 
 - Thử trong game: bản đồ có khớp vị trí người chơi (so với bản đồ thế giới trong game), xoay đúng khi quay camera, đổi cửa sổ không giật.
