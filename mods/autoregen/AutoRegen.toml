@@ -2,74 +2,82 @@
 # File format version, managed by the mod - don't change.
 ConfigVersion = 1
 
-# Key that reloads this file in game, no restart needed.
+# Key that reloads this config file in-game, no restart needed.
 # https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
 ReloadKey = "F5"
 
-# Show a banner at the top of the screen after a reload. Errors always show.
+# Show a banner at the top of the screen after a reload.
 ReloadBanner = false
 
 
 [PerTick]
-# Restores HP, FP and Stamina over time.
+# Enable/disable this feature
 Enabled = true
 
-# When a tick may restore anything.
-# 0 = always
-# 1 = only while out of combat
-# 2 = only while in combat
-# 3 = only while idle (no movement, attack, item, guard or mount for 5+ seconds)
-# 4 = only during one of the gestures listed in GestureId
+# When this tick regen is allowed to apply
+# 0 = Always
+# 1 = Only while out of combat
+# 2 = Only while in combat
+# 3 = Only while idle (no movement/attack/item/guard/mount for 5+ seconds)
+# 4 = Only while a gesture from GestureId below is active
 Trigger = 0
 
-# The gestures that count for Trigger 4: not just sitting, any gesture listed works. The default
-# list is Dejection, Patches' Crouch, Crossed Legs, Rest, Sitting Sideways, Dozing Cross-Legged,
-# Spread Out, Balled Up, Prayer and Desperate Prayer. A value is half of the game's gesture id.
+# Which gestures count for Trigger = 4 above - not just "sitting", any gesture
+# listed here works. Default list: Dejection, Patches' Crouch, Crossed Legs,
+# Rest, Sitting Sideways, Dozing Cross-Legged, Spread Out, Balled Up, Prayer,
+# Desperate Prayer. Values here are HALF the GESTURE_ID shown at
+# https://github.com/The-Grand-Archives/Elden-Ring-CT-TGA
 GestureId = [80, 90, 91, 92, 93, 94, 95, 97, 100, 101]
 
-# How often a tick happens, in milliseconds (1000 = every second).
+# How often it triggers, in milliseconds. Example: 1000=1 second, 5000=5
+# second. Lower values tick faster but cost more performance.
 Interval = 1000
 
-# What the amounts below mean.
-# 0 = points: HP = 1 restores 1 HP per tick.
-# 1 = percent of the maximum: HP = 1 restores 1% of max HP per tick.
-# 2 = percent of what is missing (max - current): HP = 5 restores 5% of the missing HP per tick,
-#     fast while low and slower as it fills.
+# Value type for the values below. 0 = points, 1 = percent of max, 2 = percent
+# of the amount currently missing (max - current)
+# 0 = points, e.g. HP = 1 restores 1 Hp point per tick
+# 1 = percent of max, e.g. HP = 1 restores 1% of max Hp per tick, same amount
+#     no matter how low or high current Hp already is
+# 2 = percent of missing Hp, e.g. HP = 5 restores 5% of (max Hp - current Hp)
+#     per tick - heals fast while low, tapers off as it approaches max
 ValueType = 1
 
-# Amount restored per tick.
+# Amount restored per tick
 HP = 0.5
 FP = 1.0
 SP = 5.0
 
-# Highest percent of the maximum a tick restores a stat to. 100 means no ceiling; 80 stops
-# restoring once the stat is at 80%.
+# Max percent of a stat's true max that tick regen will restore it to.
+# 100 (default) = no ceiling. Example: Cap = 80 stops healing once at 80% max.
 Cap = 100.0
 
 
 [PerHit]
-# Restores HP, FP and Stamina when you land a hit.
+# Enable/disable this feature
 Enabled = false
 
-# 0 = a fixed number of points per hit.
-# 1 = a percent of the maximum per hit.
-# 2 = a percent of the damage you just dealt.
-# Balanced starting points:
-#   0: HP = 15, FP = 5, SP = 5.
-#   1: with about 1500 max HP and 130 max FP/SP, HP = 1 (~15 HP), FP = 4 (~5 FP), SP = 4 (~5 SP).
-#   2: with about 200 damage per hit, HP = 7.5 (~15 HP), FP = 2.5 (~5 FP), SP = 2.5 (~5 SP).
+# 0 = Restore a fixed number of points every time you land a hit.
+# 1 = Restore a percent of your max stat every time you land a hit.
+# 2 = Restore a percent of the damage you just dealt every time you land a
+#     hit.
+# Suggested balanced values:
+#   0: HP = 15, FP = 5, SP = 5
+#   1: Assuming ~1500 max Hp, ~130 max Fp/SP (mid-game):
+#       HP = 1 (~15 Hp/hit), FP = 4 (~5 Fp/hit), SP = 4 (~5 SP/hit).
+#   2: Assuming ~200 damage/hit (mid-game):
+#       HP = 7.5 (~15 Hp/hit), FP = 2.5 (~5 Fp/hit), SP = 2.5 (~5 SP/hit).
 Mode = 0
 
-# Which hits count.
-# 0 = melee weapon hits only
-# 1 = ranged and spell hits only
-# 2 = both
+# Which hits count at all, regardless of Trigger above
+# 0 = Melee weapon hits only
+# 1 = Ranged/spell hits only
+# 2 = Both
 DamageType = 0
 
-# Hits of weapon arts (Ash of War) restore nothing.
+# When true, Weapon Art/Ash of War hits don't restore anything
 ExcludeAow = false
 
-# Amount restored per hit.
+# Amount restored per hit
 HP = 0.5
 FP = 1.0
 SP = 5.0

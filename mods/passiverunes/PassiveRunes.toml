@@ -2,37 +2,42 @@
 # File format version, managed by the mod - don't change.
 ConfigVersion = 1
 
-# Key that reloads this file in game, no restart needed.
+# Key that reloads this config file in-game, no restart needed.
 # https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
 ReloadKey = "F5"
 
-# Show a banner at the top of the screen after a reload. Errors always show.
+# Show a banner at the top of the screen after a reload.
 ReloadBanner = false
 
 
 [Passive]
-# Turns the interval rewards and the milestones on or off.
+# Enable/disable this feature
 Enabled = true
 
-# How often a reward is given, in milliseconds (1000 = 1 second). 0 pauses the interval rewards.
+# How often it triggers, in milliseconds. Example: 1000=1 second.
 Interval = 10000
 
-# A fixed number of runes per interval, from -999999999 to 999999999. A negative number takes
-# runes away.
+# Fixed amount of runes granted per interval
+# Range: -999999999 to 999999999 (negative takes runes away)
+# Default: 50
 Amount = 50
 
-# A percent of the runes needed for your next level, per interval, from -100 to 100. Suggested: 0.2 to
-# 0.5. A negative number takes runes away.
+# Percent of the runes needed for your next level, granted per interval
+# Range: -100 to 100 (negative takes runes away)
+# Default: 0.25
+# Suggested: 0.2 to 0.5
 Percent = 0.25
 
-# A percent of the runes you are holding, per interval, from -100 to 100 (compound interest, it grows
-# fast). Suggested: 0.05 to 0.1. A negative number takes runes away.
+# Percent of the runes you're currently holding, granted per interval
+# (compound interest). Grows fast
+# Range: -100 to 100 (negative takes runes away)
+# Default: 0
+# Suggested: 0.05 to 0.1
 Interest = 0.0
 
-# Bonus runes at play-time milestones, as "seconds:runes" pairs separated by commas. The default is
-# 30 minutes = 5000, 1 hour = 10000, 2 hours = 25000, 3 hours = 40000, 6 hours = 100000,
-# 12 hours = 500000, 24 hours = 1000000. An empty string disables the milestone bonuses. Milestones are
-# read once at start-up.
+# Bonus runes at time milestones, formatted as "seconds:runes" pairs separated by commas
+# Default: 30m=5000, 1H=10000, 2H=25000, 3H=40000, 6H=100000, 12H=500000...
+# Leave empty to disable the milestone bonuses
 Milestones = "1800:5000,3600:10000,7200:25000,10800:40000,21600:100000,43200:500000,86400:1000000"
 
 

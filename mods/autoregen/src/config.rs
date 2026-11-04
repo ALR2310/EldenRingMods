@@ -192,6 +192,6 @@ mod tests {
     #[test]
     fn the_imported_file_keeps_the_template_comments() {
         let text = import_ini("Regen.PerTick.HP=3\n");
-        assert!(text.contains("# Amount restored per tick."));
+        assert!(text.contains("# Enable/disable this feature"));
     }
 }
