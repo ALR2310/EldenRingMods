@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
-"""Quét file bằng VirusTotal (API v3) và in số hãng gắn cờ.
+"""Scan files with VirusTotal (API v3) and print how many engines flag them.
 
-Dùng cho zip phát hành trước khi đăng lên Nexus (skill `deploy-nexus-mod`) để
-biết trước hãng nào báo nhầm. Cần `VT_API_KEY` trong `.env` ở gốc repo (khoá
-miễn phí của tài khoản VirusTotal; gói miễn phí ~4 yêu cầu/phút, 500/ngày,
-chỉ cho mục đích phi thương mại).
+Run it on a release zip before publishing, to see which engines raise false positives.
+Needs `VT_API_KEY` in the environment or in `.env` at the repo root (the free key allows
+about 4 requests per minute and 500 per day, for non-commercial use).
 
-    python scripts/vt-scan.py builds/animcancel/AnimCancel-1.1.1.zip
-    python scripts/vt-scan.py new.zip old.zip           # so sánh nhiều file
-    python scripts/vt-scan.py new.zip --no-upload       # chỉ tra hash, không tải lên
-    python scripts/vt-scan.py new.zip --fail-above 5    # exit 1 nếu > 5 hãng gắn cờ
+    python scripts/vt-scan.py builds/<crate>/<Mod>-<version>.zip
+    python scripts/vt-scan.py new.zip old.zip           # compare several files
+    python scripts/vt-scan.py new.zip --no-upload       # look up the hash only
+    python scripts/vt-scan.py new.zip --fail-above 5    # exit 1 if more than 5 engines flag it
 
-Mỗi file: tra theo SHA-256 trước (không tải gì lên); chưa có trên VirusTotal thì
-tải lên (**file trở thành công khai trên VirusTotal**; bản phát hành vốn đã
-public, nhưng build thử chưa phát hành cũng sẽ bị chia sẻ, dùng --no-upload để
-tránh) rồi chờ phân tích xong. Mã thoát: 0 = đã quét xong, 1 = vượt
---fail-above, 2 = lỗi (thiếu khoá, mạng, không có kết quả).
+Each file is looked up by SHA-256 first, which uploads nothing. If VirusTotal does not know the
+file it is uploaded, and an uploaded file becomes public on VirusTotal. Release builds are public
+anyway, but an unreleased test build would be shared too; use --no-upload to avoid that.
+Exit codes: 0 = scanned, 1 = above --fail-above, 2 = error (missing key, network, no result).
 """
 
 import argparse
@@ -31,7 +29,7 @@ import uuid
 API = "https://www.virustotal.com/api/v3"
 GUI = "https://www.virustotal.com/gui/file/"
 POLL_SECONDS = 15
-POLL_MAX = 24  # 6 phút
+POLL_MAX = 24  # 6 minutes
 MAX_DIRECT_UPLOAD = 32 * 1024 * 1024
 
 
@@ -76,10 +74,10 @@ def sha256_of(path):
 
 
 def upload(key, path):
-    """Tải file lên (<= 32 MB), trả về id của lần phân tích."""
+    """Upload a file (up to 32 MB) and return the analysis id."""
     size = os.path.getsize(path)
     if size > MAX_DIRECT_UPLOAD:
-        sys.exit(f"{path}: {size} byte, lớn hơn 32 MB (cần upload_url, chưa hỗ trợ)")
+        sys.exit(f"{path}: {size} bytes, larger than 32 MB (needs an upload_url, not supported)")
     boundary = uuid.uuid4().hex
     name = os.path.basename(path)
     with open(path, "rb") as f:
@@ -92,7 +90,7 @@ def upload(key, path):
         key, "POST", "/files", body, {"content-type": f"multipart/form-data; boundary={boundary}"}
     )
     if status != 200:
-        raise RuntimeError(f"tải lên thất bại (HTTP {status}): {data}")
+        raise RuntimeError(f"upload failed (HTTP {status}): {data}")
     return data["data"]["id"]
 
 
@@ -103,42 +101,42 @@ def wait_for_analysis(key, analysis_id):
             time.sleep(POLL_SECONDS)
             continue
         if status != 200:
-            raise RuntimeError(f"đọc kết quả thất bại (HTTP {status}): {data}")
+            raise RuntimeError(f"reading the result failed (HTTP {status}): {data}")
         attrs = data["data"]["attributes"]
         if attrs.get("status") == "completed":
             return
         time.sleep(POLL_SECONDS)
-    raise RuntimeError("hết thời gian chờ phân tích (thử lại sau vài phút bằng cùng lệnh)")
+    raise RuntimeError("timed out waiting for the analysis (run the same command again in a few minutes)")
 
 
 def lookup(key, sha256):
-    """Kết quả phân tích mới nhất của hash, hoặc None nếu VirusTotal chưa biết."""
+    """Latest analysis of the hash, or None if VirusTotal does not know it."""
     status, data = request(key, "GET", f"/files/{sha256}")
     if status == 404:
         return None
     if status != 200:
-        raise RuntimeError(f"tra hash thất bại (HTTP {status}): {data}")
+        raise RuntimeError(f"hash lookup failed (HTTP {status}): {data}")
     return data["data"]["attributes"]
 
 
 def scan(key, path, allow_upload):
     sha256 = sha256_of(path)
     attrs = lookup(key, sha256)
-    source = "đã có trên VirusTotal"
+    source = "already on VirusTotal"
     if attrs is None:
         if not allow_upload:
             return {"path": path, "sha256": sha256, "known": False}
-        print(f"{path}: chưa có trên VirusTotal, đang tải lên...", file=sys.stderr)
+        print(f"{path}: not on VirusTotal yet, uploading...", file=sys.stderr)
         wait_for_analysis(key, upload(key, path))
-        # Hash vừa có nên tra lại; chờ một nhịp cho kết quả hiện lên.
+        # Look the hash up again; the results can take a moment to appear.
         for _ in range(5):
             attrs = lookup(key, sha256)
             if attrs and attrs.get("last_analysis_results"):
                 break
             time.sleep(5)
         if not attrs:
-            raise RuntimeError("không đọc được kết quả sau khi tải lên")
-        source = "vừa tải lên"
+            raise RuntimeError("no result after the upload")
+        source = "just uploaded"
     stats = attrs.get("last_analysis_stats", {})
     results = attrs.get("last_analysis_results", {})
     flagged = {
@@ -163,7 +161,7 @@ def report(result):
     print(f"== {result['path']}")
     print(f"   SHA-256: {result['sha256']}")
     if not result["known"]:
-        print("   VirusTotal chưa biết file này (đã dùng --no-upload, không tải lên).")
+        print("   VirusTotal does not know this file (--no-upload, nothing was uploaded).")
         return
     detections = result["malicious"] + result["suspicious"]
     extra = f" (+{result['suspicious']} suspicious)" if result["suspicious"] else ""
@@ -171,28 +169,28 @@ def report(result):
     for engine, label in sorted(result["flagged"].items()):
         print(f"     - {engine}: {label}")
     if not detections:
-        print("     (không có hãng nào gắn cờ)")
+        print("     (no engine flags it)")
     print(f"   {GUI}{result['sha256']}")
 
 
 def main():
-    # Windows consoles default to cp1252 and choke on Vietnamese text.
+    # Windows consoles default to cp1252 and choke on non-ASCII engine labels.
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("files", nargs="+", help="file cần quét (zip phát hành hoặc DLL)")
-    parser.add_argument("--no-upload", action="store_true", help="chỉ tra hash, không tải file lên")
-    parser.add_argument("--fail-above", type=int, default=None, metavar="N", help="exit 1 nếu số hãng gắn cờ > N")
+    parser.add_argument("files", nargs="+", help="files to scan (a release zip or a DLL)")
+    parser.add_argument("--no-upload", action="store_true", help="look up the hash only, do not upload")
+    parser.add_argument("--fail-above", type=int, default=None, metavar="N", help="exit 1 if more than N engines flag a file")
     args = parser.parse_args()
 
     key = load_key()
     if not key:
-        print("Thiếu VT_API_KEY (biến môi trường hoặc .env ở gốc repo).", file=sys.stderr)
+        print("Missing VT_API_KEY (environment variable or .env at the repo root).", file=sys.stderr)
         return 2
     worst = 0
     for path in args.files:
         if not os.path.isfile(path):
-            print(f"Không thấy file: {path}", file=sys.stderr)
+            print(f"File not found: {path}", file=sys.stderr)
             return 2
         try:
             result = scan(key, path, not args.no_upload)

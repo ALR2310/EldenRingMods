@@ -1,19 +1,19 @@
-"""Liệt kê vtable của 1 class (theo tên RTTI) hoặc tại 1 địa chỉ, kèm slot.
+"""List the vtable of a class (by RTTI name) or at an address, with its slots.
 
-Dùng:
-    run.ps1 vtable <tên class con | địa chỉ>... [--slots=N] [--decompile[=i,j,..]]
-                                              [--rtti-scan]
+Usage:
+    run.ps1 vtable <class name part | address>... [--slots=N] [--decompile[=i,j,..]]
+                                                  [--rtti-scan]
 
-    --slots=N       số slot tối đa mỗi vtable (mặc định 40; dừng ở slot không
-                    trỏ vào hàm)
-    --decompile     decompile mọi slot (hoặc chỉ các chỉ số i,j,..) vào
+    --slots=N       maximum slots per vtable (default 40; stops at the first slot that
+                    does not point into a function)
+    --decompile     decompile every slot (or only the indices i,j,..) into
                     vtable/<vtable>_slot<i>.c
-    --rtti-scan     bỏ qua tên symbol, quét RTTI type descriptor trong
-                    .data/.rdata (dùng khi database chưa đặt tên `??_7...`)
+    --rtti-scan     ignore symbol names and scan the RTTI type descriptors in
+                    .data/.rdata (use when the database has no `??_7...` names)
 
-Tham số bắt đầu bằng 0x hoặc toàn chữ số hex (>= 6 ký tự) coi là địa chỉ,
-còn lại là chuỗi con của tên class (vd. `CSChrBehaviorModule`).
-Ghi vtable.txt: `slot i  RVA  tên hàm`.
+An argument that starts with 0x, or is only hex digits (6 or more characters), is an
+address; anything else is a substring of the class name (for example `CSChrBehaviorModule`).
+Writes vtable.txt: `slot i  RVA  function name`.
 """
 import os
 import sys
@@ -54,7 +54,7 @@ def vtables_by_name(sub):
 
 
 def vtables_by_rtti(sub):
-    """Quét '.?AV<...sub...>' -> COMPLETE_OBJECT_LOCATOR -> vtable (như RTTI của MSVC x64)."""
+    """Scan '.?AV<...sub...>' -> COMPLETE_OBJECT_LOCATOR -> vtable (MSVC x64 RTTI layout)."""
     rx = re.compile(rb"\.\?A[VU][A-Za-z0-9_@?$]*" + re.escape(sub.encode()) + rb"[A-Za-z0-9_@?$]*", re.I)
     segs = [(s, idc.get_segm_end(s)) for s in idautils.Segments() if idc.get_segm_name(s) in (".data", ".rdata")]
     rdata = {s: ida_bytes.get_bytes(s, e - s) or b"" for s, e in segs if idc.get_segm_name(s) == ".rdata"}
@@ -82,7 +82,7 @@ def vtables_by_rtti(sub):
 def main():
     pos, flags = common.parse_args()
     if not pos:
-        common.die("thiếu tên class/địa chỉ; xem docstring")
+        common.die("missing class name or address; see the docstring")
     limit = int(flags.get("slots", 40))
     want = flags.get("decompile")
     only = None if want in (None, True) else {int(x) for x in str(want).split(",")}
@@ -99,7 +99,7 @@ def main():
             if not found:
                 found = list(vtables_by_rtti(tok))
         if not found:
-            out.write("== %s: không thấy vtable\n" % tok)
+            out.write("== %s: no vtable found\n" % tok)
         for vt, name in found:
             n += 1
             out.write("== %s  vtable RVA %#x\n" % (name, common.rva(vt)))

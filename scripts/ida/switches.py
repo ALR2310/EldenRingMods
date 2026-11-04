@@ -1,13 +1,13 @@
-"""Tìm các `switch` lớn (bảng nhảy) trong cây gọi của 1 tập hàm gốc - thường là
-bộ phân loại theo ID (TAE event, ESD command, loại item...).
+"""Find large `switch` statements (jump tables) in the call tree of a set of root functions;
+these are usually ID dispatchers (event types, command IDs, item kinds).
 
-Dùng:
-    run.ps1 switches <gốc>... [--depth=N] [--min-cases=N]
+Usage:
+    run.ps1 switches <root>... [--depth=N] [--min-cases=N]
 
-    --depth=N       độ sâu theo callee (mặc định 3)
-    --min-cases=N   chỉ báo switch có ít nhất N case (mặc định 15)
+    --depth=N       depth along callees (default 3)
+    --min-cases=N   report only switches with at least N cases (default 15)
 
-Ghi switches.txt: `<gốc> d<tầng> func RVA switch@RVA cases=N low=L size=S`.
+Writes switches.txt: `<root> d<level> func RVA switch@RVA cases=N low=L size=S`.
 """
 import os
 import sys
@@ -33,7 +33,7 @@ def switches(f):
 def main():
     pos, flags = common.parse_args()
     if not pos:
-        common.die("thiếu hàm gốc; xem docstring")
+        common.die("missing root function; see the docstring")
     depth = int(flags.get("depth", 3))
     min_cases = int(flags.get("min-cases", 15))
     out = common.open_out("switches.txt")
@@ -56,7 +56,7 @@ def main():
             if d < depth:
                 for c in common.callees(f.start_ea):
                     stack.append((c, d + 1))
-        out.write("%s: đã duyệt %d hàm\n" % (tok, len(seen)))
+        out.write("%s: visited %d functions\n" % (tok, len(seen)))
     out.close()
     print("-> " + common.out_path("switches.txt"))
 

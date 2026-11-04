@@ -1,14 +1,14 @@
-"""Tìm string trong exe và hàm tham chiếu tới nó (điểm xuất phát tốt nhất khi
-chưa biết hàm nằm đâu).
+"""Find strings in the exe and the functions that reference them (the best starting point when
+you do not know where a function lives).
 
-Dùng:
-    run.ps1 strings <chuỗi con>... [--decompile] [--regex] [--case]
+Usage:
+    run.ps1 strings <substring>... [--decompile] [--regex] [--case]
 
-    --regex      coi mỗi tham số là regex thay vì chuỗi con
-    --case       phân biệt hoa thường (mặc định: không phân biệt)
-    --decompile  ghi decompile của hàm tham chiếu vào strings/sub_<RVA>.c
+    --regex      treat each argument as a regex instead of a substring
+    --case       case-sensitive (default: case-insensitive)
+    --decompile  write the decompiled referencing functions to strings/sub_<RVA>.c
 
-Quét cả string ASCII lẫn UTF-16. Ghi strings.txt: `RVA "text" <- hàm...`.
+Scans both ASCII and UTF-16 strings. Writes strings.txt: `RVA "text" <- function...`.
 """
 import os
 import sys
@@ -28,7 +28,7 @@ import common
 def main():
     pos, flags = common.parse_args()
     if not pos:
-        common.die("thiếu chuỗi cần tìm; xem docstring")
+        common.die("missing search string; see the docstring")
     pats = [re.compile(p if "regex" in flags else re.escape(p), 0 if "case" in flags else re.I) for p in pos]
     sub = os.path.join(common.OUT_DIR, "strings")
     if "decompile" in flags:
@@ -52,13 +52,13 @@ def main():
             refs.append("%X(%s)" % (common.rva(x), common.fn_name(fs) if fs else "-"))
             if fs:
                 funcs[fs] = text
-        out.write("%X %r <- %s\n" % (common.rva(s.ea), text[:140], " ".join(refs[:8]) or "(không có xref)"))
+        out.write("%X %r <- %s\n" % (common.rva(s.ea), text[:140], " ".join(refs[:8]) or "(no xrefs)"))
     if "decompile" in flags:
         for fs, text in funcs.items():
             with open(os.path.join(sub, "sub_%X.c" % common.rva(fs)), "w", encoding="utf-8") as fh:
                 fh.write("// string: %r\n%s\n" % (text[:100], common.decompile(fs)))
     out.close()
-    print("%d string khớp, %d hàm -> %s" % (hits, len(funcs), common.out_path("strings.txt")))
+    print("%d strings matched, %d functions -> %s" % (hits, len(funcs), common.out_path("strings.txt")))
 
 
 common.init()

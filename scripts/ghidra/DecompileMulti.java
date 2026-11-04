@@ -6,9 +6,8 @@ import ghidra.program.model.listing.Function;
 import java.io.FileOutputStream;
 import java.io.PrintWriter;
 
-// Decompiles several functions (by entry address, comma-separated in arg 0)
-// into one output file, each clearly delimited - for batch inspection of
-// SetHp's callers.
+// Decompiles several functions (entry addresses, comma-separated in arg 0) into one output
+// file, each clearly delimited. Args: <addr,addr,...> [output file].
 public class DecompileMulti extends GhidraScript {
     @Override
     public void run() throws Exception {
