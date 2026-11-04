@@ -53,3 +53,50 @@ pub fn for_each_active_chr(set: &ChrSet<ChrIns>, mut f: impl FnMut(&mut ChrIns))
         f(unsafe { chr.as_mut() });
     }
 }
+
+/// The pad input read each frame from the main player's `CSChrActionRequestModule`.
+/// `r1`, `r2`, `l1`, `l2` and `new_gesture` are true for exactly one frame, on the press, and
+/// `requested_gesture` only means something on that frame. `busy` is every other way the player is
+/// not idle: held actions and movement input.
+pub struct ActionSnapshot {
+    pub r1: bool,
+    pub r2: bool,
+    pub l1: bool,
+    pub l2: bool,
+    pub new_gesture: bool,
+    pub requested_gesture: i32,
+    pub busy: bool,
+}
+
+/// This frame's input of the main player, `None` until the player is resolved.
+pub fn main_player_action_snapshot() -> Option<ActionSnapshot> {
+    // SAFETY: called from game tasks; `instance` returns `Err` while the singleton does not exist.
+    let world_chr_man = unsafe { WorldChrMan::instance() }.ok()?;
+    let main_player = world_chr_man.main_player.as_ref()?;
+    let action_request = &main_player.chr_ins.modules.action_request;
+    let new_presses = &action_request.new_action_presses;
+    let held = &action_request.action_requests;
+    let busy = action_request.movement_request_flags.raw_input()
+        || held.r1()
+        || held.r2()
+        || held.l1()
+        || held.l2()
+        || held.sp_move()
+        || held.jump()
+        || held.use_item()
+        || held.action()
+        || held.guard()
+        || held.rideon()
+        || held.rideoff()
+        || held.ladderup()
+        || held.ladderdown();
+    Some(ActionSnapshot {
+        r1: new_presses.r1(),
+        r2: new_presses.r2(),
+        l1: new_presses.l1(),
+        l2: new_presses.l2(),
+        new_gesture: new_presses.gesture(),
+        requested_gesture: action_request.requested_gesture,
+        busy,
+    })
+}

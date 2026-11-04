@@ -51,6 +51,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "autoregen"
+version = "2.6.4"
+dependencies = [
+ "eldenring",
+ "fromsoftware-shared",
+ "serde",
+ "shared",
+ "toml",
+ "toml_edit",
+ "winresource",
+]
+
+[[package]]
 name = "bitfield"
 version = "0.19.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -203,6 +203,80 @@ impl Provider {
         Ok(row)
     }
 
+    /// A row cycled with left/right through `options` (1 to 32 labels); the value is the index.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_inline_choice(
+        &self,
+        page: PageHandle,
+        label: &str,
+        help: &str,
+        options: &[&str],
+        initial_index: u8,
+        callback: ValueChangedCallback,
+        user_data: *mut c_void,
+    ) -> Result<RowHandle, String> {
+        let label = wide(label);
+        let help = wide(help);
+        let option_text: Vec<Vec<u16>> = options.iter().map(|o| wide(o)).collect();
+        let views: Vec<Utf16View> = option_text.iter().map(|o| Utf16View::of(o)).collect();
+        let desc = ChoiceDesc {
+            size: std::mem::size_of::<ChoiceDesc>() as u32,
+            flags: 0,
+            label: Utf16View::of(&label),
+            help: Utf16View::of(&help),
+            changed_callback: Some(callback),
+            user_data,
+            options: views.as_ptr(),
+            option_count: views.len() as u32,
+            initial_index,
+            reserved8: [0; 3],
+        };
+        let mut row: RowHandle = 0;
+        // SAFETY: the function pointers were checked by `validate_api`; the descriptor and the strings it views outlive the call.
+        let status =
+            unsafe { (self.api.add_inline_choice.unwrap())(self.provider, page, &desc, &mut row) };
+        check(status, "add_inline_choice")?;
+        Ok(row)
+    }
+
+    /// A slider over whole numbers `minimum..=maximum` in steps of `step`; the host owns the byte.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_slider(
+        &self,
+        page: PageHandle,
+        label: &str,
+        help: &str,
+        minimum: i32,
+        maximum: i32,
+        step: i32,
+        initial: u8,
+        callback: ValueChangedCallback,
+        user_data: *mut c_void,
+    ) -> Result<RowHandle, String> {
+        let label = wide(label);
+        let help = wide(help);
+        let desc = SliderDesc {
+            size: std::mem::size_of::<SliderDesc>() as u32,
+            flags: 0,
+            label: Utf16View::of(&label),
+            help: Utf16View::of(&help),
+            changed_callback: Some(callback),
+            user_data,
+            minimum,
+            maximum,
+            step,
+            initial_value: initial,
+            reserved8: [0; 3],
+            enabled: 1,
+        };
+        let mut row: RowHandle = 0;
+        // SAFETY: the function pointers were checked by `validate_api`; the descriptor and the strings it views outlive the call.
+        let status =
+            unsafe { (self.api.add_slider.unwrap())(self.provider, page, &desc, &mut row) };
+        check(status, "add_slider")?;
+        Ok(row)
+    }
+
     pub fn add_toggle(
         &self,
         page: PageHandle,

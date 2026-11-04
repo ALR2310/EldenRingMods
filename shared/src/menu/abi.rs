@@ -70,6 +70,36 @@ pub(super) struct ToggleDesc {
 }
 
 #[repr(C)]
+pub(super) struct SliderDesc {
+    pub(super) size: u32,
+    pub(super) flags: u32,
+    pub(super) label: Utf16View,
+    pub(super) help: Utf16View,
+    pub(super) changed_callback: Option<ValueChangedCallback>,
+    pub(super) user_data: *mut c_void,
+    pub(super) minimum: i32,
+    pub(super) maximum: i32,
+    pub(super) step: i32,
+    pub(super) initial_value: u8,
+    pub(super) reserved8: [u8; 3],
+    pub(super) enabled: u32,
+}
+
+#[repr(C)]
+pub(super) struct ChoiceDesc {
+    pub(super) size: u32,
+    pub(super) flags: u32,
+    pub(super) label: Utf16View,
+    pub(super) help: Utf16View,
+    pub(super) changed_callback: Option<ValueChangedCallback>,
+    pub(super) user_data: *mut c_void,
+    pub(super) options: *const Utf16View,
+    pub(super) option_count: u32,
+    pub(super) initial_index: u8,
+    pub(super) reserved8: [u8; 3],
+}
+
+#[repr(C)]
 pub(super) struct SubmenuDesc {
     pub(super) size: u32,
     pub(super) flags: u32,
@@ -204,8 +234,22 @@ pub(super) struct Api {
             *mut RowHandle,
         ) -> Status,
     >,
-    pub(super) add_slider: Unused,
-    pub(super) add_inline_choice: Unused,
+    pub(super) add_slider: Option<
+        unsafe extern "C" fn(
+            ProviderHandle,
+            PageHandle,
+            *const SliderDesc,
+            *mut RowHandle,
+        ) -> Status,
+    >,
+    pub(super) add_inline_choice: Option<
+        unsafe extern "C" fn(
+            ProviderHandle,
+            PageHandle,
+            *const ChoiceDesc,
+            *mut RowHandle,
+        ) -> Status,
+    >,
     pub(super) add_popup_choice: Unused,
     pub(super) add_submenu: Option<
         unsafe extern "C" fn(
@@ -324,6 +368,8 @@ pub(super) fn validate_api(api: &Api, version: u32) -> Result<(), String> {
     }
     let complete = api.register_provider.is_some()
         && api.add_toggle.is_some()
+        && api.add_slider.is_some()
+        && api.add_inline_choice.is_some()
         && api.add_submenu.is_some()
         && api.add_text_input.is_some()
         && api.set_text_input_value.is_some()
