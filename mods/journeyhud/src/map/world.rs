@@ -61,7 +61,7 @@ pub fn locate(block: BlockId, local: [f32; 2]) -> ([f32; 2], i32, Option<MapId>)
         return (position, i32::from(block.area()), map);
     }
     // Roundtable Hold has a world map spot but is not anywhere on the map itself.
-    let roundtable_hold = (block.area(), block.block()) == (11, 10);
+    let roundtable_hold = is_roundtable_hold(block);
     let conversion = conversions()
         .and_then(|conversions| legacy_conversion(conversions, block, local))
         .filter(|_| !roundtable_hold);
@@ -81,6 +81,11 @@ pub fn locate(block: BlockId, local: [f32; 2]) -> ([f32; 2], i32, Option<MapId>)
 /// Whether `area` is a legacy dungeon, one of the large hand-made maps (Stormveil, Leyndell, Farum
 /// Azula, Shadow Keep...) as opposed to catacombs, caves, tunnels and towers (areas 30 to 34, 40
 /// to 43). The game has no flag for it; this is the list of their areas.
+/// Roundtable Hold (`m11_10`).
+pub fn is_roundtable_hold(block: BlockId) -> bool {
+    (block.area(), block.block()) == (11, 10)
+}
+
 pub fn is_legacy_dungeon(area: u8) -> bool {
     matches!(area, 10 | 11 | 13 | 14 | 15 | 16 | 18 | 19 | 20 | 21 | 22 | 25 | 28 | 35)
 }
@@ -235,6 +240,13 @@ mod tests {
         let (position, area) = legacy_conversion(&stormveil, BlockId::from_parts(10, 0, 0, 0), [110.0, 70.0]).unwrap();
         assert_eq!(area, 60);
         assert_eq!(position, [20.0 + 42.0 * 256.0, 40.0 + 36.0 * 256.0]);
+    }
+
+    #[test]
+    fn roundtable_hold_is_m11_10() {
+        assert!(is_roundtable_hold(BlockId::from_parts(11, 10, 0, 0)));
+        assert!(!is_roundtable_hold(BlockId::from_parts(11, 0, 0, 0)));
+        assert!(!is_roundtable_hold(BlockId::from_parts(10, 10, 0, 0)));
     }
 
     #[test]

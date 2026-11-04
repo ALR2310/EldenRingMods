@@ -169,7 +169,9 @@ impl Radar {
         let in_control = snapshot.is_some_and(|s| s.hud_visible && s.fade < 0.05);
         self.in_control = in_control;
         let hidden = snapshot.is_some_and(|s| {
-            (settings::minimap_hide_in_caves() && s.in_cave) || (settings::minimap_hide_in_boss_fights() && s.boss_fight)
+            (settings::minimap_hide_in_caves() && s.in_cave)
+                || (settings::minimap_hide_at_roundtable() && s.at_roundtable)
+                || (settings::minimap_hide_in_boss_fights() && s.boss_fight)
         });
         self.collapsed += (if hidden { 1.0 } else { 0.0 } - self.collapsed) * (dt * COLLAPSE_RATE).min(1.0);
         COLLAPSED.store(self.collapsed.to_bits(), Ordering::Relaxed);

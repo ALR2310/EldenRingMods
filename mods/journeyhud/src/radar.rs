@@ -87,6 +87,8 @@ pub struct Snapshot {
     pub boss_fight: bool,
     /// The player is in a cave, catacomb or other dungeon block.
     pub in_cave: bool,
+    /// The player is in Roundtable Hold.
+    pub at_roundtable: bool,
     /// The map fragments the player has, one bit per fragment (all set when the whole map shows).
     pub fragments: u32,
     /// The in-game time of day: hours and minutes.
@@ -156,6 +158,7 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
     // Catacombs, caves, tunnels and the like, not the legacy dungeons (see `world::in_cave`).
     let block = player.current_block_id;
     let in_cave = world::in_cave(block);
+    let at_roundtable = world::is_roundtable_hold(block);
 
     // The camera and the physics matrices share axes and scale with the
     // world, so their direction vectors apply to offsets directly.
@@ -238,6 +241,7 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
         hud_visible,
         boss_fight,
         in_cave,
+        at_roundtable,
         fragments,
         clock,
         deaths,

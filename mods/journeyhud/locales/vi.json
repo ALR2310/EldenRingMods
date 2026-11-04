@@ -114,6 +114,10 @@
     "label": "Xoay theo camera",
     "help": "Xoay minimap theo camera. Tắt thì hướng bắc luôn ở trên."
   },
+  "minimap_hide_roundtable": {
+    "label": "Ẩn ở Roundtable",
+    "help": "Ẩn minimap khi ở Roundtable Hold."
+  },
   "minimap_hide_caves": {
     "label": "Ẩn trong hang",
     "help": "Ẩn minimap khi ở trong hang, hầm mộ và đường hầm."

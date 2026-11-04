@@ -74,6 +74,7 @@ Enemies = false         # hostile enemies near you, as red dots
 
 [Minimap.Hide]
 InCaves = false         # caves, catacombs and tunnels
+AtRoundtable = false    # Roundtable Hold
 InBossFights = false    # while a boss health bar is on screen
 
 
