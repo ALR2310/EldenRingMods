@@ -21,6 +21,15 @@ toán hạng rip-relative của `call`/`lea`, vốn đổi theo lần link lại
 | 1.16.2 | `eldenring` 0.14.0 | `0xeb1fe0` |
 | 1.17.0 | `fromsoftware-rs` commit `acb2a19` | `0xeb3de0` |
 
+Kiểm tra thêm 2026-11-04 bằng `scripts/ida/run.ps1 aob -Version all` với đúng mẫu của `task_hook.rs`: duy nhất ở cả bốn bản exe trong `dumps/eldenring/`.
+
+| Bản exe | RVA |
+|---|---|
+| 2.6.2.0 | `0xEB1FE0` |
+| 2.7.0.0 | `0xEB3DE0` |
+| 2.7.1.0 | `0xEB3E50` |
+| 2.7.2.0 (1.17.2) | `0xEB5540` |
+
 Một pattern neo vào mọi byte **trừ** các toán hạng đó là duy nhất trong `.text`
 trên cả hai. Quét pattern bằng `common::memscan` (cùng kỹ thuật với `hit_hook`
 của autoregen) tìm ra hàm bất kể phiên bản nào làm nó dịch chỗ, tránh hẳn cổng

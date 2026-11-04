@@ -87,6 +87,8 @@ hết vào nhánh `mod/` của mod.
 - **Tài liệu dùng chung:** viết trang Nexus, changelog, gọi API Nexus, prompt logo:
   `docs/nexus.md`. Phân tích dump crash: `docs/crash_dump_analysis.md`. Cổng "đã
   vào game", đọc/ghi param an toàn, hot reload, log riêng tư: `shared/docs/`.
+  Trao đổi lâu dài với người dùng khác trên Nexus (ghi để lần sau nhớ): `docs/community/`
+  (hiện có `definitelynotedwin.md`); người dùng nhắc tên ai thì mở file đó trước.
 
 ## Mod nội bộ và mod public: `[package.metadata.mod] audience`
 
