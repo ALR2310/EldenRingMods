@@ -37,3 +37,4 @@
 ## Bản đồ
 
 - 2026-11-03 [user] Đổi bản đồ Lands Between sang Shadow Realm (DLC): mở bản đồ bằng M, đang ở bản đồ thì giữ X khoảng 0.6 giây (press x 0.6); bấm 0.2 giây không ăn. Trong danh sách grace (F) thì Z/X chỉ đổi vùng của danh sách, không đổi bản đồ: phải bấm Q để thoát danh sách về bản đồ rồi mới giữ X. Footer của bản đồ có dòng "X Show Shadow Realm map" / "Show Lands Between map". Danh sách grace chỉ có vùng của bản đồ đang hiển thị.
+- 2026-11-04 [observed] 2026-11-04 [observed] Dịch chuyển (fast travel) qua MCP: M mở bản đồ, F mở danh sách grace, di chuyển hàng bằng phím mũi tên up/down (rê chuột không đổi hàng được chọn, chỉ click_at không chọn hàng), E chọn, hộp thoại "Is that okay?" bấm E lần nữa để OK, đợi khoảng 12 giây tải. Danh sách mở lại thì con trỏ không nhớ hàng cũ nên chụp ảnh kiểm hàng sáng trước khi bấm E.
