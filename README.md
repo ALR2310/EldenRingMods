@@ -33,6 +33,7 @@ and a reload key applies changes without restarting the game.
 | [**InfiniteAilment**](mods/infiniteailment) | Sets how long Poison, Scarlet Rot, Black Flame and Destined Death last and how hard they hit | [11087](https://www.nexusmods.com/eldenring/mods/11087) |
 | [**RuneMultiplier**](mods/runemultiplier) | Multiplies the runes you gain from every source | [10630](https://www.nexusmods.com/eldenring/mods/10630) |
 | [**SpeedMultiplier**](mods/speedmultiplier) | Speeds up or slows down the player, Torrent, spirits and enemies per kind of action | [11173](https://www.nexusmods.com/eldenring/mods/11173) |
+| [**WeightMultiplier**](mods/weightmultiplier) | Multiplies your equip load by a factor, or fixes it to one number | [10549](https://www.nexusmods.com/eldenring/mods/10549) |
 
 Each mod's page describes how it works and its limits, and its `CHANGELOG.md` has the release notes.
 

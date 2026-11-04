@@ -808,6 +808,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "weightmultiplier"
+version = "2.0.1"
+dependencies = [
+ "serde",
+ "shared",
+ "toml",
+ "winresource",
+]
+
+[[package]]
 name = "winapi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"

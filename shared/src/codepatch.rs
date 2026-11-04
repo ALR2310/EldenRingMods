@@ -145,6 +145,54 @@ pub unsafe fn redirect_rel32(site: *mut u8, stub_body: &[u8]) -> Option<*mut u8>
     Some(stub)
 }
 
+/// `E9 rel32` at `at`, jumping to `to`.
+fn jmp_rel32(at: *const u8, to: *const u8) -> [u8; 5] {
+    let rel = (to as isize - at as isize - 5) as i32;
+    let mut code = [0xE9, 0, 0, 0, 0];
+    code[1..].copy_from_slice(&rel.to_le_bytes());
+    code
+}
+
+/// Hooks code too short for an [absolute_jmp]: copies `stub_body` to memory near `target`, appends
+/// a jump back to `target + original_len`, then overwrites `original_len` bytes at `target` with
+/// `E9 rel32` to the stub (NOP-padded past 5 bytes). `original_len` must be at least 5. Returns the
+/// stub's address; on failure the original bytes are untouched.
+///
+/// `stub_body` must not jump or return on its own, since the jump back is appended, and must do
+/// what the replaced instructions did (replay them, or replace them).
+///
+/// # Safety
+/// `target..target + original_len` must be mapped code of this process that ends on an instruction
+/// boundary, and `stub_body` valid machine code for the bytes it stands in for.
+pub unsafe fn install_jmp_hook(
+    target: *mut u8,
+    original_len: usize,
+    stub_body: &[u8],
+) -> Option<*mut u8> {
+    if original_len < 5 {
+        return None;
+    }
+    let stub_size = stub_body.len() + 5;
+    let stub = alloc_near(target, stub_size)?;
+    // SAFETY: `stub` is a fresh allocation of `stub_size` bytes.
+    unsafe {
+        std::ptr::copy_nonoverlapping(stub_body.as_ptr(), stub, stub_body.len());
+        let back = jmp_rel32(stub.add(stub_body.len()), target.add(original_len));
+        std::ptr::copy_nonoverlapping(back.as_ptr(), stub.add(stub_body.len()), back.len());
+        FlushInstructionCache(GetCurrentProcess(), stub as *const c_void, stub_size);
+    }
+
+    let mut patch = vec![0x90u8; original_len];
+    patch[..5].copy_from_slice(&jmp_rel32(target, stub));
+    // SAFETY: the range is mapped code, by this function's contract.
+    if !unsafe { overwrite_bytes(target, &patch) } {
+        // SAFETY: `stub` was allocated above and nothing jumps to it.
+        unsafe { VirtualFree(stub as *mut c_void, 0, MEM_RELEASE) };
+        return None;
+    }
+    Some(stub)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,6 +223,34 @@ mod tests {
         let other = [0x90u8; 5];
         // SAFETY: as above.
         assert_eq!(unsafe { rel32_target(other.as_ptr()) }, None);
+    }
+
+    #[test]
+    fn jmp_rel32_encodes_the_distance_from_the_next_instruction() {
+        let buffer = [0u8; 64];
+        let at = buffer.as_ptr();
+        // SAFETY: both pointers stay inside `buffer`.
+        let to = unsafe { at.add(20) };
+        assert_eq!(jmp_rel32(at, to), [0xE9, 15, 0, 0, 0]);
+        assert_eq!(jmp_rel32(to, at), [0xE9, 0xE7, 0xFF, 0xFF, 0xFF]); // -25
+    }
+
+    #[test]
+    fn install_jmp_hook_redirects_and_pads() {
+        let code = alloc_executable(32).expect("alloc");
+        // SAFETY: `code` is a fresh RWX allocation owned by this test.
+        unsafe {
+            std::ptr::write_bytes(code, 0x90, 32);
+            let stub = install_jmp_hook(code, 7, &[0xB0, 0x07]).expect("hook");
+            assert_eq!(code.read(), 0xE9);
+            assert_eq!(std::slice::from_raw_parts(code.add(5), 2), [0x90, 0x90]);
+            assert_eq!(rel32_target(code), Some(stub as u64));
+            // The stub holds the body, then a jump back to code + 7.
+            assert_eq!(std::slice::from_raw_parts(stub, 2), [0xB0, 0x07]);
+            assert_eq!(rel32_target(stub.add(2)), Some(code.add(7) as u64));
+        }
+        // SAFETY: as above.
+        assert!(unsafe { install_jmp_hook(code, 4, &[0x90]) }.is_none(), "too short for a jump");
     }
 
     #[test]
