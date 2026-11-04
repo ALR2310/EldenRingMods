@@ -54,6 +54,7 @@ static MINIMAP_COOP: AtomicBool = AtomicBool::new(true);
 static MINIMAP_SPIRITS: AtomicBool = AtomicBool::new(true);
 static MINIMAP_ENEMIES: AtomicBool = AtomicBool::new(false);
 static MINIMAP_HIDE_IN_CAVES: AtomicBool = AtomicBool::new(false);
+static MINIMAP_HIDE_AT_ROUNDTABLE: AtomicBool = AtomicBool::new(false);
 static MINIMAP_HIDE_IN_BOSS_FIGHTS: AtomicBool = AtomicBool::new(false);
 static MINIMAP_RANGE: AtomicI32 = AtomicI32::new(100);
 /// Virtual-key codes of the zoom keys.
@@ -101,6 +102,7 @@ pub fn load(config: &Config) {
     set_minimap_coop(minimap.layers.coop_players as u8);
     set_minimap_spirits(minimap.layers.spirits as u8);
     set_minimap_hide_in_caves(minimap.hide.in_caves as u8);
+    set_minimap_hide_at_roundtable(minimap.hide.at_roundtable as u8);
     set_minimap_hide_in_boss_fights(minimap.hide.in_boss_fights as u8);
     set_minimap_range(f64::from(minimap.range));
     TOGGLE_KEY.store(parse_virtual_key(&config.general.toggle_key, 0), Ordering::Relaxed);
@@ -257,6 +259,11 @@ pub fn minimap_enemies() -> bool {
 /// Whether the player's summoned spirits are marked.
 pub fn minimap_spirits() -> bool {
     MINIMAP_SPIRITS.load(Ordering::Relaxed)
+}
+
+/// Whether the minimap hides in Roundtable Hold.
+pub fn minimap_hide_at_roundtable() -> bool {
+    MINIMAP_HIDE_AT_ROUNDTABLE.load(Ordering::Relaxed)
 }
 
 /// Whether the minimap hides in caves, catacombs and other dungeons.
@@ -448,6 +455,10 @@ pub fn set_minimap_enemies(value: u8) {
 
 pub fn set_minimap_spirits(value: u8) {
     MINIMAP_SPIRITS.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_minimap_hide_at_roundtable(value: u8) {
+    MINIMAP_HIDE_AT_ROUNDTABLE.store(value != 0, Ordering::Relaxed);
 }
 
 pub fn set_minimap_hide_in_caves(value: u8) {

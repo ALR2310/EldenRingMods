@@ -114,6 +114,10 @@
     "label": "Turn with camera",
     "help": "Turn the minimap with the camera. Off keeps north at the top."
   },
+  "minimap_hide_roundtable": {
+    "label": "Hide at Roundtable",
+    "help": "Hide the minimap in Roundtable Hold."
+  },
   "minimap_hide_caves": {
     "label": "Hide in caves",
     "help": "Hide the minimap in caves, catacombs and tunnels."

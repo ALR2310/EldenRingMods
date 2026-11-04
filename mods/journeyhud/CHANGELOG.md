@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Added an option to hide the minimap in Roundtable Hold.
+
 ## [1.2.0] - 2026-11-03
 
 - Added a drag mode (F7 by default) to move the minimap and the target bar with the mouse.

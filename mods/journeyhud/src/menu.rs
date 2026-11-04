@@ -8,7 +8,7 @@
 //!                               Bar length slider, Size stepped, Right margin slider, Top margin slider
 //!   Minimap                  -> Minimap on/off, Map, Graces, Points, Beacons, Map for Goblins,
 //!                               Co-op players, Spirits, Enemies, Full map, Clock, Deaths, Trail, Compass, Turn with
-//!                               camera, Hide in caves, Hide in boss fights (all on/off),
+//!                               camera, Hide in caves, Hide at Roundtable, Hide in boss fights (all on/off),
 //!                               Minimap range and size (sliders), Minimap scale (stepped)
 //! ```
 //!
@@ -76,6 +76,11 @@ static MINIMAP_ROTATE: Setting =
     Setting { key: "Minimap.Rotate", format: erui::format_bool, apply: Some(settings::set_minimap_rotate) };
 static MINIMAP_HIDE_IN_CAVES: Setting =
     Setting { key: "Minimap.Hide.InCaves", format: erui::format_bool, apply: Some(settings::set_minimap_hide_in_caves) };
+static MINIMAP_HIDE_AT_ROUNDTABLE: Setting = Setting {
+    key: "Minimap.Hide.AtRoundtable",
+    format: erui::format_bool,
+    apply: Some(settings::set_minimap_hide_at_roundtable),
+};
 static MINIMAP_HIDE_IN_BOSS_FIGHTS: Setting = Setting {
     key: "Minimap.Hide.InBossFights",
     format: erui::format_bool,
@@ -166,6 +171,9 @@ fn build(b: &mut erui::MenuBuilder) -> Result<(), String> {
     b.toggle(minimap, &t("minimap_hide_caves.label"), &t("minimap_hide_caves.help"), &MINIMAP_HIDE_IN_CAVES, || {
         config::get().minimap.hide.in_caves as u8
     })?;
+    b.toggle(minimap, &t("minimap_hide_roundtable.label"), &t("minimap_hide_roundtable.help"), &MINIMAP_HIDE_AT_ROUNDTABLE, || {
+        config::get().minimap.hide.at_roundtable as u8
+    })?;
     b.toggle(minimap, &t("minimap_hide_boss.label"), &t("minimap_hide_boss.help"), &MINIMAP_HIDE_IN_BOSS_FIGHTS, || {
         config::get().minimap.hide.in_boss_fights as u8
     })?;
@@ -205,7 +213,7 @@ mod tests {
         let settings = [&ENABLED, &SHOW_NUMBERS, &BUILDUP, &EFFECTS_TARGET, &EFFECTS_PLAYER, &MINIMAP, &MINIMAP_MAP, &MINIMAP_GRACES, &MINIMAP_POINTS, &MINIMAP_BEACONS, &MINIMAP_COMPASS, &MINIMAP_CLOCK, &MINIMAP_DEATHS, &MINIMAP_TRAIL, &MINIMAP_GOBLINS, &MINIMAP_FULL_MAP, &MINIMAP_COOP, &MINIMAP_SPIRITS, &MINIMAP_ENEMIES];
         let numbers = [&WIDTH, &SCALE, &PLAYER_SCALE, &OFFSET_X, &OFFSET_Y, &MINIMAP_RANGE, &MINIMAP_SIZE, &MINIMAP_SCALE];
         let keys = settings.iter().map(|s| s.key).chain(numbers.iter().map(|n| n.key));
-        for key in keys.chain([MINIMAP_ROTATE.key, MINIMAP_HIDE_IN_CAVES.key, MINIMAP_HIDE_IN_BOSS_FIGHTS.key]) {
+        for key in keys.chain([MINIMAP_ROTATE.key, MINIMAP_HIDE_IN_CAVES.key, MINIMAP_HIDE_AT_ROUNDTABLE.key, MINIMAP_HIDE_IN_BOSS_FIGHTS.key]) {
             assert!(key.split('.').try_fold(&doc, |table, part| table.get(part)).is_some(), "{key} is not in the template");
         }
     }

@@ -134,6 +134,7 @@ pub struct Layers {
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct Hide {
     pub in_caves: bool,
+    pub at_roundtable: bool,
     pub in_boss_fights: bool,
 }
 
@@ -242,11 +243,12 @@ mod tests {
         assert!(save(&[
             ("Minimap.Layers.Map", "false".to_string()),
             ("Minimap.Hide.InCaves", "true".to_string()),
+            ("Minimap.Hide.AtRoundtable", "true".to_string()),
             ("Minimap.Range", "50".to_string()),
             ("Target.Scale", "1.5".to_string()),
         ]));
         let config = get();
-        assert!(!config.minimap.layers.map && config.minimap.hide.in_caves);
+        assert!(!config.minimap.layers.map && config.minimap.hide.in_caves && config.minimap.hide.at_roundtable);
         assert_eq!((config.minimap.range, config.target.scale), (50, 1.5));
         let text = std::fs::read_to_string(&path).unwrap();
         let comments = |text: &str| -> Vec<String> {
