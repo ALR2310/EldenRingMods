@@ -262,6 +262,46 @@
       "problemMatcher": "$rustc"
     },
     {
+      "label": "Build SoulsTeleport",
+      "detail": "Builds SoulsTeleport and copies the DLL (and its config) to builds/soulsteleport/",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\build-mod.ps1",
+        "-Mod",
+        "SoulsTeleport"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build Toolbox",
+      "detail": "Builds Toolbox and copies the DLL (and its config) to builds/toolbox/",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\build-mod.ps1",
+        "-Mod",
+        "Toolbox"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
       "label": "Cargo: Build All",
       "type": "shell",
       "command": "cargo build --release --workspace",

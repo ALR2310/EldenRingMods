@@ -35,6 +35,7 @@ nạp lại để áp dụng thay đổi mà không cần khởi động lại g
 | [**PassiveRunes**](mods/passiverunes) | Cộng (hoặc trừ) rune theo thời gian, kèm bonus ở các mốc thời gian chơi | [10528](https://www.nexusmods.com/eldenring/mods/10528) |
 | [**RiseArcher**](mods/risearcher) | Buff cho cung, nỏ, ballista, mũi tên và tên nỏ | [5807](https://www.nexusmods.com/eldenring/mods/5807) |
 | [**RuneMultiplier**](mods/runemultiplier) | Nhân hệ số lên số rune nhận được từ mọi nguồn | [10630](https://www.nexusmods.com/eldenring/mods/10630) |
+| [**SoulsTeleport**](mods/soulsteleport) | Dịch chuyển tới đúng chỗ đồng đội đang đứng trong Seamless Co-op | [11119](https://www.nexusmods.com/eldenring/mods/11119) |
 | [**SpeedMultiplier**](mods/speedmultiplier) | Tăng hoặc giảm tốc độ của người chơi, Torrent, spirit và kẻ địch theo từng loại hành động | [11173](https://www.nexusmods.com/eldenring/mods/11173) |
 | [**SpiritMultiplier**](mods/spiritmultiplier) | Triệu hồi nhiều spirit hơn mỗi Ash, nhiều Ash cùng lúc và ở mọi nơi | [11168](https://www.nexusmods.com/eldenring/mods/11168) |
 | [**WeightMultiplier**](mods/weightmultiplier) | Nhân Trọng Tải với một hệ số, hoặc đặt cứng nó bằng một số | [10549](https://www.nexusmods.com/eldenring/mods/10549) |
