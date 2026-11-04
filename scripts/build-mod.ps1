@@ -38,8 +38,17 @@ if (-not (Test-Path (Join-Path $crateDir $config))) { throw "Missing '$config' i
 $manifest = Get-Content (Join-Path $crateDir "Cargo.toml") -Raw
 $shipConfig = $manifest -notmatch '(?m)^ship-config\s*=\s*false'
 
-cargo build --release -p $crate --manifest-path (Join-Path $root "Cargo.toml")
-if ($LASTEXITCODE -ne 0) { throw "cargo build failed for '$crate'." }
+# Panic locations of this repo and of the dependencies would otherwise embed the build
+# machine's paths (including the user name) in the DLL.
+$cargoHome = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE ".cargo" }
+$sysroot = (rustc --print sysroot).Trim()
+$env:RUSTFLAGS = "--remap-path-prefix=$root=. --remap-path-prefix=$cargoHome=.cargo --remap-path-prefix=$sysroot=.rustup"
+try {
+    cargo build --release -p $crate --manifest-path (Join-Path $root "Cargo.toml")
+    if ($LASTEXITCODE -ne 0) { throw "cargo build failed for '$crate'." }
+} finally {
+    Remove-Item Env:RUSTFLAGS -ErrorAction SilentlyContinue
+}
 
 $dll = Join-Path $root "target/release/$Mod.dll"
 if (-not (Test-Path $dll)) { throw "'$dll' was not produced; check [lib] name in Cargo.toml." }

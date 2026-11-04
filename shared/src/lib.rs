@@ -13,6 +13,8 @@ pub mod input;
 pub mod logger;
 pub mod memscan;
 pub mod menu;
+#[cfg(feature = "overlay")]
+pub mod overlay;
 pub mod params;
 pub mod player;
 pub mod reload;
