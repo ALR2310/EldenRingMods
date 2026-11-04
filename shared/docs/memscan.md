@@ -14,6 +14,8 @@ How does a mod find game code and data by pattern, safely, on several builds?
 | `find_pattern_in_module(pattern)` | First match of an IDA-style AOB (`"48 8B 05 ?? ?? ?? ?? 48 85 C0"`, `?` or `??` wildcard) in the executable sections of the main module. |
 | `wait_for_pattern_in_module(pattern, interval, timeout)` | Same, retried until the module has unpacked. |
 | `find_jumps_to(target)` | Every `jmp rel32` in executable sections that lands on `target`: the tail jump of a small wrapper into a function. |
+| `read_safe::<T>(address)` | Reads a `T` with `ReadProcessMemory`, `None` when unreadable: the way to walk a pointer chain that is not checked on every build. |
+| `CachedAddr` | Caches one resolved address (a hit is kept, a miss is retried by the next caller) behind a lock. |
 | `find_data_pointers(value)` | Every 8-byte-aligned slot in the non-executable sections holding `value`: where a function address sits in a vtable or call table. |
 
 A pattern must match exactly once on every supported build (see the research notes); a pattern that matches

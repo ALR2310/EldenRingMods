@@ -51,6 +51,7 @@ khi viết mới; cách mỗi module hoạt động và lý do thiết kế nằ
 | Bộ nhớ | `memscan`, `codepatch`, `conflict` | Quét AOB, hook mã máy, phát hiện hook của mod khác |
 | Game engine | `task`, `alloc_hook`, `player`, `params`, `anim` | Task chạy theo frame và tra cứu engine không vỡ khi game cập nhật, cổng "người chơi đã vào thế giới", đọc param an toàn, nhóm animation |
 | Tương tác | `input`, `reload`, `announce`, `menu` | Phím nóng, nạp lại config, banner đầu màn hình, menu trong game |
+| Overlay và HUD | `gfx`, `overlay` (feature) | Chỉnh movie Scaleform trong bộ nhớ, hook chuột và con trỏ cho overlay ImGui riêng của mod |
 
 ## Build
 
