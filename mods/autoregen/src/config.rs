@@ -4,9 +4,7 @@
 use std::sync::{Arc, OnceLock};
 
 use serde::{Deserialize, Serialize};
-use toml_edit::{Array, DocumentMut, Value};
-
-use shared::toml_config::{LoadReport, Migration, Step, TomlConfig, set_value};
+use shared::toml_config::{LoadReport, Migration, Step, TomlConfig};
 
 pub const TEMPLATE: &str = include_str!("../AutoRegen.toml");
 
@@ -76,49 +74,16 @@ pub struct Logging {
 /// The settings of the `.ini` file the 2.x releases used, laid over the template. The ini keys map
 /// one to one: `Regen.PerTick.HP` is `PerTick.HP`.
 pub fn import_ini(ini: &str) -> String {
-    let template: DocumentMut = TEMPLATE.parse().expect("the template is valid TOML");
-    let mut doc = template.clone();
-    for line in ini.lines() {
-        let Some((key, text)) = line.trim().split_once('=') else { continue };
-        let path = match key.trim() {
-            "ReloadKey" | "ReloadBanner" => format!("General.{}", key.trim()),
-            "LogFile" => "Logging.LogFile".to_string(),
-            key => match key.strip_prefix("Regen.") {
-                Some(rest) => rest.to_string(),
-                None => continue,
-            },
-        };
-        if let Some(value) = typed_like_template(&template, &path, text.trim()) {
-            set_value(&mut doc, &template, &path, value);
-        }
-    }
-    doc.to_string()
+    shared::toml_config::import_ini(TEMPLATE, ini, |key| match key {
+        "ReloadKey" | "ReloadBanner" => Some(format!("General.{key}")),
+        "LogFile" => Some("Logging.LogFile".to_string()),
+        _ => key.strip_prefix("Regen.").map(str::to_string),
+    })
 }
 
-/// `text` as the kind of value the template holds at `path`; `None` if it is not one.
-fn typed_like_template(template: &DocumentMut, path: &str, text: &str) -> Option<Value> {
-    let (section, key) = path.split_once('.')?;
-    match template.get(section)?.get(key)?.as_value()? {
-        Value::Boolean(_) => text.parse::<bool>().ok().map(Value::from),
-        Value::Integer(_) => text.parse::<i64>().ok().map(Value::from),
-        Value::Float(_) => text.parse::<f64>().ok().map(Value::from),
-        Value::String(_) => Some(Value::from(text)),
-        Value::Array(_) => {
-            let ids: Option<Vec<i64>> = text.split(',').map(|id| id.trim().parse().ok()).collect();
-            ids.map(|ids| ids.into_iter().collect::<Array>().into())
-        }
-        _ => None,
-    }
-}
-
-/// 2.x kept its settings in `<name>.ini`; writes them as the new file when there is none yet.
+/// 2.x kept its settings in `<name>.ini`; they become the new file when there is none yet.
 pub fn adopt_ini(path: &str, ini_path: &str) {
-    if std::path::Path::new(path).exists() {
-        return;
-    }
-    if let Ok(ini) = std::fs::read_to_string(ini_path) {
-        let _ = std::fs::write(path, import_ini(&ini));
-    }
+    shared::toml_config::adopt_ini(path, ini_path, import_ini);
 }
 
 static CONFIG: OnceLock<TomlConfig<Config>> = OnceLock::new();

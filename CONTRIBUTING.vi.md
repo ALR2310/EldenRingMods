@@ -65,7 +65,8 @@ cargo clippy --workspace --all-targets
 ```
 
 Build và đóng gói một mod: `pwsh scripts/build-mod.ps1 -Mod <Mod> [-Zip]` (kết quả ở
-`builds/<crate>/`).
+`builds/<crate>/`). File zip gồm DLL và config của nó; mod tự tạo config ở lần chạy đầu và chỉ cần
+phát hành DLL thì đặt `ship-config = false` dưới `[package.metadata.release]` trong `Cargo.toml`.
 
 Script trong `scripts/` dùng PowerShell cho các bước build và đóng gói đơn giản. Dùng Python
 (3.10+, ưu tiên chỉ thư viện chuẩn) khi script cần logic thật, như đọc JSON hoặc gọi API.

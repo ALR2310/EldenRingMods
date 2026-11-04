@@ -449,6 +449,50 @@ pub fn set_value(
     }
 }
 
+/// The settings of an old `.ini` file laid over `template`, as TOML text that keeps the template's
+/// comments. `path_of` maps an ini key to the `"Section.Key"` it became, `None` to skip it. A value
+/// is read as the kind the template holds there (bool, integer, float, string, or a comma-separated
+/// list of integers for an array); one that does not read as that kind keeps the template's value.
+pub fn import_ini(template: &str, ini: &str, path_of: impl Fn(&str) -> Option<String>) -> String {
+    let template: DocumentMut = template.parse().expect("the template is valid TOML");
+    let mut doc = template.clone();
+    for line in ini.lines() {
+        let Some((key, text)) = line.trim().split_once('=') else { continue };
+        let Some(path) = path_of(key.trim()) else { continue };
+        if let Some(value) = typed_like(&template, &path, text.trim()) {
+            set_value(&mut doc, &template, &path, value);
+        }
+    }
+    doc.to_string()
+}
+
+fn typed_like(template: &DocumentMut, path: &str, text: &str) -> Option<toml_edit::Value> {
+    use toml_edit::Value;
+    let (section, key) = path.split_once('.')?;
+    match template.get(section)?.get(key)?.as_value()? {
+        Value::Boolean(_) => text.parse::<bool>().ok().map(Value::from),
+        Value::Integer(_) => text.parse::<i64>().ok().map(Value::from),
+        Value::Float(_) => text.parse::<f64>().ok().map(Value::from),
+        Value::String(_) => Some(Value::from(text)),
+        Value::Array(_) => {
+            let ids: Option<Vec<i64>> = text.split(',').map(|id| id.trim().parse().ok()).collect();
+            ids.map(|ids| ids.into_iter().collect::<toml_edit::Array>().into())
+        }
+        _ => None,
+    }
+}
+
+/// For a mod that used to keep its settings in an `.ini`: when `path` does not exist yet and
+/// `ini_path` does, writes `import(ini text)` to `path`. The ini file is left alone.
+pub fn adopt_ini(path: &str, ini_path: &str, import: impl FnOnce(&str) -> String) {
+    if std::path::Path::new(path).exists() {
+        return;
+    }
+    if let Ok(ini) = fs::read_to_string(ini_path) {
+        let _ = write_atomic(path, &import(&ini));
+    }
+}
+
 fn split_path(path: &str) -> (Vec<&str>, &str) {
     let mut parts: Vec<&str> = path.split('.').collect();
     let key = parts.pop().unwrap_or_default();
@@ -570,6 +614,28 @@ Run = 1.2
 [Logging]
 LogFile = true
 ";
+
+    #[test]
+    fn an_ini_is_laid_over_the_template() {
+        let ini = "ReloadKey=F6
+All=2
+Walk=oops
+LogFile=false
+Other=1
+";
+        let text = import_ini(TEMPLATE, ini, |key| match key {
+            "ReloadKey" => Some("General.ReloadKey".to_string()),
+            "All" | "Walk" => Some(format!("Player.{key}")),
+            "LogFile" => Some("Logging.LogFile".to_string()),
+            _ => None,
+        });
+        let doc: toml::Value = toml::from_str(&text).unwrap();
+        assert_eq!(doc["General"]["ReloadKey"].as_str(), Some("F6"));
+        assert_eq!(doc["Player"]["All"].as_float(), Some(2.0));
+        assert_eq!(doc["Player"]["Walk"].as_float(), Some(1.2), "a bad value keeps the template's");
+        assert_eq!(doc["Logging"]["LogFile"].as_bool(), Some(false));
+        assert!(text.contains("# running"), "the template's comments are kept");
+    }
 
     /// 1 -> 2: `Speed.PlayerAll` / `Speed.PlayerMove` moved under `[Player]`.
     fn step_1_to_2(doc: &mut DocumentMut, template: &DocumentMut) {

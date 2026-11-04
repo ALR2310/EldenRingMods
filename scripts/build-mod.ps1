@@ -1,6 +1,8 @@
 <#
 .SYNOPSIS
-    Builds one mod in release mode and copies its DLL and config to builds/<crate>/.
+    Builds one mod in release mode and copies its DLL and config to builds/<crate>/. A mod whose
+    Cargo.toml has `ship-config = false` under [package.metadata.release] ships the DLL alone: it
+    creates its config on first run.
 
 .PARAMETER Mod
     PascalCase mod name, the same as its [lib] name in Cargo.toml (for example AutoPickup).
@@ -33,6 +35,9 @@ $config = "$Mod.toml"
 if (-not (Test-Path $crateDir)) { throw "No crate at '$crateDir'." }
 if (-not (Test-Path (Join-Path $crateDir $config))) { throw "Missing '$config' in '$crateDir'." }
 
+$manifest = Get-Content (Join-Path $crateDir "Cargo.toml") -Raw
+$shipConfig = $manifest -notmatch '(?m)^ship-config\s*=\s*false'
+
 cargo build --release -p $crate --manifest-path (Join-Path $root "Cargo.toml")
 if ($LASTEXITCODE -ne 0) { throw "cargo build failed for '$crate'." }
 
@@ -46,17 +51,18 @@ New-Item -ItemType Directory -Force $out | Out-Null
 $notices = @(foreach ($dir in $crateDir, (Join-Path $crateDir "assets")) {
     if (Test-Path $dir) { Get-ChildItem $dir -File | Where-Object Name -match '(license|notice).*\.txt$' }
 })
-Copy-Item (@($dll, (Join-Path $crateDir $config)) + @($notices | ForEach-Object FullName)) -Destination $out -Force
+$shipped = @($dll) + @(if ($shipConfig) { Join-Path $crateDir $config }) + @($notices | ForEach-Object FullName)
+Copy-Item $shipped -Destination $out -Force
+if (-not $shipConfig) { Remove-Item (Join-Path $out $config) -ErrorAction SilentlyContinue }
 Write-Host "Built $out/$Mod.dll"
 
 if ($Zip) {
     if (-not $Version) {
-        $manifest = Get-Content (Join-Path $crateDir "Cargo.toml") -Raw
         if ($manifest -notmatch '(?m)^version\s*=\s*"([^"]+)"') { throw "No version in $crate's Cargo.toml." }
         $Version = $Matches[1]
     }
     $zipPath = Join-Path $out "$Mod-$Version.zip"
-    $files = @("$Mod.dll", $config) + @($notices | ForEach-Object Name) | ForEach-Object { Join-Path $out $_ }
+    $files = @("$Mod.dll") + @(if ($shipConfig) { $config }) + @($notices | ForEach-Object Name) | ForEach-Object { Join-Path $out $_ }
     Compress-Archive -Path $files -DestinationPath $zipPath -Force
     Write-Host "Created $zipPath"
 }
