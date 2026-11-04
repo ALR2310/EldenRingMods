@@ -90,6 +90,54 @@ impl MenuBuilder {
         Ok(())
     }
 
+    /// A left/right row over `options` (1 to 32 labels); the value is the index.
+    pub fn choice(
+        &mut self,
+        page: PageHandle,
+        label: &str,
+        help: &str,
+        options: &[&str],
+        setting: &'static Setting,
+        read: ByteReader,
+    ) -> Result<(), String> {
+        let row = self.provider.add_inline_choice(
+            page,
+            label,
+            help,
+            options,
+            read(),
+            setting_changed,
+            setting.user_data(),
+        )?;
+        self.rows.push((row, read));
+        Ok(())
+    }
+
+    /// A slider over the whole numbers `min..=max` (step 1, at most 255 positions).
+    pub fn slider(
+        &mut self,
+        page: PageHandle,
+        label: &str,
+        help: &str,
+        range: (i32, i32),
+        setting: &'static Setting,
+        read: ByteReader,
+    ) -> Result<(), String> {
+        let row = self.provider.add_slider(
+            page,
+            label,
+            help,
+            range.0,
+            range.1,
+            1,
+            read(),
+            setting_changed,
+            setting.user_data(),
+        )?;
+        self.rows.push((row, read));
+        Ok(())
+    }
+
     /// A text row for a number (see [`NumberSetting`]); `read` gives the config's value.
     pub fn number(
         &mut self,

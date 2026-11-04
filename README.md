@@ -17,6 +17,7 @@ DLL.
 | [AutoPickup](mods/autopickup) | Picks up materials, items, corpse loot and runes when you stand in reach |
 | [AnimCancel](mods/animcancel) | Cuts the animation that is playing with guard, dodge, jump or a weapon swap |
 | [SpeedMultiplier](mods/speedmultiplier) | Speeds up or slows down the player, Torrent, spirits and enemies per kind of action |
+| [AutoRegen](mods/autoregen) | Restores HP, FP and Stamina over time or when you land a hit |
 
 ## Installation
 

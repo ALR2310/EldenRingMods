@@ -28,6 +28,11 @@ impl Setting {
         Setting { key, format: format_bool, apply: None }
     }
 
+    /// A choice or slider row stored as its byte (`0`, `1`, ...).
+    pub const fn int(key: &'static str) -> Self {
+        Setting { key, format: format_int, apply: None }
+    }
+
     /// The `user_data` pointer for the row; `self` must be a `static`.
     pub fn user_data(&'static self) -> *mut c_void {
         self as *const Setting as *mut c_void
@@ -37,6 +42,11 @@ impl Setting {
 /// `format` for a toggle: the byte as `true` / `false`.
 pub fn format_bool(value: u8) -> String {
     (value != 0).to_string()
+}
+
+/// `format` for a choice or slider: the byte as a number.
+pub fn format_int(value: u8) -> String {
+    value.to_string()
 }
 
 type Pending = (&'static str, String);
@@ -124,6 +134,8 @@ pub struct NumberSetting {
     pub row: OnceLock<RowHandle>,
     /// Last accepted value (`f64` bits).
     pub last: AtomicU64,
+    /// Whether a whole number is shown and saved with a decimal point (a TOML float field).
+    pub decimal_point: bool,
     /// Step of the native slider (`0` = text row only, see [`NumberSetting::stepped`]).
     pub step: f64,
     /// Range of the native slider when narrower than `min..max`; `None` = `min..max`.
@@ -164,10 +176,18 @@ impl NumberSetting {
             apply,
             row: OnceLock::new(),
             last: AtomicU64::new(0),
+            decimal_point: true,
             step: 0.0,
             slider_range: None,
             slider: AtomicU32::new(0),
         }
+    }
+
+    /// A number stored in a TOML integer field: saved without a decimal point.
+    pub const fn whole(key: &'static str, min: f64, max: f64, apply: Option<fn(f64)>) -> Self {
+        let mut setting = NumberSetting::new(key, min, max, apply);
+        setting.decimal_point = false;
+        setting
     }
 
     /// Makes the row a native slider in steps of `step` when the host has API 1.2. The range must
@@ -216,7 +236,7 @@ impl NumberSetting {
     /// The text shown in the row and written to the config for `value`.
     fn text(&self, value: f64) -> String {
         let text = number_text(value);
-        if text.contains('.') { text } else { format!("{text}.0") }
+        if self.decimal_point && !text.contains('.') { format!("{text}.0") } else { text }
     }
 
     /// Shows `value` (normalized) in the row, e.g. after the config was reloaded.
