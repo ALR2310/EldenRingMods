@@ -242,6 +242,26 @@
       "problemMatcher": "$rustc"
     },
     {
+      "label": "Build JourneyHUD",
+      "detail": "Builds JourneyHUD and copies the DLL (and its config) to builds/journeyhud/",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\build-mod.ps1",
+        "-Mod",
+        "JourneyHUD"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
       "label": "Cargo: Build All",
       "type": "shell",
       "command": "cargo build --release --workspace",

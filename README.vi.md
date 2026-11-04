@@ -31,6 +31,7 @@ nạp lại để áp dụng thay đổi mà không cần khởi động lại g
 | [**DropMultiplier**](mods/dropmultiplier) | Chỉnh tỉ lệ rơi đồ của quái và số lượng nguyên liệu nhận được | [11075](https://www.nexusmods.com/eldenring/mods/11075) |
 | [**FasterRevival**](mods/fasterrevival) | Hồi sinh sớm hơn sau khi chết, không đợi animation ngã hay màn "YOU DIED" | [11160](https://www.nexusmods.com/eldenring/mods/11160) |
 | [**InfiniteAilment**](mods/infiniteailment) | Chỉnh thời lượng và sát thương của Poison, Scarlet Rot, Black Flame và Destined Death | [11087](https://www.nexusmods.com/eldenring/mods/11087) |
+| [**JourneyHUD**](mods/journeyhud) | Minimap trên bản đồ thế giới, cùng máu, posture và tích tụ trạng thái của mục tiêu | [11543](https://www.nexusmods.com/eldenring/mods/11543) |
 | [**PassiveRunes**](mods/passiverunes) | Cộng (hoặc trừ) rune theo thời gian, kèm bonus ở các mốc thời gian chơi | [10528](https://www.nexusmods.com/eldenring/mods/10528) |
 | [**RiseArcher**](mods/risearcher) | Buff cho cung, nỏ, ballista, mũi tên và tên nỏ | [5807](https://www.nexusmods.com/eldenring/mods/5807) |
 | [**RuneMultiplier**](mods/runemultiplier) | Nhân hệ số lên số rune nhận được từ mọi nguồn | [10630](https://www.nexusmods.com/eldenring/mods/10630) |
