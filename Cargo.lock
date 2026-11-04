@@ -448,6 +448,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "passiverunes"
+version = "2.1.1"
+dependencies = [
+ "eldenring",
+ "fromsoftware-shared",
+ "serde",
+ "shared",
+ "toml",
+ "winresource",
+]
+
+[[package]]
 name = "pelite"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
