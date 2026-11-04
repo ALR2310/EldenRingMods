@@ -7,6 +7,7 @@ pub mod codepatch;
 pub mod conflict;
 pub mod crash;
 pub mod diag;
+pub mod gfx;
 pub mod i18n;
 pub mod input;
 pub mod logger;

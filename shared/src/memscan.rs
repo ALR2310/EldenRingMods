@@ -156,6 +156,77 @@ pub fn find_pattern_in_module(pattern: &str) -> Option<*mut u8> {
         })
 }
 
+/// Offsets in `code` of every `jmp rel32` (`E9`) that lands on `target`, when `code` starts at `base`.
+fn find_jumps(code: &[u8], base: usize, target: usize) -> Vec<usize> {
+    let mut offsets = Vec::new();
+    for i in 0..code.len().saturating_sub(4) {
+        if code[i] != 0xE9 {
+            continue;
+        }
+        let rel = i32::from_le_bytes([code[i + 1], code[i + 2], code[i + 3], code[i + 4]]);
+        if (base + i + 5).wrapping_add_signed(rel as isize) == target {
+            offsets.push(i);
+        }
+    }
+    offsets
+}
+
+/// Every `jmp rel32` in the main module's executable sections that lands on `target`: the tail jump of
+/// a small wrapper into a function.
+pub fn find_jumps_to(target: usize) -> Vec<*mut u8> {
+    module_sections()
+        .into_iter()
+        .filter(|s| s.characteristics & IMAGE_SCN_MEM_EXECUTE != 0)
+        .flat_map(|section| {
+            // SAFETY: a section of the loaded image, mapped for the process lifetime.
+            let code = unsafe { std::slice::from_raw_parts(section.start, section.size) };
+            find_jumps(code, section.start as usize, target).into_iter().map(move |i| {
+                // SAFETY: `i` is an offset inside the section just scanned.
+                unsafe { section.start.add(i) as *mut u8 }
+            })
+        })
+        .collect()
+}
+
+const PAGE_SIZE: usize = 0x1000;
+
+/// Every 8-byte-aligned slot in the main module's non-executable sections that holds `value`: where
+/// a function address sits in a vtable or a call table. Only readable pages are read, since a section
+/// can hold guard or no-access pages that crash the process when touched.
+pub fn find_data_pointers(value: usize) -> Vec<*mut usize> {
+    let needle = value.to_le_bytes();
+    let mut slots = Vec::new();
+    for section in
+        module_sections().into_iter().filter(|s| s.characteristics & IMAGE_SCN_MEM_EXECUTE == 0)
+    {
+        let end = section.start as usize + section.size;
+        let mut at = (section.start as usize).next_multiple_of(8);
+        while at < end {
+            let readable = crate::conflict::readable_len(at);
+            if readable == 0 {
+                at = (at | (PAGE_SIZE - 1)) + 1;
+                continue;
+            }
+            let chunk_end = (at + readable).min(end);
+            if chunk_end - at >= 8 {
+                // SAFETY: `at..chunk_end` is committed, readable memory, just queried.
+                let chunk = unsafe { std::slice::from_raw_parts(at as *const u8, chunk_end - at) };
+                slots.extend(
+                    chunk
+                        .as_chunks::<8>()
+                        .0
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, word)| **word == needle)
+                        .map(|(i, _)| (at + i * 8) as *mut usize),
+                );
+            }
+            at = chunk_end.next_multiple_of(8);
+        }
+    }
+    slots
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -168,6 +239,26 @@ mod tests {
         );
         assert_eq!(parse_pattern("zz"), vec![Some(0)]); // typo: matches 00, never panics
         assert!(parse_pattern("").is_empty());
+    }
+
+    #[test]
+    fn finds_a_pointer_stored_in_the_modules_own_data() {
+        // The needle lives in this test binary's data; a missing value is not found, and no page that
+        // cannot be read is touched on the way.
+        static NEEDLE: usize = 0x1BAD_B002_CAFE_F00D;
+        let slots = find_data_pointers(NEEDLE);
+        assert!(slots.iter().any(|&slot| std::ptr::eq(slot, &NEEDLE)));
+        assert!(find_data_pointers(0x0123_4567_89AB_CDEF ^ 0x5A5A_5A5A_5A5A_5A5A).is_empty());
+    }
+
+    #[test]
+    fn finds_jumps_that_land_on_the_target() {
+        // E9 at offset 2 (next instruction at 7), displacement 0x10: lands on base + 0x17.
+        let code = [0x90, 0x90, 0xE9, 0x10, 0, 0, 0, 0x90, 0xE9, 0x00];
+        assert_eq!(find_jumps(&code, 0x1000, 0x1017), vec![2]);
+        assert!(find_jumps(&code, 0x1000, 0x1018).is_empty());
+        // A trailing E9 with too few bytes after it is ignored, not read past the end.
+        assert!(find_jumps(&[0xE9, 1, 2], 0, 0).is_empty());
     }
 
     #[test]
