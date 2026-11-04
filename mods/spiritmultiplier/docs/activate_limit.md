@@ -32,13 +32,13 @@ the game runs at its vanilla limit. The originals `[60, 60, 40, 40]` are capture
 singleton is seen. The fields are written on a tick because the singleton may not exist at start-up,
 which also makes the setting hot-reloadable.
 
-A debug value `ActiveCharacterLimit > 0` overrode it with a fixed number during research: 120 made the
+The debug key `Logging.ActiveCharacterLimit` (0 = off, marked "do not change" in the config) forces a fixed limit instead; during research: 120 made the
 soldiers stay, going back to 60 made them vanish again, 0 restored the originals.
 
 ## Lessons
 
-- A debug probe that read the `ChrIns` of `Unloaded` entries (stale freed pointers) and later walked
-  `chr_sets` while the map streamed **crashed twice**. Do not walk the sets that way; use the game's own
+- `EnemyProbe` (`src/probe/enemies.rs`, logs the characters near the player with their load, omission and cutoff state) once read the `ChrIns` of `Unloaded` entries (stale freed pointers) and later walked
+  `chr_sets` while the map streamed **crashed twice**. It now reads only `Active` and `ReadyForActivation` entries and counts the rest by status; use the game's own
   distance-sorted accessor if a probe is needed again.
 - `WorldChrMan+0x1E618` counts characters activated in the frame; bit 9 of `load_state` does **not**
   mean "cut" and is not evidence.

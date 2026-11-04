@@ -63,15 +63,27 @@ pub struct Spirit {
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct Logging {
     pub log_file: bool,
+    pub slot_probe: bool,
+    pub effect_probe: bool,
+    pub enemy_probe: bool,
+    pub warp_probe: bool,
+    pub persist_probe: bool,
+    pub active_character_limit: u32,
 }
 
 /// The settings of the `.ini` file the 1.x releases used, laid over the template. Its keys had no
-/// section, so every key but the general and logging ones goes to `[Spirit]`; the probe keys and
-/// `ActiveCharacterLimit` no longer exist, and `Regen` and `HpBars` were renamed long ago.
+/// section, so every key but the general and logging ones goes to `[Spirit]`; `Regen` and `HpBars`
+/// were renamed long ago.
 pub fn import_ini(ini: &str) -> String {
     shared::toml_config::import_ini(TEMPLATE, ini, |key| match key {
         "ReloadKey" | "ReloadBanner" => Some(format!("General.{key}")),
-        "LogFile" => Some("Logging.LogFile".to_string()),
+        "LogFile"
+        | "SlotProbe"
+        | "EffectProbe"
+        | "EnemyProbe"
+        | "WarpProbe"
+        | "PersistProbe"
+        | "ActiveCharacterLimit" => Some(format!("Logging.{key}")),
         "Regen" => Some("Spirit.RegenValue".to_string()),
         "HpBars" => Some("Spirit.HubHpBars".to_string()),
         _ => Some(format!("Spirit.{key}")),
@@ -138,7 +150,7 @@ mod tests {
     #[test]
     fn the_ini_of_the_old_releases_is_imported() {
         let ini = "[General]\nReloadKey=F6\n[Spirit]\nMultiplier=3\nAmount=4\nGhostColor=true\n\
-                   Regen=1.5\nHpBars=10\nWarpDistance=30\nSlotProbe=true\n[Logging]\nLogFile=false\n";
+                   Regen=1.5\nHpBars=10\nWarpDistance=30\n[Logging]\nLogFile=false\nSlotProbe=true\nActiveCharacterLimit=120\n";
         let config = parse_cfg(&import_ini(ini)).unwrap();
         assert_eq!(config.general.reload_key, "F6");
         assert_eq!(config.spirit.multiplier, 3.0);
@@ -148,6 +160,8 @@ mod tests {
         assert_eq!(config.spirit.hub_hp_bars, 10);
         assert_eq!(config.spirit.warp_distance, 30.0);
         assert!(!config.logging.log_file);
+        assert!(config.logging.slot_probe && !config.logging.warp_probe);
+        assert_eq!(config.logging.active_character_limit, 120);
         assert!(config.spirit.multi_spirit, "keys the ini lacks keep the template");
     }
 }

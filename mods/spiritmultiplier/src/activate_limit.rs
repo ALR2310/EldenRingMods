@@ -1,7 +1,8 @@
 //! Keeps the engine's cap on how many open-field characters get activated
 //! at once from being eaten by our spirits: every tick the cap becomes the
 //! game's own value plus the number of spirits out (no extra cost with none),
-//! so enemies keep the slots they have in vanilla. Always on. The IDA findings,
+//! so enemies keep the slots they have in vanilla. Always on (the debug key
+//! `ActiveCharacterLimit` forces a fixed limit instead). The IDA findings,
 //! the singleton layout and the decision history: `docs/activate_limit.md`.
 
 use std::time::Duration;
@@ -66,9 +67,8 @@ pub fn run() {
 
     let cs_task = shared::task::wait_for_cs_task();
     let mut elapsed_ms: f64 = 0.0;
-    // The game's own values, captured the first time the singleton is
-    // seen (before this module ever writes) - restored when the ini key
-    // goes back to 0, so a hot reload can switch the experiment off.
+    // The game's own values, captured the first time the singleton is seen (before this module
+    // ever writes), so they can be put back.
     let mut original: Option<[u32; 4]> = None;
     let mut last_applied: Option<[u32; 4]> = None;
 
@@ -103,8 +103,11 @@ pub fn run() {
                 values
             });
 
+            // Re-read every tick so the reload key applies it live; a value above 0 (a debug
+            // key) forces that fixed limit.
+            let limit = crate::config::get().logging.active_character_limit;
             let spirits = spirits_out();
-            let target = original.map(|value| value + spirits);
+            let target = if limit > 0 { [limit; 4] } else { original.map(|value| value + spirits) };
             // Only write what differs - normally nothing, once settled.
             for (offset, value) in LIMIT_OFFSETS.iter().zip(target) {
                 let ptr = field(*offset);
@@ -115,7 +118,9 @@ pub fn run() {
                 }
             }
             if last_applied != Some(target) {
-                logger::log(&format!("ActiveLimit: limits now {target:?} (spirits out {spirits})"));
+                logger::log(&format!(
+                    "ActiveLimit: limits now {target:?} (spirits out {spirits}, ActiveCharacterLimit {limit})"
+                ));
                 last_applied = Some(target);
             }
         },

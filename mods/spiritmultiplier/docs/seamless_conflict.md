@@ -79,7 +79,7 @@ third-party mod rewrites a row `503045` to `2147300000` in the internal param ta
 user reported that forcing `2147300000` with a memory editor about 1 second after sending spirits back
 let them summon again.
 
-Checked with diagnostic logging (player SpEffects on every change and the rows `503045` and
+Checked with diagnostic logging (`Logging.EffectProbe`: player SpEffects on every change and the rows `503045` and
 `2147300000`), with and without Seamless:
 
 - `SpEffectParam 2147300000`: **no such row** even with Seamless, so it is not a real game effect but a code

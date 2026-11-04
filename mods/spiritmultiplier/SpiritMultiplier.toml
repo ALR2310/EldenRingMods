@@ -77,3 +77,22 @@ HubHpBars = 15
 [Logging]
 # Write a log file next to the DLL, for troubleshooting.
 LogFile = true
+
+# Logs the spirit summon slot layout
+SlotProbe = false
+
+# Logs the player's SpEffect changes
+EffectProbe = false
+
+# Logs nearby enemies (load/update state) when it changes
+EnemyProbe = false
+
+# Logs the spirit warp-to-player machine's state when it changes
+WarpProbe = false
+
+# Logs the spirit groups, player block and SpEffects when they change
+PersistProbe = false
+
+# !!! DO NOT CHANGE THIS VALUE !!!
+# forces a fixed limit on characters active at once
+ActiveCharacterLimit = 0

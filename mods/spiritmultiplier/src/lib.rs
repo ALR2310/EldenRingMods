@@ -11,6 +11,7 @@ mod keep_on_rest;
 mod menu;
 mod mimic;
 mod multi_spirit;
+mod probe;
 mod regen;
 mod think;
 mod warp;
@@ -64,6 +65,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
                 },
             )
         });
+        probe::spawn();
         std::thread::spawn(keep_on_rest::run);
         std::thread::spawn(activate_limit::run);
         std::thread::spawn(ghost_color::run);

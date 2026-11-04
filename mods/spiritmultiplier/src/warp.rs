@@ -489,6 +489,79 @@ impl Threshold {
     }
 }
 
+/// `WarpProbe`: who the groups belong to. The `groups` map is keyed by the
+/// owner's player id (`*(PlayerIns+1408 -> +8)`, `docs/persist_spirits.md`), so
+/// comparing each key with the local player's tells a remote spirit apart
+/// without `is_remote`, which Seamless's own spirit creation may leave 0
+///.
+fn describe_groups(world_chr_man: &WorldChrMan) -> Option<String> {
+    let player = shared::player::main_player_chr_ins_ptr()? as usize;
+    // SAFETY: PlayerIns +1408 is the pointer `sub_1406576E0` reads (null = the
+    // engine falls back to a default), checked readable before the +8 read.
+    let local = unsafe {
+        let data: usize = rd(player, 1408);
+        if readable(data, 16) { Some(rd::<u32>(data, 8)) } else { None }
+    };
+    let mut text = format!("WarpProbe: local owner id {local:x?}; groups:");
+    let mut none = true;
+    for pair in world_chr_man.summon_buddy_manager.groups.iter() {
+        for g in pair.second.iter() {
+            none = false;
+            // SAFETY: only live characters of the manager are read, this frame.
+            let handle = unsafe {
+                (&g.chr_ins.as_ref().field_ins_handle as *const _ as *const u64).read_unaligned()
+            };
+            text.push_str(&format!(
+                " [key {:#x}{} is_remote {} alive {} buddy {} handle {handle:#x}]",
+                pair.first,
+                if Some(pair.first as u32) == local { " (local)" } else { "" },
+                g.is_remote,
+                crate::multi_spirit::group_alive(g),
+                g.buddy_param_id
+            ));
+        }
+    }
+    if none {
+        text.push_str(" none");
+    }
+    Some(text)
+}
+
+/// One line describing the warp manager, or `None` if it is not readable.
+fn describe(a1: usize) -> Option<String> {
+    if !readable(a1, 64) {
+        return None;
+    }
+    // SAFETY: the address was checked readable first.
+    unsafe {
+        let mut text = format!(
+            "WarpProbe: manager ray_time={} dist={} stack_time={} force={}; entries:",
+            rd::<f32>(a1, 24),
+            rd::<f32>(a1, 28),
+            rd::<f32>(a1, 32),
+            rd::<u8>(a1, 48)
+        );
+        let mut count = 0;
+        for_each_node(a1, |node| {
+            text.push_str(&format!(
+                " [key {:#x} stage {} flags {:#05x} ray {:.1} timer {:.1} stack {:.1}/{:.1}]",
+                rd::<u64>(node, 32),
+                rd::<u8>(node, 48),
+                rd::<u32>(node, 96),
+                rd::<f32>(node, 100),
+                rd::<f32>(node, 104),
+                rd::<f32>(node, 128),
+                rd::<f32>(node, 132)
+            ));
+            count += 1;
+        });
+        if count == 0 {
+            text.push_str(" none");
+        }
+        Some(text)
+    }
+}
+
 pub fn run() {
     if !layout_known() {
         logger::error(
@@ -537,6 +610,8 @@ pub fn run() {
     let mut elapsed_ms: f64 = TICK_INTERVAL_MS;
     let mut request_ms: f64 = 0.0;
     let mut when_far = false;
+    let mut last = String::new();
+    let mut last_groups = String::new();
     let mut thresholds = [
         Threshold::new("WarpDistance", |s| s.warp_distance, |m| &mut m.trigger_dist_to_player),
         Threshold::new(
@@ -600,13 +675,27 @@ pub fn run() {
                 unsafe { (registry.update)(a1, &time) };
             }
 
-            // Once a second: the settings and the thresholds.
+            // Once a second: the settings, the thresholds and the diagnostics.
             elapsed_ms += frame_ms;
             if elapsed_ms >= TICK_INTERVAL_MS {
                 elapsed_ms = 0.0;
                 when_far = config::get().spirit.warp_when_far;
                 for threshold in thresholds.iter_mut() {
                     threshold.sync(&mut world_chr_man.summon_buddy_manager.warp_manager);
+                }
+                if config::get().logging.warp_probe {
+                    if let Some(text) = describe(a1)
+                        && text != last
+                    {
+                        logger::log(&text);
+                        last = text;
+                    }
+                    if let Some(text) = describe_groups(world_chr_man)
+                        && text != last_groups
+                    {
+                        logger::log(&text);
+                        last_groups = text;
+                    }
                 }
             }
 

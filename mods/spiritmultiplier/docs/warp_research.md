@@ -105,6 +105,11 @@ both machines.
   instance: both players' spirits stay in the right place, no blinking, no repeated warp requests.
 - Not checked: whether vanilla co-op (without Seamless) shows the same fault.
 
+## Diagnostics
+
+`Logging.WarpProbe` (off by default) logs the warp manager (thresholds, every entry with stage, flags and
+timers) and the spirit groups with their owner key, `is_remote` and handle, whenever either changes.
+
 ## Independence from the game version
 
 The warp code finds the game's functions by AOB and checks the node layout (`layout_known`), so it is not tied
