@@ -3,7 +3,7 @@
   "tasks": [
     {
       "label": "Build AutoPickup",
-      "detail": "Builds AutoPickup and copies the DLL and config to builds/autopickup/",
+      "detail": "Builds AutoPickup and copies the DLL (and its config) to builds/autopickup/",
       "type": "process",
       "command": "powershell.exe",
       "args": [
@@ -11,7 +11,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "${workspaceFolder}\\scripts\build-mod.ps1",
         "-Mod",
         "AutoPickup"
       ],
@@ -23,7 +23,7 @@
     },
     {
       "label": "Build AnimCancel",
-      "detail": "Builds AnimCancel and copies the DLL and config to builds/animcancel/",
+      "detail": "Builds AnimCancel and copies the DLL (and its config) to builds/animcancel/",
       "type": "process",
       "command": "powershell.exe",
       "args": [
@@ -31,7 +31,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "${workspaceFolder}\\scripts\build-mod.ps1",
         "-Mod",
         "AnimCancel"
       ],
@@ -43,7 +43,7 @@
     },
     {
       "label": "Build SpeedMultiplier",
-      "detail": "Builds SpeedMultiplier and copies the DLL and config to builds/speedmultiplier/",
+      "detail": "Builds SpeedMultiplier and copies the DLL (and its config) to builds/speedmultiplier/",
       "type": "process",
       "command": "powershell.exe",
       "args": [
@@ -51,7 +51,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "${workspaceFolder}\\scripts\build-mod.ps1",
         "-Mod",
         "SpeedMultiplier"
       ],
@@ -63,7 +63,7 @@
     },
     {
       "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
+      "detail": "Builds AutoRegen and copies the DLL (and its config) to builds/autoregen/",
       "type": "process",
       "command": "powershell.exe",
       "args": [
@@ -71,7 +71,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "${workspaceFolder}\\scripts\build-mod.ps1",
         "-Mod",
         "AutoRegen"
       ],
@@ -83,7 +83,7 @@
     },
     {
       "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
+      "detail": "Builds DropMultiplier and copies the DLL (and its config) to builds/dropmultiplier/",
       "type": "process",
       "command": "powershell.exe",
       "args": [
@@ -91,7 +91,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "${workspaceFolder}\\scripts\build-mod.ps1",
         "-Mod",
         "DropMultiplier"
       ],
@@ -102,28 +102,8 @@
       "problemMatcher": "$rustc"
     },
     {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
       "label": "Build FasterRevival",
-      "detail": "Builds FasterRevival and copies the DLL and config to builds/fasterrevival/",
+      "detail": "Builds FasterRevival and copies the DLL (and its config) to builds/fasterrevival/",
       "type": "process",
       "command": "powershell.exe",
       "args": [
@@ -131,7 +111,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "${workspaceFolder}\\scripts\build-mod.ps1",
         "-Mod",
         "FasterRevival"
       ],
@@ -142,68 +122,8 @@
       "problemMatcher": "$rustc"
     },
     {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "DropMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
       "label": "Build RuneMultiplier",
-      "detail": "Builds RuneMultiplier and copies the DLL and config to builds/runemultiplier/",
+      "detail": "Builds RuneMultiplier and copies the DLL (and its config) to builds/runemultiplier/",
       "type": "process",
       "command": "powershell.exe",
       "args": [
@@ -211,7 +131,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "${workspaceFolder}\\scripts\build-mod.ps1",
         "-Mod",
         "RuneMultiplier"
       ],
@@ -222,148 +142,8 @@
       "problemMatcher": "$rustc"
     },
     {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "DropMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build FasterRevival",
-      "detail": "Builds FasterRevival and copies the DLL and config to builds/fasterrevival/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "FasterRevival"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "DropMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
       "label": "Build InfiniteAilment",
-      "detail": "Builds InfiniteAilment and copies the DLL and config to builds/infiniteailment/",
+      "detail": "Builds InfiniteAilment and copies the DLL (and its config) to builds/infiniteailment/",
       "type": "process",
       "command": "powershell.exe",
       "args": [
@@ -371,7 +151,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "${workspaceFolder}\\scripts\build-mod.ps1",
         "-Mod",
         "InfiniteAilment"
       ],
@@ -382,308 +162,8 @@
       "problemMatcher": "$rustc"
     },
     {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "DropMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build FasterRevival",
-      "detail": "Builds FasterRevival and copies the DLL and config to builds/fasterrevival/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "FasterRevival"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "DropMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build RuneMultiplier",
-      "detail": "Builds RuneMultiplier and copies the DLL and config to builds/runemultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "RuneMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "DropMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build FasterRevival",
-      "detail": "Builds FasterRevival and copies the DLL and config to builds/fasterrevival/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "FasterRevival"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "DropMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
       "label": "Build WeightMultiplier",
-      "detail": "Builds WeightMultiplier and copies the DLL and config to builds/weightmultiplier/",
+      "detail": "Builds WeightMultiplier and copies the DLL (and its config) to builds/weightmultiplier/",
       "type": "process",
       "command": "powershell.exe",
       "args": [
@@ -691,7 +171,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "${workspaceFolder}\\scripts\build-mod.ps1",
         "-Mod",
         "WeightMultiplier"
       ],
@@ -702,8 +182,8 @@
       "problemMatcher": "$rustc"
     },
     {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
+      "label": "Build PassiveRunes",
+      "detail": "Builds PassiveRunes and copies the DLL (and its config) to builds/passiverunes/",
       "type": "process",
       "command": "powershell.exe",
       "args": [
@@ -711,609 +191,9 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "${workspaceFolder}\\scripts\build-mod.ps1",
         "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "DropMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build FasterRevival",
-      "detail": "Builds FasterRevival and copies the DLL and config to builds/fasterrevival/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "FasterRevival"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "DropMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build RuneMultiplier",
-      "detail": "Builds RuneMultiplier and copies the DLL and config to builds/runemultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "RuneMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "DropMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build FasterRevival",
-      "detail": "Builds FasterRevival and copies the DLL and config to builds/fasterrevival/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "FasterRevival"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "DropMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build InfiniteAilment",
-      "detail": "Builds InfiniteAilment and copies the DLL and config to builds/infiniteailment/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "InfiniteAilment"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "DropMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build FasterRevival",
-      "detail": "Builds FasterRevival and copies the DLL and config to builds/fasterrevival/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "FasterRevival"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "DropMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build RuneMultiplier",
-      "detail": "Builds RuneMultiplier and copies the DLL and config to builds/runemultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "RuneMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "DropMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build FasterRevival",
-      "detail": "Builds FasterRevival and copies the DLL and config to builds/fasterrevival/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "FasterRevival"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build DropMultiplier",
-      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "DropMultiplier"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": "$rustc"
-    },
-    {
-      "label": "Build AutoRegen",
-      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
-      "type": "process",
-      "command": "powershell.exe",
-      "args": [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\build-mod.ps1",
-        "-Mod",
-        "AutoRegen"
+        "PassiveRunes"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
