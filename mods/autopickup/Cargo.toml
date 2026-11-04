@@ -1,0 +1,35 @@
+[package]
+name = "autopickup"
+version = "1.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "AutoPickup"
+crate-type = ["cdylib"]
+
+[dependencies]
+shared = { path = "../../shared" }
+eldenring.workspace = true
+fromsoftware-shared.workspace = true
+serde.workspace = true
+toml_edit.workspace = true
+
+[dev-dependencies]
+toml.workspace = true
+
+[build-dependencies]
+winresource = "0.1"
+
+[lints]
+workspace = true
+
+# Windows version resource (DLL properties), see build.rs
+[package.metadata.winresource]
+ProductName = "Auto Pickup"
+FileDescription = "Auto Pickup - Elden Ring mod"
+InternalName = "AutoPickup"
+OriginalFilename = "AutoPickup.dll"
+LegalCopyright = "Copyright (c) 2026 ALR2310"

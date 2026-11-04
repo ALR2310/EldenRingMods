@@ -3,6 +3,7 @@
 
 # Local-only material: reverse-engineering dumps, personal notes, API keys
 /.local/
+/TODO.md
 /dumps/
 .env
 
