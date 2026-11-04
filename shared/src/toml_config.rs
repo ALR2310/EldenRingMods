@@ -1,10 +1,8 @@
-//! TOML config for a mod. The mod declares a serde struct `T` and an embedded template that
-//! holds every default. The file is read in two passes (errors with their line, then the user's
-//! values laid over the template) and is brought in line with the template at start-up through
-//! `toml_edit`: versioned migration steps run, missing keys are added and unknown keys are kept
-//! as comments. The parsed config is an `Arc<T>` snapshot, so take [`TomlConfig::get`] once per
-//! tick. See `docs/toml_config.md`.
+//! TOML config for a mod: a serde struct `T` plus an embedded template holding every default. The
+//! file is read in two passes (errors with their line, then the user's values over the template)
+//! and brought in line with the template at start-up. See `docs/toml_config.md`.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::sync::{Arc, RwLock};
 
@@ -20,16 +18,13 @@ pub struct TomlConfig<T> {
     current: RwLock<Arc<T>>,
 }
 
-/// One migration step: changes a file of the previous format version into
-/// the next (the template is there for its comments, see [rename_key]).
+/// One migration step: turns a file of the previous format version into the next.
 pub type Step = fn(&mut DocumentMut, &DocumentMut);
 
-/// How an existing file is brought in line with the template, see the
-/// module doc.
 #[derive(Clone, Copy)]
 pub struct Migration<'a> {
-    /// Dotted path of the format version (`"General.ConfigVersion"`). The
-    /// template must hold the current version there.
+    /// Dotted path of the format version, e.g. `"General.ConfigVersion"`; the template holds the
+    /// current one.
     pub version_key: &'a str,
     /// `steps[i]`: version `i + 1` -> `i + 2`. Append only.
     pub steps: &'a [Step],
@@ -37,18 +32,15 @@ pub struct Migration<'a> {
     pub keep: &'a [&'a str],
 }
 
-/// What [`TomlConfig::load_or_create`] did, for the mod to log once its
-/// logger is up (the logger's own on/off switch lives in this config).
+/// What [`TomlConfig::load_or_create`] did, for the mod to log once its logger is up.
 #[derive(Default, Debug)]
 pub struct LoadReport {
     /// The file didn't exist and the template was written.
     pub created: bool,
     /// `(from, to)` format versions, when migration steps ran.
     pub migrated: Option<(u32, u32)>,
-    /// The file is from a newer format version than this mod knows - it was
-    /// left untouched. `(file, current)`.
+    /// The file is from a newer format version and was left untouched: `(file, current)`.
     pub newer: Option<(u32, u32)>,
-    /// Keys added from the template to an existing file.
     pub added_keys: usize,
     /// Keys the template doesn't have, moved to the comment block at the end
     /// of the file (`"Speed.PlayerMovement = 1.2"`).
@@ -58,8 +50,7 @@ pub struct LoadReport {
 }
 
 impl LoadReport {
-    /// Logs what loading `file` did, one short line each; call it once the
-    /// logger is up. Nothing is logged for a file that loaded unchanged.
+    /// One short line per thing loading did; nothing for a file that loaded unchanged.
     pub fn log(&self, file: &str) {
         if self.created {
             logger::log(&format!("{file}: created"));
@@ -90,7 +81,7 @@ impl LoadReport {
 
 impl<T> TomlConfig<T>
 where
-    T: DeserializeOwned + Send + Sync,
+    T: DeserializeOwned + Serialize + Send + Sync,
 {
     pub fn load_or_create(path: &str, template: &str, migration: Migration) -> (Self, LoadReport) {
         let mut report = LoadReport::default();
@@ -128,15 +119,19 @@ where
         )
     }
 
-    /// The config in use - take it once per tick.
+    /// The parsed config; take it once per tick.
     pub fn get(&self) -> Arc<T> {
         self.current.read().unwrap().clone()
     }
 
-    /// Re-reads the file. On error the previous config stays in use.
+    /// Re-reads the file and logs every key whose value changed as
+    /// `Config: Section.Key: old -> new`. On error the previous config stays in use.
     pub fn reload(&self) -> Result<(), String> {
-        let config = read(&self.path, &self.template)?;
-        *self.current.write().unwrap() = Arc::new(config);
+        let config: Arc<T> = Arc::new(read(&self.path, &self.template)?);
+        let previous = std::mem::replace(&mut *self.current.write().unwrap(), config.clone());
+        for change in changed_keys(&*previous, &*config) {
+            logger::log(&format!("Config: {change}"));
+        }
         Ok(())
     }
 
@@ -144,10 +139,9 @@ where
         &self.path
     }
 
-    /// Writes `values` (`("Section.Key", "text")`) into the file, keeping its
-    /// comments and layout, then re-reads it. Meant for saving what the player changed in game.
-    /// Each text becomes a bool (`true`/`false`), an integer, a float or else a string. On error
-    /// the file is left as it was (a failed re-read keeps the last good config).
+    /// Writes `("Section.Key", "text")` pairs into the file, keeping its comments and layout, then
+    /// re-reads it. Each text becomes a bool, an integer, a float or a string. On error the file is
+    /// left as it was.
     pub fn save_values(&self, values: &[(&str, String)]) -> Result<(), String> {
         let text = fs::read_to_string(&self.path).map_err(|e| e.to_string())?;
         let mut doc: DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| e.to_string())?;
@@ -161,14 +155,46 @@ where
     }
 }
 
-/// Writes `contents` to `path` through a temporary file next to it and a rename, so a crash or
-/// a second writer never leaves a half-written config behind.
+/// Writes through a temporary file and a rename, so a crash never leaves a half-written config.
 fn write_atomic(path: &str, contents: &str) -> std::io::Result<()> {
     let temp = format!("{path}.tmp");
     fs::write(&temp, contents)?;
     fs::rename(&temp, path).inspect_err(|_| {
         let _ = fs::remove_file(&temp);
     })
+}
+
+/// `"Section.Key: old -> new"` for every value that differs between two configs. A config that
+/// cannot be turned into TOML has no changes to list.
+fn changed_keys<T: Serialize>(old: &T, new: &T) -> Vec<String> {
+    let (Ok(old), Ok(new)) = (toml::Table::try_from(old), toml::Table::try_from(new)) else {
+        return Vec::new();
+    };
+    let (mut old_values, mut new_values) = (BTreeMap::new(), BTreeMap::new());
+    flatten("", &old, &mut old_values);
+    flatten("", &new, &mut new_values);
+    let keys: BTreeSet<_> = old_values.keys().chain(new_values.keys()).collect();
+    keys.into_iter()
+        .filter(|key| old_values.get(*key) != new_values.get(*key))
+        .map(|key| {
+            let show = |values: &BTreeMap<String, toml::Value>| {
+                values.get(key).map_or_else(|| "(none)".to_string(), ToString::to_string)
+            };
+            format!("{key}: {} -> {}", show(&old_values), show(&new_values))
+        })
+        .collect()
+}
+
+fn flatten(prefix: &str, table: &toml::Table, out: &mut BTreeMap<String, toml::Value>) {
+    for (key, value) in table {
+        let path = if prefix.is_empty() { key.clone() } else { format!("{prefix}.{key}") };
+        match value {
+            toml::Value::Table(inner) => flatten(&path, inner, out),
+            other => {
+                out.insert(path, other.clone());
+            }
+        }
+    }
 }
 
 /// `true`/`false` -> bool, `42` -> integer, `1.5` -> float, anything else a string.
@@ -210,9 +236,8 @@ fn toml_error(e: impl std::fmt::Display) -> String {
     e.to_string().trim_end().to_string()
 }
 
-/// `text` read as a `T` the way a config file is: errors (unknown keys,
-/// wrong types, syntax) reported with their line from `text` alone, then
-/// the values taken with every key `text` lacks filled from `template`.
+/// `text` read as a `T`: errors with their line from `text` alone, then the values with every
+/// missing key filled from `template`.
 pub fn parse<T: DeserializeOwned>(text: &str, template: &str) -> Result<T, String> {
     toml::from_str::<T>(text).map_err(toml_error)?;
     let mut merged: toml::Table =
@@ -237,15 +262,13 @@ fn lay_over(base: &mut toml::Table, user: toml::Table) {
     }
 }
 
-/// The template's values - the defaults. Panics if the template doesn't
-/// parse (a mod test parses it, so that's a build-time mistake).
+/// The template's values. Panics if the template doesn't parse (a mod test covers that).
 pub fn defaults<T: DeserializeOwned>(template: &str) -> T {
     toml::from_str(template).expect("the embedded template parses")
 }
 
-/// Dotted paths of every field `T` has but `template` doesn't set -
-/// which [parse] would leave at the derived zero value. Names in `keep`
-/// (lists like `[[Override]]`) are skipped. For a mod's unit test.
+/// Dotted paths of every field `T` has but `template` doesn't set, which [parse] would leave at
+/// zero. Names in `keep` are skipped. For a mod's unit test.
 pub fn template_missing_keys<T: DeserializeOwned + Serialize>(
     template: &str,
     keep: &[&str],
@@ -283,7 +306,6 @@ const UNKNOWN_HEADER: &str = "\n# ---- Keys this version doesn't use (renamed or
 
 #[derive(Default)]
 struct Synced {
-    /// The new file text, `None` if nothing changed.
     text: Option<String>,
     migrated: Option<(u32, u32)>,
     newer: Option<(u32, u32)>,
@@ -296,8 +318,7 @@ fn version_at(doc: &DocumentMut, path: &str) -> Option<u32> {
     get_table(doc.as_table(), &parent)?.get(key)?.as_integer().and_then(|v| u32::try_from(v).ok())
 }
 
-/// `user` brought in line with `template` (see the module doc). A `user`
-/// that isn't valid TOML is left as it is.
+/// `user` brought in line with `template`; text that isn't valid TOML is left as it is.
 fn sync_with_template(user: &str, template: &str, migration: Migration) -> Synced {
     let mut out = Synced::default();
     let (Ok(mut doc), Ok(template)) =
@@ -353,10 +374,9 @@ fn sync_with_template(user: &str, template: &str, migration: Migration) -> Synce
     out
 }
 
-/// For migration steps: moves the value at `old` to `new` (dotted paths),
-/// creating `new`'s tables (with the template's comments) as needed, and
-/// keeping the template's comment above the key. Does nothing if `old`
-/// isn't a plain value or `new` is already set. Returns whether it moved.
+/// For migration steps: moves the value at `old` to `new` (dotted paths), keeping the template's
+/// comments. Does nothing if `old` isn't a plain value or `new` is already set; returns whether it
+/// moved.
 pub fn rename_key(doc: &mut DocumentMut, template: &DocumentMut, old: &str, new: &str) -> bool {
     let (old_parent, old_key) = split_path(old);
     let (new_parent, new_key) = split_path(new);
@@ -385,9 +405,7 @@ pub fn remove_value(doc: &mut DocumentMut, path: &str) -> Option<toml_edit::Valu
     table.remove(key)?.into_value().ok()
 }
 
-/// For migration steps: sets `path` to `v`, creating its tables (with the
-/// template's comments) as needed and keeping the template's comment above
-/// the key when the key is new.
+/// For migration steps: sets `path` to `v`, creating its tables with the template's comments.
 pub fn set_value(
     doc: &mut DocumentMut,
     template: &DocumentMut,
@@ -534,9 +552,7 @@ fn describe(item: &Item, path: &str, out: &mut Vec<String>) {
 mod tests {
     use super::*;
 
-    /// Format version 3 of a made-up mod: v1 had `[Speed] PlayerRun`,
-    /// v2 renamed it to `[Player] Run`, v3 split `Player.Move` into
-    /// `Player.Walk` + `Player.Run`... see the steps below.
+    /// Format version 3 of a made-up mod; see the steps below.
     const TEMPLATE: &str = "\
 [General]
 ConfigVersion = 3   # managed by the mod
@@ -771,8 +787,6 @@ Walk = 1.1
         assert!(d.to_string().contains("Run = 2.0 # mine"), "{}", d);
     }
 
-    // ---- save_values / scalar ----
-
     #[test]
     fn scalar_types_the_text() {
         assert_eq!(scalar("true").as_bool(), Some(true));
@@ -938,5 +952,26 @@ Guard = true        # raising the guard
         let (config, path) = save_config("gone", USER_FILE);
         fs::remove_file(&path).unwrap();
         assert!(config.save_values(&[("Player.Run", "2.0".to_string())]).is_err());
+    }
+
+    #[test]
+    fn changed_keys_lists_only_what_differs() {
+        #[derive(Serialize)]
+        struct Group {
+            enabled: bool,
+            range: f64,
+        }
+        #[derive(Serialize)]
+        struct Settings {
+            items: Group,
+            key: String,
+        }
+        let old = Settings { items: Group { enabled: true, range: 2.0 }, key: "F5".into() };
+        let new = Settings { items: Group { enabled: false, range: 2.0 }, key: "F6".into() };
+        assert_eq!(
+            changed_keys(&old, &new),
+            vec!["items.enabled: true -> false", "key: \"F5\" -> \"F6\""]
+        );
+        assert!(changed_keys(&old, &old).is_empty());
     }
 }

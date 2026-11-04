@@ -60,6 +60,10 @@ fields, no string lookups. `save_values` writes `("Section.Key", "text")` pairs 
 keeping comments and layout (each text becomes a bool, an integer, a float or a string) and
 re-reads it.
 
+`reload` logs every key whose value changed, one line each, for example
+`Config: Materials.Range: 2.0 -> 3.0`, so the log shows what a reload picked up. A config type
+must implement `Serialize` for this.
+
 `key_name` is a `deserialize_with` for a hotkey field read by `input::parse_virtual_key`. It
 accepts a string (`"F5"`, `"0x74"`) or a bare number (`116`), which TOML would otherwise reject
 where a string is expected.

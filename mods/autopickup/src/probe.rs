@@ -1,16 +1,7 @@
-//! `Logging.PickupProbe`: logs which interactions the mod answered, to check a
-//! pickup was handled and to find the ID of one that isn't. The hook only
-//! pushes `(id, handled)` into a fixed ring of atomics (no allocation, no lock,
-//! no I/O); the per-frame tick drains it and writes the log lines:
-//!
-//! - `Probe: picked <id> <group> x<n>`: answered "triggered", at most once a
-//!   second per ID;
-//! - `Probe: skipped <id> <group>`: an ID of a group the mod left alone (group
-//!   off, or paused in combat), once per ID;
-//! - `Probe: other <id>`: an interaction outside every group (levers, graces,
-//!   a pickup the mod doesn't know), once per ID.
-//!
-//! Off by default; the ring is written only while the option is on.
+//! `Logging.PickupProbe`: logs which interactions the mod answered, to find the ID of one it does
+//! not know. The hook only pushes into a ring of atomics; the per-frame tick drains it into
+//! `Probe: picked <id> <group> xN` (at most once a second per ID), `Probe: skipped <id> <group>`
+//! and `Probe: other <id>` (once per ID).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -25,11 +16,9 @@ const RING_LEN: usize = 256;
 const VALID: u64 = 1 << 40;
 const HANDLED: u64 = 1 << 32;
 
-/// The same ID is logged as picked at most this often.
 const PICKED_INTERVAL: Duration = Duration::from_secs(1);
 
-/// A ring the hook writes and the tick reads. If the tick falls more than
-/// [`RING_LEN`] entries behind, the oldest are lost (fine for a probe).
+/// If the tick falls more than [`RING_LEN`] entries behind, the oldest entries are lost.
 pub struct Ring {
     slots: [AtomicU64; RING_LEN],
     head: AtomicUsize,
@@ -40,14 +29,12 @@ impl Ring {
         Ring { slots: [const { AtomicU64::new(0) }; RING_LEN], head: AtomicUsize::new(0) }
     }
 
-    /// Hook side: wait-free, no allocation.
     pub fn push(&self, id: u32, handled: bool) {
         let at = self.head.fetch_add(1, Ordering::Relaxed);
         let entry = VALID | if handled { HANDLED } else { 0 } | u64::from(id);
         self.slots[at % RING_LEN].store(entry, Ordering::Relaxed);
     }
 
-    /// Tick side: everything pushed since `tail`, oldest first.
     pub fn drain(&self, tail: &mut usize) -> Vec<(u32, bool)> {
         let head = self.head.load(Ordering::Relaxed);
         let start = (*tail).max(head.saturating_sub(RING_LEN));
@@ -68,14 +55,12 @@ pub fn set_enabled(enabled: bool) {
     ENABLED.store(enabled, Ordering::Relaxed);
 }
 
-/// Hook side: records an answer while the probe is on.
 pub fn record(id: u32, handled: bool) {
     if ENABLED.load(Ordering::Relaxed) {
         RING.push(id, handled);
     }
 }
 
-/// Tick side: turns the ring into log lines.
 #[derive(Default)]
 pub struct Drainer {
     tail: usize,
@@ -96,7 +81,6 @@ impl Drainer {
         }
     }
 
-    /// The log lines for `entries`, remembering what was already reported.
     fn lines(&mut self, entries: Vec<(u32, bool)>, now: Instant) -> Vec<String> {
         let mut picked: Vec<(u32, usize)> = Vec::new();
         let mut lines = Vec::new();

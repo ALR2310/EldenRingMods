@@ -1,6 +1,5 @@
-//! Watches the reload hotkey and reloads the config when it is pressed, independently of any
-//! feature module. [RELOAD_GENERATION] counts reloads for features that must react to one.
-//! This must be the only poller of the reload key in a process.
+//! Watches the reload hotkey and reloads the config on press. [RELOAD_GENERATION] counts reloads.
+//! Must be the only poller of the reload key in a process.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -12,7 +11,6 @@ use crate::logger;
 
 const VK_F5: i32 = 0x74;
 
-/// Bumped on every successful reload.
 pub static RELOAD_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// Watches the reload key on the game's `FrameBegin` task group for the rest of the process's
@@ -42,15 +40,13 @@ where
             match reload() {
                 Ok(()) => {
                     RELOAD_GENERATION.fetch_add(1, Ordering::Relaxed);
-                    logger::log("Config reloaded");
+                    logger::log("Reload: done");
                     if banner() {
                         crate::announce::show_announcement("Config reloaded");
                     }
                 }
                 Err(err) => {
-                    logger::error(&format!(
-                        "Reload: config not reloaded, the previous one stays in use:\n{err}"
-                    ));
+                    logger::error(&format!("Reload: failed, previous config kept\n{err}"));
                     crate::announce::show_announcement("Config error - see log");
                 }
             }

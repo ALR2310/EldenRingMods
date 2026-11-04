@@ -1,8 +1,6 @@
-//! Code patching helpers: an in-place byte overwrite and the pieces a hook needs to jump to a
-//! stub anywhere in the address space.
-//!
-//! Keep hook stubs in memory from [alloc_executable], not in a `static` that is made executable
-//! later: a DLL that jumps into its own data section is flagged by several antivirus engines.
+//! Byte patching, and the pieces a hook needs to jump to a stub anywhere in the address space.
+//! Keep stubs in [alloc_executable] memory, never in a `static` made executable: antivirus engines
+//! flag a DLL that jumps into its own data section.
 
 use std::ffi::c_void;
 
@@ -31,7 +29,6 @@ const MEM_COMMIT: u32 = 0x1000;
 const MEM_RESERVE: u32 = 0x2000;
 const PAGE_EXECUTE_READWRITE: u32 = 0x40;
 
-/// Length of [absolute_jmp].
 pub const ABSOLUTE_JMP_LEN: usize = 12;
 
 /// `mov rax, target; jmp rax`: a jump that reaches any 64-bit address (unlike `E9 rel32`).
@@ -44,8 +41,7 @@ pub fn absolute_jmp(target: u64) -> [u8; ABSOLUTE_JMP_LEN] {
     code
 }
 
-/// Allocates `len` bytes of readable, writable, executable memory anywhere in the address space,
-/// for a stub reached by an [absolute_jmp] or a trampoline.
+/// Readable, writable, executable memory for a stub reached by an [absolute_jmp] or trampoline.
 pub fn alloc_executable(len: usize) -> Option<*mut u8> {
     // SAFETY: a null address lets the OS pick fresh memory; nothing existing is touched.
     let mem = unsafe {
@@ -54,9 +50,8 @@ pub fn alloc_executable(len: usize) -> Option<*mut u8> {
     (!mem.is_null()).then_some(mem as *mut u8)
 }
 
-/// Overwrites `patched.len()` bytes at `addr` in place. Returns `false`, leaving the original
-/// bytes untouched, if `VirtualProtect` fails. The protection is restored and the instruction
-/// cache flushed afterwards.
+/// Overwrites bytes in place and flushes the instruction cache. `false`, with the original bytes
+/// untouched, if `VirtualProtect` fails.
 ///
 /// # Safety
 /// `addr..addr + patched.len()` must be mapped code of this process, and `patched` must be valid

@@ -1,6 +1,4 @@
-//! Code shared by every mod DLL in this workspace: config and logging, memory scanning and
-//! patching, and helpers for the game's engine types. Each mod links its own copy of this crate,
-//! so mods share no runtime state.
+//! Code shared by every mod DLL. Each mod links its own copy, so mods share no runtime state.
 
 pub mod alloc_hook;
 pub mod announce;
@@ -25,11 +23,9 @@ unsafe extern "system" {
     fn GetModuleFileNameW(hmodule: *mut c_void, lp_filename: *mut u16, n_size: u32) -> u32;
 }
 
-/// Full path of a module loaded in this process (`hmodule` = its base address), or `None` if the
-/// WinAPI call fails. Uses the wide API: the ANSI one garbles non-ASCII folder names.
+/// Full path of a loaded module, through the wide API (the ANSI one garbles non-ASCII folders).
 pub(crate) fn module_path(hmodule: *mut c_void) -> Option<String> {
-    // Start at MAX_PATH and grow: the call truncates when the buffer is too
-    // small, which long-path installs can hit.
+    // Start at MAX_PATH and grow: the call truncates on long-path installs.
     let mut buf = vec![0u16; 260];
     let len = loop {
         // SAFETY: `buf` is writable for the length passed; a bad handle makes the call fail.
@@ -42,14 +38,12 @@ pub(crate) fn module_path(hmodule: *mut c_void) -> Option<String> {
     (len != 0).then(|| String::from_utf16_lossy(&buf[..len]))
 }
 
-/// The directory part of a Windows path, `None` if it has no `\`.
 pub(crate) fn dir_of(path: &str) -> Option<&str> {
     path.rsplit_once('\\').map(|(dir, _)| dir)
 }
 
-/// Directory the calling DLL itself was loaded from - not the process's
-/// current working directory, which mod loaders don't always set to the game
-/// folder. Falls back to "." if the WinAPI call fails for any reason.
+/// The directory the DLL was loaded from, or "." on failure. The working directory is not used:
+/// mod loaders don't always set it to the game folder.
 pub fn dll_dir(hmodule: u64) -> String {
     module_path(hmodule as *mut c_void)
         .and_then(|path| dir_of(&path).map(str::to_string))

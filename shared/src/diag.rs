@@ -32,19 +32,15 @@ unsafe extern "system" {
     ) -> i32;
 }
 
-/// One module loaded in this process.
 pub struct ModuleInfo {
     /// File name only, e.g. `eldenring.exe`.
     pub name: String,
     pub path: String,
     pub base: usize,
-    /// `SizeOfImage` from the in-memory PE header.
     pub size: u32,
-    /// `FileHeader.TimeDateStamp`: identifies the exact build even when the
-    /// file version string wasn't bumped.
+    /// Identifies the exact build even when the file version string wasn't bumped.
     pub timestamp: u32,
-    /// `a.b.c.d` from the file's version resource; `0.0.0.0` if it has none
-    /// (most mod DLLs don't).
+    /// From the version resource; `0.0.0.0` if there is none (most mod DLLs).
     pub version: String,
 }
 
@@ -80,7 +76,6 @@ fn read_file_version(path: &str) -> Option<String> {
     }
 }
 
-/// Reads `(SizeOfImage, TimeDateStamp)` from a loaded module's PE header.
 fn pe_size_and_timestamp(base: *const u8) -> (u32, u32) {
     // SAFETY: `base` is a loaded module, whose headers stay mapped for as long as it is loaded.
     unsafe {
@@ -101,7 +96,6 @@ fn module_info(hmodule: *mut c_void) -> Option<ModuleInfo> {
     Some(ModuleInfo { version, name, path, base: hmodule as usize, size, timestamp })
 }
 
-/// Handles of every module in this process, in load order (the main exe first).
 fn module_handles() -> Vec<*mut c_void> {
     let mut handles: Vec<*mut c_void> = vec![std::ptr::null_mut(); 512];
     loop {
@@ -123,15 +117,13 @@ fn module_handles() -> Vec<*mut c_void> {
     }
 }
 
-/// Every module currently loaded in this process, in load order (the main
-/// exe first). Reads each file's version resource, so prefer
+/// Every module currently loaded, in load order. Reads each file's version resource, so use
 /// [module_containing] for a single lookup.
 pub fn loaded_modules() -> Vec<ModuleInfo> {
     module_handles().into_iter().filter_map(module_info).collect()
 }
 
-/// The loaded module whose image contains `addr`, if any - e.g. to name
-/// which DLL a foreign `jmp` patched into game code points into.
+/// The loaded module whose image contains `addr`, if any.
 pub fn module_containing(addr: usize) -> Option<ModuleInfo> {
     let handle = module_handles().into_iter().find(|&h| {
         let base = h as usize;
@@ -140,13 +132,11 @@ pub fn module_containing(addr: usize) -> Option<ModuleInfo> {
     module_info(handle)
 }
 
-/// Whether `m` lives under the Windows directory (kernel32, user32, ...).
 pub fn is_system_module(m: &ModuleInfo) -> bool {
     m.path.to_lowercase().starts_with(&windows_dir())
 }
 
-/// Game-bundled and Steam-client DLLs left out of the logged list (compared
-/// case-insensitively).
+/// Game-bundled and Steam-client DLLs left out of the logged list.
 const HIDDEN_MODULES: &[&str] = &[
     // Shipped with the game
     "bink2w64.dll",
@@ -159,7 +149,7 @@ const HIDDEN_MODULES: &[&str] = &[
     "tier0_s64.dll",
     "vstdlib_s64.dll",
     "gameoverlayrenderer64.dll",
-    // Hidden for the same reason as steam_api64 (see docs)
+    // Hidden for the same reason as steam_api64
     "onlinefix64.dll",
 ];
 
@@ -186,8 +176,7 @@ fn windows_dir() -> String {
     String::from_utf16_lossy(&buf[..n]).to_lowercase()
 }
 
-/// Logs the non-system module list, the game exe first. Call it after the
-/// other mods have loaded, not straight from `DllMain`.
+/// Logs the non-system module list, game exe first. Call it after the other mods have loaded.
 pub fn log_environment() {
     // SAFETY: a null name asks for the main module.
     let exe = unsafe { GetModuleHandleW(std::ptr::null()) };
@@ -216,10 +205,8 @@ pub fn log_environment() {
     }
 }
 
-/// Waits for `CSTaskImp` (by then every mod loader has loaded its DLLs), then
-/// [log_environment]. For a mod's startup thread, before its feature starts:
-/// several features only reach their own `wait_for_cs_task` once the player is
-/// in the world, too late for a "mod never started" report.
+/// Waits for `CSTaskImp` (by then every mod loader has loaded its DLLs), then [log_environment].
+/// Call it before a feature starts, so a "mod never started" report still has the environment.
 pub fn log_environment_when_game_ready() {
     crate::task::wait_for_cs_task();
     log_environment();

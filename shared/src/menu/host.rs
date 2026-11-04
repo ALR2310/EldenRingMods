@@ -14,11 +14,9 @@ pub struct Connection {
     pub(super) numeric_slider: bool,
 }
 
-/// Polls for the already-loaded `ERNativeUI.dll` and negotiates API 1.2,
-/// falling back to 1.1 (no numeric slider: [`super::NumberSetting`] rows are typed).
-/// Returns `Err` with a human-readable reason when the host is missing, failed
-/// or does not become ready within `timeout`; callers should log it and carry
-/// on without a menu.
+/// Polls for the loaded `ERNativeUI.dll` and negotiates API 1.2, falling back to 1.1 (no numeric
+/// slider). `Err` with the reason if the host is missing, failed or not ready within `timeout`;
+/// callers log it and carry on without a menu.
 pub fn connect(timeout: Duration) -> Result<Connection, String> {
     let deadline = Instant::now() + timeout;
     let host_name = wide("ERNativeUI.dll\0");
@@ -79,9 +77,8 @@ pub fn connect(timeout: Duration) -> Result<Connection, String> {
     }
 }
 
-/// A provider being built (rows are added to its root page, which is the
-/// shared System > Game Options page). Dropping it without [`Provider::commit`]
-/// aborts the registration.
+/// A provider being built; its root page is the shared System > Game Options page. Dropping it
+/// without [`Provider::commit`] aborts the registration.
 pub struct Provider {
     pub(super) api: Api,
     pub(super) provider: ProviderHandle,
@@ -91,9 +88,8 @@ pub struct Provider {
 }
 
 impl Connection {
-    /// `provider_id`: 1-255 ASCII letters, digits, `.`, `_`, `-`; unique
-    /// process-wide. `owner_module`: the mod's own `HMODULE` (the `hmodule`
-    /// passed to `DllMain`), which the host pins so row callbacks stay valid.
+    /// `provider_id`: 1-255 ASCII letters, digits, `.`, `_`, `-`, unique in the process.
+    /// `owner_module` is the mod's `HMODULE`, which the host pins so row callbacks stay valid.
     pub fn register_provider(
         &self,
         provider_id: &str,
@@ -131,13 +127,11 @@ impl Connection {
 }
 
 impl Provider {
-    /// The shared System > Game Options page.
     pub fn root_page(&self) -> PageHandle {
         self.root
     }
 
-    /// Adds a row on `parent` that opens a new child page owned by this
-    /// provider; returns the child page (to add rows to) and the row handle.
+    /// Adds a row on `parent` that opens a child page; returns the page and the row handle.
     /// `page_title`/`page_help` fall back to `label`/`help` when empty.
     pub fn add_submenu(
         &self,
@@ -209,7 +203,6 @@ impl Provider {
         Ok(row)
     }
 
-    /// Adds an on/off row to `page`.
     pub fn add_toggle(
         &self,
         page: PageHandle,
@@ -240,14 +233,11 @@ impl Provider {
         Ok(row)
     }
 
-    /// Commits the provider; blocks until the host finished its native
-    /// installation (or failed). Keep the returned [`Registration`] to push
-    /// values to rows later.
+    /// Commits the provider, blocking until the host finished installing it (or failed).
     pub fn commit(mut self) -> Result<Registration, String> {
         // SAFETY: the function pointers were checked by `validate_api`; the descriptor and the strings it views outlive the call.
         let status = unsafe { (self.api.commit_provider.unwrap())(self.provider) };
-        // A rejected commit (e.g. a callback outside this module) leaves the
-        // draft in the host; Drop aborts it so it cannot stall the host's startup.
+        // A rejected commit leaves the draft in the host; Drop aborts it so it cannot stall startup.
         check(status, "commit_provider")?;
         self.committed = true;
         let registration = Registration { api: self.api, provider: self.provider };

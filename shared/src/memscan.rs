@@ -1,7 +1,6 @@
-//! IDA-style AOB (array-of-bytes) scanner over the executable sections of the game's main module,
-//! for hooking call sites that `fromsoftware-rs` doesn't reflect. A pattern is hex bytes with `?`
-//! or `??` as a wildcard: `"48 8B 05 ?? ?? ?? ?? 48 85 C0 74 07"`. A pattern must match exactly
-//! once on every supported game build; see `docs/research/README.md`.
+//! IDA-style AOB scanner over the executable sections of the game's main module. A pattern is hex
+//! bytes with `?` or `??` as a wildcard: `"48 8B 05 ?? ?? ?? ?? 48 85 C0 74 07"`. It must match
+//! exactly once on every supported build; see `docs/research/README.md`.
 
 use std::ffi::c_void;
 use std::sync::Mutex;
@@ -41,8 +40,8 @@ const IMAGE_SCN_MEM_EXECUTE: u32 = 0x2000_0000;
 /// `Some(byte)` must match exactly, `None` is a wildcard.
 type Pattern = Vec<Option<u8>>;
 
-/// A token that isn't `?`, `??` or hex counts as byte `00`, so a typo in a
-/// pattern shows up as "not found" rather than a panic inside the game.
+/// A token that isn't `?`, `??` or hex counts as byte `00`, so a typo reads as "not found", not a
+/// panic inside the game.
 fn parse_pattern(pattern: &str) -> Pattern {
     pattern
         .split_whitespace()
@@ -62,10 +61,8 @@ fn find_pattern(haystack: &[u8], pattern: &[Option<u8>]) -> Option<usize> {
     })
 }
 
-/// A process-lifetime cache for one resolved address. Code addresses in the
-/// game exe never move once found, so scanning the same pattern again is
-/// wasted work. Only a successful resolve is cached; a miss is retried by the
-/// next caller.
+/// Cache for one resolved address: code addresses in the game exe never move, so a hit is kept
+/// and a miss is retried by the next caller.
 pub struct CachedAddr(Mutex<Option<usize>>);
 
 impl CachedAddr {
@@ -73,10 +70,8 @@ impl CachedAddr {
         Self(Mutex::new(None))
     }
 
-    /// Returns the cached address, or runs `resolve` (holding the lock, so
-    /// concurrent callers wait and reuse its result) and caches it if `Some`.
-    /// `resolve` runs only while nothing is cached, so a "found" log inside it
-    /// appears once per process.
+    /// The cached address, or the result of `resolve` (run under the lock, so concurrent callers
+    /// wait and reuse it).
     pub fn get_or_resolve(&self, resolve: impl FnOnce() -> Option<usize>) -> Option<usize> {
         let mut cached = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         if cached.is_none() {
@@ -92,9 +87,8 @@ impl Default for CachedAddr {
     }
 }
 
-/// Retries [find_pattern_in_module] every `retry_interval` until it matches
-/// or `timeout` elapses (then `None`). For a one-shot startup scan that may
-/// race the game's anti-tamper unpacking.
+/// Retries [find_pattern_in_module] until it matches or `timeout` elapses, for a startup scan that
+/// may race the game's anti-tamper unpacking.
 pub fn wait_for_pattern_in_module(
     pattern: &str,
     retry_interval: Duration,
@@ -112,14 +106,12 @@ pub fn wait_for_pattern_in_module(
     }
 }
 
-/// One section of the main module's image.
 struct Section {
     start: *const u8,
     size: usize,
     characteristics: u32,
 }
 
-/// The sections of the main module (the game .exe), empty if it can't be read.
 fn module_sections() -> Vec<Section> {
     // SAFETY: a null name asks for the main module.
     let base = unsafe { GetModuleHandleA(std::ptr::null()) } as *const u8;
@@ -149,8 +141,7 @@ fn module_sections() -> Vec<Section> {
     }
 }
 
-/// Scans the executable sections of the main module (the game .exe) for
-/// `pattern`, returning the absolute address of the first match.
+/// The absolute address of the first match of `pattern` in the executable sections.
 pub fn find_pattern_in_module(pattern: &str) -> Option<*mut u8> {
     let bytes = parse_pattern(pattern);
     module_sections()

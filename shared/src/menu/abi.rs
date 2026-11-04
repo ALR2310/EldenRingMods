@@ -89,8 +89,7 @@ pub(super) struct DecimalValue {
     pub(super) reserved: u32,
 }
 
-/// What the host passes to a numeric-slider callback
-/// (`ERUI_NumericSliderChangeContext`).
+/// What the host passes to a numeric-slider callback (`ERUI_NumericSliderChangeContext`).
 #[repr(C)]
 pub struct NumericSliderChange {
     pub(super) size: u32,
@@ -185,10 +184,8 @@ pub(super) struct TextInputDesc {
 
 pub(super) type Unused = Option<unsafe extern "C" fn()>;
 
-/// `ERUI_Api` (API 1.2). Field order is the ABI; entries this module does not
-/// call are kept as opaque [`Unused`] pointers so the table has the exact size
-/// the host expects (`ERUI_API_V1_2_SIZE`; an API 1.1 host only fills the first
-/// `ERUI_API_V1_1_SIZE` bytes).
+/// `ERUI_Api` (API 1.2). Field order is the ABI; entries this module does not call are opaque
+/// [`Unused`] pointers, so the table has the exact size the host expects.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub(super) struct Api {
@@ -312,10 +309,8 @@ pub(super) fn check(status: Status, what: &str) -> Result<(), String> {
     if status == ERUI_OK { Ok(()) } else { Err(format!("{what}: {}", result_name(status))) }
 }
 
-/// The checks the host's docs ask a strict-C client to make on the table it
-/// returned: exact version and size, the capability bits, and every function
-/// pointer this module calls (they are `unwrap`ped later). `version` is the one
-/// requested.
+/// The checks the host's docs ask of a strict-C client: exact version and size, the capability
+/// bits, and every function pointer this module calls (they are `unwrap`ped later).
 pub(super) fn validate_api(api: &Api, version: u32) -> Result<(), String> {
     let size = if version == API_VERSION_1_2 { API_V1_2_SIZE } else { API_V1_1_SIZE };
     if api.api_version != version
@@ -347,9 +342,8 @@ pub(super) fn version_name(version: u32) -> String {
     format!("{}.{}", version >> 16, version & 0xFFFF)
 }
 
-/// Tells [`crate::i18n`] the host's language (exact identifier, e.g.
-/// `"vietnamese"`), so menu text can be translated. Anything unavailable leaves
-/// the English default.
+/// Tells [`crate::i18n`] the host's language so menu text can be translated; anything
+/// unavailable keeps English.
 pub(super) fn select_language(api: &Api) {
     let Some(get_language) = api.get_game_language else { return };
     let mut info = GameLanguageInfo {

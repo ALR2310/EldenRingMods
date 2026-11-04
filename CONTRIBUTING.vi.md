@@ -107,7 +107,9 @@ thiếu được thêm từ bản mặc định mà không đụng vào comment 
 trong file mặc định có một dòng comment.
 
 **Log.** Mỗi mod một file log cạnh DLL. Thông điệp ngắn và kỹ thuật: `Thành phần: trạng thái`,
-ví dụ `Menu: registered`. Lỗi kèm lý do. Không in danh sách dài ở mức log bình thường.
+ví dụ `Menu: registered`. Lỗi kèm lý do. Không in danh sách dài ở mức log bình thường. Log viết
+cho dev, không cho người chơi; ngoại lệ là lời nhắn cố ý như
+`game may need a mod update, check Nexus`.
 
 **Đặt tên.** Theo chuẩn Rust: hàm và module `snake_case`, kiểu `UpperCamelCase`, hằng
 `SCREAMING_SNAKE_CASE`. Ngoại lệ duy nhất là `[lib] name` của crate viết PascalCase để DLL có

@@ -1,7 +1,5 @@
-//! Per-frame tasks without `fromsoftware-rs`'s version-gated `eldenring::rva::get()`, whose table
-//! only knows some game versions and panics on the rest: `CSTaskImp` is acquired by its
-//! singleton lookup, and the game's task-registration function is found by AOB and called with a
-//! fake native task object.
+//! Per-frame tasks without `eldenring::rva::get()`: `CSTaskImp` comes from its singleton lookup and
+//! the game's task-registration function is found by AOB.
 
 use std::ffi::c_void;
 use std::time::{Duration, Instant};
@@ -14,12 +12,9 @@ use vtable_rs::VPtr;
 use crate::logger;
 use crate::memscan::{self, CachedAddr};
 
-// `CSTaskImp` never moves once constructed. Cached so a mod registering several tasks
-// (`shared::reload` and its own feature) waits once and logs "ready" once instead of every
-// thread polling on its own.
+// `CSTaskImp` never moves once constructed; cached so several tasks wait and log once.
 static CS_TASK: CachedAddr = CachedAddr::new();
 
-// Resolved once per process and shared by every task a mod registers.
 static REGISTER_TASK_ADDR: CachedAddr = CachedAddr::new();
 
 const WARN_AFTER: Duration = Duration::from_secs(15);
@@ -33,8 +28,7 @@ trait TaskVmt {
     fn execute(&mut self, data: *const c_void);
 }
 
-/// The game only reads a vtable pointer at offset 0; the closure after it is opaque to the game
-/// and only reached through `execute`.
+/// The game only reads a vtable pointer at offset 0; the closure after it is opaque to it.
 #[repr(C)]
 struct Task {
     vftable: VPtr<dyn TaskVmt, Self>,
@@ -42,8 +36,7 @@ struct Task {
 }
 
 impl TaskVmt for Task {
-    // Harmless no-ops rather than `unimplemented!()`: a panic here would unwind into the game's
-    // own frames if it ever called them directly.
+    // No-ops, not `unimplemented!()`: a panic would unwind into the game's own frames.
     extern "C" fn get_runtime_class(&self) -> usize {
         0
     }
@@ -56,12 +49,10 @@ impl TaskVmt for Task {
     }
 }
 
-/// Polls for `CSTaskImp` (the game's per-frame task scheduler) by its name-based singleton
-/// lookup, retrying every 500 ms. Logs one error if it takes longer than `WARN_AFTER` (usually
-/// the game needs a mod update, not just a slow start). Never gives up.
+/// Polls for `CSTaskImp` every 500 ms and never gives up; logs one error after `WARN_AFTER`
+/// (usually the game needs a mod update, not just a slow start).
 pub fn wait_for_cs_task() -> &'static CSTaskImp {
     let addr = CS_TASK.get_or_resolve(|| Some(poll_cs_task() as *const CSTaskImp as usize));
-    // `poll_cs_task` never gives up, so the cache is always filled here.
     // SAFETY: the cached address came from a `&'static CSTaskImp`.
     unsafe { &*(addr.expect("poll_cs_task never returns None") as *const CSTaskImp) }
 }
@@ -84,7 +75,7 @@ fn poll_cs_task() -> &'static CSTaskImp {
         } else if !warned {
             warned = true;
             logger::error(&format!(
-                "CSTaskImp not found after {}s - game may need a mod update, check Nexus.",
+                "CSTaskImp: not found after {}s - game may need a mod update, check Nexus.",
                 WARN_AFTER.as_secs()
             ));
         }
@@ -92,12 +83,9 @@ fn poll_cs_task() -> &'static CSTaskImp {
     }
 }
 
-/// Registers `closure` on `group`, like `CSTaskImp::run_recurring` but with the registration
-/// function found by AOB. Returns `false` (logged, closure never installed) if the pattern isn't
-/// found within 60 s.
-///
-/// The task is never unregistered: it lives as long as the DLL, so its allocation is leaked on
-/// purpose.
+/// Like `CSTaskImp::run_recurring` but with the registration function found by AOB; `false`
+/// (logged) if the pattern isn't found within 60 s. The task is never unregistered, so its
+/// allocation is leaked on purpose.
 fn register<F>(cs_task: &'static CSTaskImp, group: CSTaskGroupIndex, closure: F) -> bool
 where
     F: FnMut(&FD4TaskData) + 'static + Send,
@@ -112,7 +100,7 @@ where
         Some(addr as usize)
     }) else {
         logger::error(
-            "Could not locate the game's task-registration function (AOB pattern not found) - task NOT installed.",
+            "register_task: pattern not found - game may need a mod update, check Nexus.",
         );
         return false;
     };
@@ -127,11 +115,9 @@ where
     true
 }
 
-/// Registers `f` as a recurring task on `group`, but catches a panic `f` raises in a frame
-/// instead of letting it unwind into the game's own call stack: `f` is just skipped for that
-/// frame (`tag` names the feature in the log). Returns `false` if the registration itself failed
-/// (AOB not found). Needs `panic = "unwind"`: `catch_unwind` catches nothing once a panic aborts
-/// the process.
+/// Registers `f` as a recurring task, skipping a frame in which it panics instead of unwinding
+/// into the game's stack (`tag` names the feature in the log). `false` if registration failed.
+/// Needs `panic = "unwind"`.
 pub fn run_recurring_safe<F>(
     cs_task: &'static CSTaskImp,
     tag: &'static str,
@@ -143,11 +129,11 @@ where
 {
     let installed = register(cs_task, group, move |data: &FD4TaskData| {
         if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(data))).is_err() {
-            logger::error(&format!("{tag}: tick panicked, skipped this frame."));
+            logger::error(&format!("{tag}: tick panicked, frame skipped"));
         }
     });
     if installed {
-        logger::log(&format!("{tag}: task registered."));
+        logger::log(&format!("{tag}: task registered"));
     }
     installed
 }
