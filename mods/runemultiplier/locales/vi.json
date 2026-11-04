@@ -1,0 +1,13 @@
+{
+  "mod": {
+    "help": "Thiết lập cho mod Rune Multiplier."
+  },
+  "multiplier": {
+    "label": "Hệ số nhân",
+    "help": "Nhân lượng rune nhận được. 1 = gốc, 2 = gấp đôi, 0 = không nhận, số âm sẽ trừ rune."
+  },
+  "log": {
+    "label": "Tệp log",
+    "help": "Ghi tệp log cạnh DLL để khắc phục sự cố."
+  }
+}

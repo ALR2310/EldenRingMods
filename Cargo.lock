@@ -488,6 +488,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "runemultiplier"
+version = "1.0.4"
+dependencies = [
+ "serde",
+ "shared",
+ "toml",
+ "winresource",
+]
+
+[[package]]
 name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
