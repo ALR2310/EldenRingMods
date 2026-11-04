@@ -31,6 +31,7 @@ and a reload key applies changes without restarting the game.
 | [**DropMultiplier**](mods/dropmultiplier) | Adjusts how often enemies drop items and how many materials you get | [11075](https://www.nexusmods.com/eldenring/mods/11075) |
 | [**FasterRevival**](mods/fasterrevival) | Respawn sooner after dying, without waiting on the death animation or "YOU DIED" | [11160](https://www.nexusmods.com/eldenring/mods/11160) |
 | [**InfiniteAilment**](mods/infiniteailment) | Sets how long Poison, Scarlet Rot, Black Flame and Destined Death last and how hard they hit | [11087](https://www.nexusmods.com/eldenring/mods/11087) |
+| [**JourneyHUD**](mods/journeyhud) | A minimap on the game's world map, and the health, posture and status buildup of your target | [11543](https://www.nexusmods.com/eldenring/mods/11543) |
 | [**PassiveRunes**](mods/passiverunes) | Gives (or takes) runes over time, with bonuses at play-time milestones | [10528](https://www.nexusmods.com/eldenring/mods/10528) |
 | [**RiseArcher**](mods/risearcher) | Buffs bows, crossbows, ballistas, arrows and bolts | [5807](https://www.nexusmods.com/eldenring/mods/5807) |
 | [**RuneMultiplier**](mods/runemultiplier) | Multiplies the runes you gain from every source | [10630](https://www.nexusmods.com/eldenring/mods/10630) |
