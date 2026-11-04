@@ -1,0 +1,45 @@
+{
+  "mod": {
+    "help": "Settings for the Drop Multiplier mod."
+  },
+  "drops": {
+    "title": "Drop Chance",
+    "help": "How likely enemies are to drop items."
+  },
+  "materials": {
+    "title": "Materials",
+    "help": "How many materials you get from each drop or pickup."
+  },
+  "mode": {
+    "label": "Mode",
+    "help": "Multiply chance: an item's drop chance is multiplied. Fixed chance: every drop is set to one chance.",
+    "options": {
+      "multiply": "Multiply chance",
+      "fixed": "Fixed chance"
+    }
+  },
+  "multiplier": {
+    "label": "Multiplier",
+    "help": "Drop-rate multiplier, used when Mode is Multiply chance. 1 = vanilla, 0 = no drops."
+  },
+  "percentage": {
+    "label": "Percentage (%)",
+    "help": "Fixed drop chance in percent, used when Mode is Fixed chance. 100 guarantees a drop."
+  },
+  "crafting": {
+    "label": "Crafting",
+    "help": "Multiplies the crafting materials you get (Rowa Fruit, Herba, bones...). 1 = vanilla."
+  },
+  "upgrade": {
+    "label": "Upgrade",
+    "help": "Multiplies the upgrade materials you get (Smithing Stones, Gloveworts...). 1 = vanilla."
+  },
+  "unique": {
+    "label": "Unique",
+    "help": "Multiplies materials found only once (Sacred Tears, Scadutree Fragments...). 1 = vanilla."
+  },
+  "log": {
+    "label": "Log file",
+    "help": "Write a log file next to the DLL, for troubleshooting."
+  }
+}

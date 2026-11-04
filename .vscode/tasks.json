@@ -82,6 +82,46 @@
       "problemMatcher": "$rustc"
     },
     {
+      "label": "Build DropMultiplier",
+      "detail": "Builds DropMultiplier and copies the DLL and config to builds/dropmultiplier/",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "DropMultiplier"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build AutoRegen",
+      "detail": "Builds AutoRegen and copies the DLL and config to builds/autoregen/",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "AutoRegen"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
       "label": "Cargo: Build All",
       "type": "shell",
       "command": "cargo build --release --workspace",

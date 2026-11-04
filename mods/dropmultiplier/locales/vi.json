@@ -1,0 +1,45 @@
+{
+  "mod": {
+    "help": "Thiết lập cho mod Drop Multiplier."
+  },
+  "drops": {
+    "title": "Tỉ lệ rơi đồ",
+    "help": "Khả năng kẻ địch rơi vật phẩm."
+  },
+  "materials": {
+    "title": "Nguyên liệu",
+    "help": "Số nguyên liệu bạn nhận được từ mỗi lần rơi đồ hoặc nhặt."
+  },
+  "mode": {
+    "label": "Chế độ",
+    "help": "Nhân tỉ lệ: tỉ lệ rơi của mỗi vật phẩm được nhân lên. Tỉ lệ cố định: mọi vật phẩm rơi theo cùng một tỉ lệ.",
+    "options": {
+      "multiply": "Nhân tỉ lệ",
+      "fixed": "Tỉ lệ cố định"
+    }
+  },
+  "multiplier": {
+    "label": "Hệ số nhân",
+    "help": "Hệ số nhân tỉ lệ rơi, dùng khi Chế độ là Nhân tỉ lệ. 1 = gốc, 0 = không rơi gì."
+  },
+  "percentage": {
+    "label": "Phần trăm (%)",
+    "help": "Tỉ lệ rơi cố định theo phần trăm, dùng khi Chế độ là Tỉ lệ cố định. 100 là chắc chắn rơi."
+  },
+  "crafting": {
+    "label": "Chế tạo",
+    "help": "Nhân số nguyên liệu chế tạo bạn nhận được (Rowa Fruit, Herba, xương...). 1 = gốc."
+  },
+  "upgrade": {
+    "label": "Nâng cấp",
+    "help": "Nhân số nguyên liệu nâng cấp bạn nhận được (Smithing Stones, Gloveworts...). 1 = gốc."
+  },
+  "unique": {
+    "label": "Duy nhất",
+    "help": "Nhân số nguyên liệu chỉ nhặt được một lần (Sacred Tears, Scadutree Fragments...). 1 = gốc."
+  },
+  "log": {
+    "label": "Tệp log",
+    "help": "Ghi tệp log cạnh DLL để khắc phục sự cố."
+  }
+}
