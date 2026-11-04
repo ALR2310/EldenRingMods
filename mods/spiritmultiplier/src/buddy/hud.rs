@@ -122,7 +122,7 @@ fn locked<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// `HubHpBars` from the ini, kept in 5..=30.
+/// `HubHpBars` from the config, kept in 5..=30.
 fn configured_bars() -> usize {
     (config::get().spirit.hub_hp_bars.max(0) as usize).clamp(VANILLA_BARS, MAX_BARS)
 }

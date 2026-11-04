@@ -3,7 +3,7 @@
 //! `RegenValue` 0 = off. Modes: 1 = `RegenValue` HP per second; 2 (default) =
 //! `RegenValue` percent of max HP; 3 = percent of the HP it is missing (fast when
 //! badly hurt, slow when nearly full). The old single `Regen` key is carried over
-//! to `RegenValue` when the ini is updated. Only `Active` / `ReadyForActivation`
+//! to `RegenValue` when an old ini is imported. Only `Active` / `ReadyForActivation`
 //! entries are touched (any other `ChrIns` can be stale).
 
 use std::time::Duration;
@@ -24,7 +24,7 @@ enum Mode {
 }
 
 impl Mode {
-    /// The `RegenMode` ini value; anything else is the default (percent of max).
+    /// The `RegenMode` config value; anything else is the default (percent of max).
     fn from_config(value: i32) -> Mode {
         match value {
             1 => Mode::FlatHp,

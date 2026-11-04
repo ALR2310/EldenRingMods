@@ -25,7 +25,7 @@ enum Role {
     RainOfArrowsRange,
     /// `numShoot` - Rain of Arrows' sub-bullet controlling arrow count. Set
     /// to an absolute count rather than multiplied - the vanilla value is
-    /// always 1, so "count" is a more honest ini key than a multiplier of an
+    /// always 1, so "count" is a more honest config key than a multiplier of an
     /// always-1 base.
     RainOfArrowsCount,
     /// `shootAngleYMaxRandom`/`shootAngleXMaxRandom` - Rain of Arrows'

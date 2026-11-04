@@ -92,13 +92,16 @@ places.
 
 ## Check on older executables
 
-An IDA script (`scripts/ida/buddy_hud_check.py`, run with `-Version all --all`) found on **2.6.2.0,
-2.7.0.0, 2.7.1.0 and 2.7.2.0** that all 7 patterns are unique and the function relations hold: the Blob
-call lies inside the function the list-builder call targets; the view-update function contains the slot
-window (136 + 5 x 24 bytes); the view constructor references `Anim/GaugeList` and a vtable whose slot 2 is
-the `add rcx,8; jmp` wrapper of the row-append function (exactly one); the file-opener function starts
-exactly 16 bytes before its pattern and has 3 pointer cells in data. 2.7.0.0 and 2.7.1.0 share addresses
-and differ only in the file opener. This is a check on code, **not a run** on those builds.
+`scripts/ida/run.ps1 buddy_hud_check -Version all` (re-run for this port) gave 35 `RESULT OK` and no `FAIL`
+on each of **2.6.2.0, 2.7.0.0, 2.7.1.0 and 2.7.2.0**: all 8 patterns are unique (the 7 above plus the clip
+`_x/_y` setter) and the function relations hold. The Blob call lies inside the function the list-builder call
+targets; the view-update function contains the slot window (136 + 5 x 24 bytes); the view constructor
+references `Anim/GaugeList`, has a vtable whose slot 2 is the `add rcx,8; jmp` wrapper of the row-append
+function (exactly one) and places the `Anim` component at `+0x308`; the clip setter is unique with 19 callers
+on 2.7.2.0; the file-opener function starts exactly 16 bytes before its pattern and has 3 pointer cells in
+data. 2.7.0.0 and 2.7.1.0 share addresses and differ only in the file opener. Examples on 2.7.2.0 (RVA): Blob
+call site `7722BE`, view-update call `8CACC6`, row-append function `8C24C0` with its wrapper `jmp` at `8C29D7`,
+clip setter `D872C0`, file opener `D6E970`. This is a check on code, **not a run** on those builds.
 
 ## Limits and risks
 
