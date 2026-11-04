@@ -4,7 +4,7 @@
 //! Coexist". Every patch only redirects an existing `call` / `jmp`
 //! ([codepatch::redirect_rel32]), so Seamless Co-op's byte signatures still
 //! match; the stubs read one byte ([ENABLED]) the tick keeps in sync with the
-//! ini. The eight patches and what each fixes: `docs/multi_spirit.md`.
+//! config. The eight patches and what each fixes: `docs/multi_spirit.md`.
 
 use std::sync::atomic::{AtomicI32, AtomicU8, AtomicU32, AtomicUsize, Ordering};
 use std::time::Duration;
@@ -551,13 +551,13 @@ fn install_all() -> bool {
         })
 }
 
-/// `MaxSpirits` from the ini, clamped like `band::install` does.
+/// `MaxSpirits` from the config, clamped like `band::install` does.
 fn max_spirits() -> u32 {
     (config::get().spirit.max_spirits.max(0) as u32)
         .clamp(crate::band::DEFAULT_MAX_SPIRITS, crate::band::MAX_MAX_SPIRITS)
 }
 
-/// Installs every patch once, then keeps [ENABLED] in sync with the ini.
+/// Installs every patch once, then keeps [ENABLED] in sync with the config.
 /// Never returns.
 pub fn run() {
     ENABLED.store(config::get().spirit.multi_spirit as u8, Ordering::Relaxed);

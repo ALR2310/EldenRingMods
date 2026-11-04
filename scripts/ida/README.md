@@ -41,6 +41,7 @@ pwsh scripts/ida/run.ps1 <script> [-Version <ver|all>] <arguments...>
 | `fieldaccess.py` | Every `[reg+offset]` access (about 1 minute) | `run.ps1 fieldaccess 17c8 --float` |
 | `switches.py` | Large switches in a call tree (ID dispatchers) | `run.ps1 switches <root> --depth=3 --min-cases=15` |
 | `decompile_range.py` | Decompile every function in an RVA range, filtered by strings (for functions not reached through a vtable) | `run.ps1 decompile_range 406000 40A000 --grep=a,b` |
+| `buddy_hud_check.py` | Checks the patch sites of SpiritMultiplier's `HubHpBars` (patterns unique, function relations) | `run.ps1 buddy_hud_check -Version all` |
 | `export_all.py` | Export the whole exe to text for grep (very heavy, hours) | `run.ps1 export_all --asm` |
 
 Quote arguments that contain spaces (AOB patterns, search strings). Each tool documents its
