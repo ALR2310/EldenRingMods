@@ -40,6 +40,8 @@ Chi tiết: `mods/spiritmultiplier/docs/open_issues.md`, `docs/warp_research.md`
 Chi tiết: `mods/journeyhud/docs/design.md`
 
 - [ ] [bug] JourneyHUD: game crash hỏng heap (0xC0000374), thấy 2026-10-27 và 2026-11-03, stack chỉ có `eldenring.exe` / `ntdll`, chưa rõ mod nào (`mods/journeyhud/docs/heap_corruption.md`)
+- [ ] [bug] JourneyHUD: minimap còn hiện trong cutscene; tìm cờ game báo đang chiếu cutscene rồi ẩn, có thể thêm key `Minimap.Hide.InCutscenes` (gorespace, Nexus, 2026-11-04)
+- [ ] [research] JourneyHUD: vẽ posture, buildup, effect và số HP của boss ngay dưới thanh máu boss của game, bỏ thanh máu địch khỏi khung mod (Ver3ion, Nexus, 2026-11-04); xem toạ độ thanh boss trong movie HUD (tham khảo `tmp/repos/EldenRing-PostureBarMod`)
 - [ ] [research] JourneyHUD: buildup trong co-op Seamless (2026-10-28, chưa có dịp thử): hai máy cùng đánh một kẻ địch, so dòng log `Buildup:`; máy chủ thấy tổng, máy khách chỉ thấy phần mình? (`docs/buildup.md`)
 - [ ] [verify] JourneyHUD: chữ giờ dưới icon trạng thái của game khi đổi cỡ HUD trong tuỳ chọn game (`mods/journeyhud/docs/effects.md`); còn làm: khối sát thương giữa người chơi (co-op)
 - [ ] [verify] JourneyHUD: chấm kẻ địch (`Minimap.Layers.Enemies`) trong hầm, dungeon legacy, DLC và quân địch ngoài trời ngoài `chr_sets`; việc còn lại: đưa bộ lọc kẻ địch lên `common` (`mods/journeyhud/docs/radar.md`)
