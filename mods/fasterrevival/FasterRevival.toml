@@ -4,8 +4,7 @@ ConfigVersion = 1
 
 
 [Debug]
-# Logs the player's death animations while dead, for diagnosing. The mod has no reload key, so a
-# change applies the next time the game starts.
+# Logs the player's death animations
 DeathProbe = false
 
 
