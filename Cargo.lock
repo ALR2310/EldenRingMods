@@ -512,6 +512,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "risearcher"
+version = "2.0.0"
+dependencies = [
+ "eldenring",
+ "fromsoftware-shared",
+ "serde",
+ "shared",
+ "toml",
+ "winresource",
+]
+
+[[package]]
 name = "runemultiplier"
 version = "1.0.4"
 dependencies = [
