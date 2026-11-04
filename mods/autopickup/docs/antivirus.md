@@ -17,11 +17,12 @@ change removes them without changing behavior?
 | + exports reduced to `DllMain` | 11 | no change |
 | + config file name string changed | 11 | no change |
 | + relocated prologue in `VirtualAlloc` memory instead of `.data` | **1** | only ESET `GameHack_AGen` is left |
+| + PDB path changed to `mod.pdb` in `build.rs` | **0** | the ESET label was caused by the PDB path |
 
 The detections are fewer than they look: several vendors license one engine, so the 11 were four
-signatures (`Mikey` on seven engines, `Adware` on two, `CTX`, ESET). The remaining ESET label
-marks any DLL that edits game memory and is the floor for these mods; two other mods in the
-repository sit at that same one detection.
+signatures (`Mikey` on seven engines, `Adware` on two, `CTX`, ESET). ESET's `GameHack_AGen` label stayed until the PDB path was changed (see
+[animcancel/docs/antivirus.md](../../animcancel/docs/antivirus.md), which separates the strings that
+cause each detection).
 
 ## What the detected builds had
 

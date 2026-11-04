@@ -103,6 +103,10 @@ habits add many more:
   several engines.
 - Do not export anything except `DllMain`. Use `sym` in `global_asm!` instead of `#[no_mangle]`.
 - Do not pack, obfuscate or encrypt the DLL.
+- Do not spell the mod's file names (`<Mod>.toml`, `<Mod>.log`) in the code; build them from
+  `shared::dll_stem`.
+- Keep the `/PDBALTPATH:mod.pdb` line in `build.rs`, and keep the mod's name out of
+  `FileDescription`. Engines have flagged the name in each of these places.
 
 **Config.** TOML, one file next to the DLL, created from the embedded default on first run.
 Missing keys are added from the default without touching the user's comments or values. Every

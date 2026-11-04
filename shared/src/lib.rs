@@ -1,6 +1,7 @@
 //! Code shared by every mod DLL. Each mod links its own copy, so mods share no runtime state.
 
 pub mod alloc_hook;
+pub mod anim;
 pub mod announce;
 pub mod codepatch;
 pub mod conflict;
@@ -40,6 +41,16 @@ pub(crate) fn module_path(hmodule: *mut c_void) -> Option<String> {
 
 pub(crate) fn dir_of(path: &str) -> Option<&str> {
     path.rsplit_once('\\').map(|(dir, _)| dir)
+}
+
+/// The DLL's own file name without the extension, so a mod can name its files after itself without
+/// spelling the name out in the binary.
+pub fn dll_stem(hmodule: u64) -> String {
+    module_path(hmodule as *mut c_void)
+        .and_then(|path| {
+            std::path::Path::new(&path).file_stem().map(|s| s.to_string_lossy().into_owned())
+        })
+        .unwrap_or_else(|| "mod".to_string())
 }
 
 /// The directory the DLL was loaded from, or "." on failure. The working directory is not used:

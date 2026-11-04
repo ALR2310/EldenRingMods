@@ -101,6 +101,10 @@ quen làm tăng cờ rất nhiều:
   gắn cờ.
 - Không xuất gì ngoài `DllMain`. Dùng `sym` trong `global_asm!` thay vì `#[no_mangle]`.
 - Không đóng gói, làm rối hay mã hoá DLL.
+- Không viết thẳng tên file của mod (`<Mod>.toml`, `<Mod>.log`) trong code; ghép từ
+  `shared::dll_stem`.
+- Giữ dòng `/PDBALTPATH:mod.pdb` trong `build.rs`, và không để tên mod trong `FileDescription`.
+  Mỗi chỗ này đã từng bị engine gắn cờ.
 
 **Config.** TOML, một file cạnh DLL, tạo từ bản mặc định nhúng sẵn ở lần chạy đầu. Khoá còn
 thiếu được thêm từ bản mặc định mà không đụng vào comment hay giá trị của người dùng. Mỗi khoá

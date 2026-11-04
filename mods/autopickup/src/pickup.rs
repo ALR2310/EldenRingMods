@@ -59,12 +59,12 @@ fn apply_animation(repo: &mut SoloParamRepository, config: &Config) {
 }
 
 /// Never returns: run it on its own worker thread.
-pub fn run() {
+pub fn run(name: &str) {
     let mut last_seen_generation = shared::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
 
     let config = config::get();
     hook::set_enabled(enabled_mask(&config));
-    hook::install();
+    hook::install(name);
 
     let repo = shared::player::wait_for_solo_param_repository();
     apply_ranges(repo, &config, "");

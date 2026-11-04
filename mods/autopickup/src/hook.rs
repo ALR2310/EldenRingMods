@@ -142,7 +142,7 @@ enum Found {
 
 /// The full pattern, else the tail, to tell "another mod hooked the entry" from "the game code
 /// isn't there yet or changed".
-fn scan() -> Found {
+fn scan(name: &str) -> Found {
     if let Some(entry) = memscan::find_pattern_in_module(EXEC_ACTION_BUTTON_PATTERN) {
         return Found::Entry(entry);
     }
@@ -155,7 +155,7 @@ fn scan() -> Found {
     // SAFETY: `entry` is in the game image just before the matched tail, one readable code region.
     match unsafe { conflict::foreign_hook_at(entry) } {
         Some(hook) => {
-            conflict::report("AutoPickup", FEATURE, "AutoPickup.log", &hook);
+            conflict::report(name, FEATURE, &format!("{name}.log"), &hook);
             Found::Hooked
         }
         None => Found::No,
@@ -164,13 +164,13 @@ fn scan() -> Found {
 
 /// Waits for the prologue and patches it. Returns `false` (logged) if it isn't found or another
 /// mod already hooked it; the mod then runs without pickup.
-pub fn install() -> bool {
+pub fn install(name: &str) -> bool {
     if INSTALLED.load(Ordering::Relaxed) {
         return true;
     }
     let start = std::time::Instant::now();
     let entry = loop {
-        match scan() {
+        match scan(name) {
             Found::Entry(entry) => break entry,
             Found::Hooked => return false,
             Found::No if start.elapsed() >= SCAN_TIMEOUT => {
