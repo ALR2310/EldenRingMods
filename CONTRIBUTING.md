@@ -52,6 +52,7 @@ one; how a module works and why is explained in `shared/docs/`.
 | Memory | `memscan`, `codepatch`, `conflict` | AOB scan, code hooks, detecting another mod's hook |
 | Game engine | `task`, `alloc_hook`, `player`, `params`, `anim` | Per-frame tasks and engine lookups that survive game updates, the "player is in the world" gate, safe param access, animation groups |
 | Interaction | `input`, `reload`, `announce`, `menu` | Hotkeys, config reload, top-of-screen banner, in-game menu |
+| Overlay and HUD | `gfx`, `overlay` (feature) | Editing a Scaleform movie in memory, mouse and cursor hooks for a mod's own ImGui overlay |
 
 ## Building
 
