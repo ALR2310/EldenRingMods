@@ -32,6 +32,7 @@ and a reload key applies changes without restarting the game.
 | [**FasterRevival**](mods/fasterrevival) | Respawn sooner after dying, without waiting on the death animation or "YOU DIED" | [11160](https://www.nexusmods.com/eldenring/mods/11160) |
 | [**InfiniteAilment**](mods/infiniteailment) | Sets how long Poison, Scarlet Rot, Black Flame and Destined Death last and how hard they hit | [11087](https://www.nexusmods.com/eldenring/mods/11087) |
 | [**PassiveRunes**](mods/passiverunes) | Gives (or takes) runes over time, with bonuses at play-time milestones | [10528](https://www.nexusmods.com/eldenring/mods/10528) |
+| [**RiseArcher**](mods/risearcher) | Buffs bows, crossbows, ballistas, arrows and bolts | [5807](https://www.nexusmods.com/eldenring/mods/5807) |
 | [**RuneMultiplier**](mods/runemultiplier) | Multiplies the runes you gain from every source | [10630](https://www.nexusmods.com/eldenring/mods/10630) |
 | [**SpeedMultiplier**](mods/speedmultiplier) | Speeds up or slows down the player, Torrent, spirits and enemies per kind of action | [11173](https://www.nexusmods.com/eldenring/mods/11173) |
 | [**WeightMultiplier**](mods/weightmultiplier) | Multiplies your equip load by a factor, or fixes it to one number | [10549](https://www.nexusmods.com/eldenring/mods/10549) |
