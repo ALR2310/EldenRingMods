@@ -30,6 +30,7 @@ nạp lại để áp dụng thay đổi mà không cần khởi động lại g
 | [**AutoRegen**](mods/autoregen) | Tự hồi HP, FP và Stamina theo thời gian hoặc khi đánh trúng | [10548](https://www.nexusmods.com/eldenring/mods/10548) |
 | [**DropMultiplier**](mods/dropmultiplier) | Chỉnh tỉ lệ rơi đồ của quái và số lượng nguyên liệu nhận được | [11075](https://www.nexusmods.com/eldenring/mods/11075) |
 | [**FasterRevival**](mods/fasterrevival) | Hồi sinh sớm hơn sau khi chết, không đợi animation ngã hay màn "YOU DIED" | [11160](https://www.nexusmods.com/eldenring/mods/11160) |
+| [**InfiniteAilment**](mods/infiniteailment) | Chỉnh thời lượng và sát thương của Poison, Scarlet Rot, Black Flame và Destined Death | [11087](https://www.nexusmods.com/eldenring/mods/11087) |
 | [**RuneMultiplier**](mods/runemultiplier) | Nhân hệ số lên số rune nhận được từ mọi nguồn | [10630](https://www.nexusmods.com/eldenring/mods/10630) |
 | [**SpeedMultiplier**](mods/speedmultiplier) | Tăng hoặc giảm tốc độ của người chơi, Torrent, spirit và kẻ địch theo từng loại hành động | [11173](https://www.nexusmods.com/eldenring/mods/11173) |
 

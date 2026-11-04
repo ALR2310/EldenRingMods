@@ -346,6 +346,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "infiniteailment"
+version = "1.1.0"
+dependencies = [
+ "eldenring",
+ "fromsoftware-shared",
+ "serde",
+ "shared",
+ "toml",
+ "winresource",
+]
+
+[[package]]
 name = "inflections"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
