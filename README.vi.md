@@ -13,6 +13,8 @@ lúc đang chạy, cấu hình bằng một file TOML đặt cạnh DLL.
 | Mod | Chức năng |
 | --- | --- |
 | [AutoPickup](mods/autopickup) | Tự nhặt nguyên liệu, vật phẩm, đồ trên xác và rune khi đứng trong tầm |
+| [AnimCancel](mods/animcancel) | Cắt animation đang chạy bằng guard, lăn, nhảy hoặc đổi vũ khí |
+| [SpeedMultiplier](mods/speedmultiplier) | Tăng hoặc giảm tốc độ của người chơi, Torrent, spirit và kẻ địch theo từng loại hành động |
 
 ## Cài đặt
 

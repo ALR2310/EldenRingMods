@@ -1,0 +1,38 @@
+# SpeedMultiplier - Changelog
+
+## [Unreleased]
+
+- Clean code, hoping to fix false positives.
+
+## [1.4.0] - 2026-10-21
+
+- Fixed the reload key working outside the game window.
+- Added in-game settings menu support (requires the ERNativeUI mod).
+- Added support for the Torrent skins.
+
+## [1.3.0] - 2026-10-07
+
+- Added a speed for summoned spirits.
+- Added a speed for enemies and bosses.
+- Fixed enemies going out of sync with your backstabs and ripostes.
+
+## [1.2.0] - 2026-10-06
+
+- Added a separate speed for ladders.
+- Added a condition to apply speeds at a given equip load.
+- Fixed Placidusax's Ruin's laser going out of sync with faster casting.
+
+## [1.1.0] - 2026-10-03
+
+- Added separate speeds for walking, running and sneaking.
+- Added a separate speed for jumping.
+- Added a separate speed for backstabs and ripostes.
+- Added separate speeds for Torrent's walking, galloping and jumping.
+- Added an option to hide the banner shown after reloading the config.
+- Fixed speeds not applying with Seamless Co-op.
+- Added a condition to apply speeds while certain effects are active.
+- Updated the config file to allow more customization.
+
+## [1.0.0] - 2026-09-29
+
+- Initial release.
