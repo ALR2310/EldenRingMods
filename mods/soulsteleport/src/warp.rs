@@ -1,0 +1,282 @@
+//! "Warp to an exact position, with a loading screen", used to land next to
+//! a co-op partner picked in the menu. It replays the game's own sequence
+//! (`RequestMoveMap`, `SetCustomSpawn`, then `GameMan.warp_requested`), both
+//! functions found by AOB, so there is no version lock. The sequence and why
+//! it avoids the game's own trigger: `docs/warp_mechanism.md`.
+
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
+
+use eldenring::cs::CSTaskGroupIndex;
+use eldenring::fd4::FD4TaskData;
+
+// `shared::input`, not `eldenring::util::input` (`GetKeyState` reflects the whole
+// desktop: one hotkey press made BOTH game instances warp, `shared/docs/input.md`).
+use shared::input::{self, parse_virtual_key};
+use shared::{logger, memscan};
+
+use crate::config;
+use crate::net::{self, Net};
+use crate::party;
+use crate::steam::SteamMessages;
+use crate::ui;
+
+const VK_TAB: i32 = 0x09;
+
+const MENU_REFRESH_EVERY: Duration = Duration::from_millis(500);
+
+// ~10s at 60fps - Steam is up long before the player can reach the world.
+const STEAM_LOAD_ATTEMPTS: u32 = 600;
+
+// `RequestMoveMap`. The `cmp byte [rcx+0xB28], 0` tail pins the GameMan field
+// layout the offsets below assume.
+const AOB_REQUEST_MOVE_MAP: &str =
+    "40 53 48 83 EC 20 8B 02 48 8B D9 89 01 48 8B 0D ?? ?? ?? ?? 80 B9 28 0B 00 00 00";
+// `SetCustomSpawn`: writes +0xC90 / +0xCA0 and sets the +0xCB0 flag.
+const AOB_SET_CUSTOM_SPAWN: &str = "0F 28 01 48 8B 05 ?? ?? ?? ?? 0F 11 80 90 0C 00 00 \
+     0F 28 02 0F 11 80 A0 0C 00 00 C6 80 B0 0C 00 00 01";
+// Offset of `mov rax, [rip+disp32]`'s disp32 within AOB_SET_CUSTOM_SPAWN, and
+// of the instruction right after it (what disp32 is relative to).
+const GAME_MAN_DISP_OFFSET: usize = 6;
+const GAME_MAN_NEXT_INSN_OFFSET: usize = 10;
+
+/// `GameMan.warp_requested` (fromsoftware-rs `cs/game_man.rs`; the game's
+/// own setter sub_14067BCF0 is `mov [rax+10h], cl`).
+const GAME_MAN_WARP_REQUESTED: usize = 0x10;
+
+// sub_14067BA20(out, &block, unused) -> out
+type RequestMoveMapFn =
+    unsafe extern "C" fn(out: *mut i32, block: *const i32, unused: u64) -> *mut i32;
+// sub_14067B970(&position, &orientation) - both read with `movaps`, so the
+// pointers must be 16-byte aligned (see [Vec4]).
+type SetCustomSpawnFn =
+    unsafe extern "C" fn(position: *const Vec4, orientation: *const Vec4) -> u64;
+
+#[repr(C, align(16))]
+struct Vec4([f32; 4]);
+
+/// A map block + block-local position (what `PlayerIns.current_block_id` /
+/// `block_position` hold for the main player), i.e. exactly what the game's
+/// own custom-spawn warp takes.
+#[derive(Clone, Copy)]
+pub struct Spot {
+    pub block_id: i32,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub yaw: f32,
+}
+
+/// Address of the static holding the `GameMan*`, once resolved - lets
+/// other modules ask [warp_pending] without a [GameFns].
+static GAME_MAN_STATIC: AtomicUsize = AtomicUsize::new(0);
+
+/// Whether a move-map (ours, or the game's own: fast travel, death...) is
+/// requested and not yet picked up - i.e. a loading screen is imminent or
+/// under way. `false` if GameMan isn't known/allocated yet.
+pub fn warp_pending() -> bool {
+    let static_addr = GAME_MAN_STATIC.load(Ordering::Relaxed);
+    if static_addr == 0 {
+        return false;
+    }
+    // SAFETY: the address is the `GameMan` global found from the pattern; a null instance is checked.
+    let game_man = unsafe { *(static_addr as *const usize) };
+    // SAFETY: `game_man` is the non-null `GameMan`, and `warp_requested` is a bool inside it.
+    game_man != 0 && unsafe { *((game_man + GAME_MAN_WARP_REQUESTED) as *const bool) }
+}
+
+pub struct GameFns {
+    request_move_map: RequestMoveMapFn,
+    set_custom_spawn: SetCustomSpawnFn,
+    /// Address of the static holding the `GameMan*` (not GameMan itself -
+    /// that's only allocated once the game boots far enough).
+    game_man_static: *const usize,
+}
+
+// Raw pointers aren't Send by default; these are process-lifetime addresses
+// inside eldenring.exe's image, read only from the game's own task thread.
+// SAFETY: the pointers are addresses in the game image, valid for the whole process.
+unsafe impl Send for GameFns {}
+
+fn resolve_game_fns() -> Option<GameFns> {
+    let request_move_map = memscan::find_pattern_in_module(AOB_REQUEST_MOVE_MAP)?;
+    let set_custom_spawn = memscan::find_pattern_in_module(AOB_SET_CUSTOM_SPAWN)?;
+    // SAFETY: the pattern guarantees the instruction at these offsets, so the displacement lies inside the matched code.
+    let game_man_static = unsafe {
+        let disp = (set_custom_spawn.add(GAME_MAN_DISP_OFFSET) as *const i32).read_unaligned();
+        set_custom_spawn.add(GAME_MAN_NEXT_INSN_OFFSET).offset(disp as isize) as *const usize
+    };
+    Some(GameFns {
+        // SAFETY: the address was found by its pattern and is a function of this signature.
+        request_move_map: unsafe {
+            std::mem::transmute::<*mut u8, RequestMoveMapFn>(request_move_map)
+        },
+        // SAFETY: the address was found by its pattern and is a function of this signature.
+        set_custom_spawn: unsafe {
+            std::mem::transmute::<*mut u8, SetCustomSpawnFn>(set_custom_spawn)
+        },
+        game_man_static,
+    })
+}
+
+/// Asks the game to move-map to `spot` (loading screen, then spawn exactly
+/// there). Returns false if not in the world yet / GameMan not allocated.
+pub fn warp_to(fns: &GameFns, spot: &Spot) -> bool {
+    // Same "actually in the world" gate as every other mod here - warping
+    // from a loading screen or the title menu is not something to test.
+    if shared::player::main_player_chr_ins_ptr().is_none() || warp_pending() {
+        return false;
+    }
+    // SAFETY: the address is the `GameMan` global found from the pattern; a null instance is checked.
+    let game_man = unsafe { *fns.game_man_static };
+    if game_man == 0 {
+        logger::error("Warp: GameMan not allocated");
+        return false;
+    }
+
+    let mut normalized_block = 0i32;
+    let position = Vec4([spot.x, spot.y, spot.z, 1.0]);
+    // Same layout the game builds for multiplay_join_orientation in
+    // sub_1406FC370: (0, yaw, 0, 0).
+    let orientation = Vec4([0.0, spot.yaw, 0.0, 0.0]);
+    // SAFETY: the functions were found by their patterns and take the arguments the game gives them; the pointers are valid and aligned.
+    unsafe {
+        (fns.request_move_map)(&mut normalized_block, &spot.block_id, 0);
+        (fns.set_custom_spawn)(&position, &orientation);
+        *((game_man + GAME_MAN_WARP_REQUESTED) as *mut bool) = true;
+    }
+
+    logger::log(&format!(
+        "Warp: block {:#010X} (normalized {:#010X}) local ({:.2}, {:.2}, {:.2})",
+        spot.block_id, normalized_block, spot.x, spot.y, spot.z
+    ));
+    true
+}
+
+/// Asks the partner the player clicked in the menu for their current
+/// position; the warp happens once `HERE` arrives (see [handle_net_event]).
+fn request_partner_position(net: &mut Net, steam_id: u64) {
+    let members = party::members();
+    let Some(own) = party::own_steam_id(&members) else {
+        ui::set_status("Not in a co-op session.");
+        return;
+    };
+    if party::own_is_hostile() {
+        ui::set_status("Teleport is disabled while invading.");
+        return;
+    }
+    // Re-checked here, not just when the list was drawn: they may have left
+    // the session since.
+    let Some(target) = members.iter().find(|m| m.steam_id == steam_id && m.is_teleport_target())
+    else {
+        ui::set_status("That player is no longer available.");
+        return;
+    };
+    ui::with_shared(|s| {
+        s.set_status(format!("Locating {}...", target.display_name()));
+        s.busy = true;
+    });
+    net.request(own, target);
+}
+
+/// Refreshes the partner list the menu shows (only while it's open).
+fn refresh_menu_snapshot() {
+    let members = party::members();
+    let in_session = party::own_steam_id(&members).is_some();
+    let hostile = party::own_is_hostile();
+    let partners = members
+        .iter()
+        .filter(|m| m.is_teleport_target())
+        .map(|m| ui::PartnerRow {
+            steam_id: m.steam_id,
+            character_name: m.display_name().to_string(),
+            steam_name: m.steam_name.clone(),
+            role: m.role(),
+        })
+        .collect();
+    ui::with_shared(|s| {
+        s.in_session = in_session;
+        s.hostile = hostile;
+        s.partners = partners;
+    });
+}
+
+fn handle_net_event(fns: &GameFns, event: net::Event) {
+    match event {
+        net::Event::Arrived { character_name, spot } => {
+            ui::with_shared(|s| s.busy = false);
+            // No offset: the game itself pushes apart 2 characters spawned on
+            // top of each other (seen in game).
+            if warp_to(fns, &spot) {
+                ui::set_status(format!("Teleporting to {character_name}..."));
+                ui::MENU_OPEN.store(false, Ordering::Relaxed);
+            } else {
+                ui::set_status("Can't teleport right now (loading or not in the world).");
+            }
+        }
+        net::Event::TimedOut { target_name } => {
+            ui::with_shared(|s| {
+                s.busy = false;
+                s.set_status(format!("{target_name} did not respond."));
+            });
+        }
+    }
+}
+
+/// Registers the per-frame hotkey watcher + position requests. Meant to run
+/// on its own worker thread spawned from `DllMain`; never returns.
+pub fn run() {
+    let Some(fns) = resolve_game_fns() else {
+        logger::error("Warp: AOB not found, disabled (game update?)");
+        return;
+    };
+    logger::log("Warp: ready");
+    GAME_MAN_STATIC.store(fns.game_man_static as usize, Ordering::Relaxed);
+
+    let cs_task = shared::task::wait_for_cs_task();
+    // Steam's messaging interface may not exist yet this early - retried
+    // from the task until it does (logged once either way).
+    let mut net: Option<Net> = None;
+    let mut steam_attempts = 0u32;
+    let mut last_snapshot: Option<Instant> = None;
+    shared::task::run_recurring_safe(
+        cs_task,
+        "Teleport",
+        CSTaskGroupIndex::FrameBegin,
+        move |_data: &FD4TaskData| {
+            if net.is_none() && steam_attempts < STEAM_LOAD_ATTEMPTS {
+                steam_attempts += 1;
+                if let Some(steam) = SteamMessages::load() {
+                    logger::log("Net: Steam messaging ready");
+                    net = Some(Net::new(steam));
+                } else if steam_attempts == STEAM_LOAD_ATTEMPTS {
+                    logger::error("Net: Steam messaging unavailable, teleport to partner off");
+                }
+            }
+            if let Some(event) = net.as_mut().and_then(Net::tick) {
+                handle_net_event(&fns, event);
+            }
+
+            let menu_key = parse_virtual_key(&config::get().menu.key, VK_TAB);
+            if input::is_key_pressed(menu_key) {
+                ui::toggle();
+            }
+            if ui::MENU_OPEN.load(Ordering::Relaxed)
+                && last_snapshot.is_none_or(|t: Instant| t.elapsed() >= MENU_REFRESH_EVERY)
+            {
+                last_snapshot = Some(Instant::now());
+                refresh_menu_snapshot();
+            }
+            if let Some(steam_id) = ui::REQUEST.lock().unwrap().take() {
+                match net.as_mut() {
+                    Some(net) => request_partner_position(net, steam_id),
+                    None => ui::set_status("Steam networking unavailable."),
+                }
+            }
+        },
+    );
+
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(60));
+    }
+}
