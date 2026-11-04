@@ -24,7 +24,7 @@ mods/<name>/
 ├── Cargo.toml          must contain `[lints] workspace = true`
 ├── build.rs            embeds the Windows version resource
 ├── <Name>.toml         default config, embedded into the DLL at build time
-├── README.md           English: what it does, how it works, limits
+├── README.md           English: what it does, how to install it, links to the docs
 ├── README.vi.md        Vietnamese translation
 ├── CHANGELOG.md        user-facing release notes (English)
 ├── nexus_page.bbcode   description for the mod's Nexus page (BBCode), when it has one
@@ -39,6 +39,19 @@ Anything that needs more than a README (research notes, offsets, how a game syst
 in `mods/<name>/docs/<topic>.md`. Write it the way [docs/research/README.md](docs/research/README.md)
 describes: evidence labels, the build each finding was tested on, and rejected paths kept on the
 page.
+
+### The `shared` crate
+
+Mods share code through `shared` instead of copying it, so a fix applies to all of them. Each mod
+links its own copy, so mods share no runtime state. Look for an existing helper here before writing
+one; how a module works and why is explained in `shared/docs/`.
+
+| Group | Modules | Role |
+| --- | --- | --- |
+| Config and logs | `toml_config`, `logger`, `diag`, `crash`, `i18n` | TOML with migration, log file, environment dump, crash trace, menu texts |
+| Memory | `memscan`, `codepatch`, `conflict` | AOB scan, code hooks, detecting another mod's hook |
+| Game engine | `task`, `alloc_hook`, `player`, `params`, `anim` | Per-frame tasks and engine lookups that survive game updates, the "player is in the world" gate, safe param access, animation groups |
+| Interaction | `input`, `reload`, `announce`, `menu` | Hotkeys, config reload, top-of-screen banner, in-game menu |
 
 ## Building
 
@@ -125,8 +138,9 @@ PascalCase so the DLL gets the right file name (`#![allow(non_snake_case)]` in `
 
 - User-facing text (README, CHANGELOG) is written for players: say what the mod does, not how
   the code is organized.
-- Every mod README has the same sections: summary, installation, configuration, how it works,
-  compatibility and known limits.
+- Every mod README is short and has the same three sections: About (what it does and its known
+  limits, in plain language), Installation, and Documentation (changelog, Nexus page and the
+  `docs/` pages). How it works belongs in `docs/`, not in the README.
 - Technical notes (offsets, how a game system works) go in `mods/<name>/docs/`.
 - README and CHANGELOG are English. Add a Vietnamese README (`README.vi.md`) for each mod and
   keep it in sync.

@@ -24,7 +24,7 @@ mods/<tên>/
 ├── Cargo.toml          phải có `[lints] workspace = true`
 ├── build.rs            nhúng version resource của Windows
 ├── <Tên>.toml          config mặc định, nhúng vào DLL lúc build
-├── README.md           tiếng Anh: chức năng, cách hoạt động, giới hạn
+├── README.md           tiếng Anh: chức năng, cách cài, link tới tài liệu
 ├── README.vi.md        bản tiếng Việt
 ├── CHANGELOG.md        ghi chú phát hành cho người chơi (tiếng Anh)
 ├── nexus_page.bbcode   phần mô tả cho trang Nexus của mod (BBCode), nếu mod có trang
@@ -38,6 +38,19 @@ mods/<tên>/
 Nội dung dài hơn README (ghi chú nghiên cứu, offset, cách một hệ thống của game vận hành)
 đặt ở `mods/<tên>/docs/<chủ đề>.md`. Viết theo [docs/research/README.md](docs/research/README.md):
 nhãn bằng chứng, bản build đã thử cho từng phát hiện, và giữ lại các hướng đã bị loại.
+
+### Crate `shared`
+
+Các mod dùng chung mã qua `shared` thay vì sao chép, nên một bản sửa có hiệu lực cho cả bộ. Mỗi mod
+link bản riêng của nó, nên các mod không chia sẻ trạng thái lúc chạy. Hãy tìm hàm có sẵn ở đây trước
+khi viết mới; cách mỗi module hoạt động và lý do thiết kế nằm trong `shared/docs/`.
+
+| Nhóm | Module | Vai trò |
+| --- | --- | --- |
+| Cấu hình và log | `toml_config`, `logger`, `diag`, `crash`, `i18n` | TOML có migration, file log, ghi môi trường, vết crash, văn bản menu |
+| Bộ nhớ | `memscan`, `codepatch`, `conflict` | Quét AOB, hook mã máy, phát hiện hook của mod khác |
+| Game engine | `task`, `alloc_hook`, `player`, `params`, `anim` | Task chạy theo frame và tra cứu engine không vỡ khi game cập nhật, cổng "người chơi đã vào thế giới", đọc param an toàn, nhóm animation |
+| Tương tác | `input`, `reload`, `announce`, `menu` | Phím nóng, nạp lại config, banner đầu màn hình, menu trong game |
 
 ## Build
 
@@ -123,8 +136,9 @@ cho dev, không cho người chơi; ngoại lệ là lời nhắn cố ý như
 
 - Văn bản cho người dùng (README, CHANGELOG) viết cho người chơi: nói mod làm gì, không nói
   code tổ chức ra sao.
-- README của mọi mod có cùng các mục: tóm tắt, cài đặt, cấu hình, cách hoạt động, tương thích
-  và giới hạn.
+- README của mọi mod ngắn và có cùng ba mục: Giới thiệu (mod làm gì và các giới hạn đã biết, bằng
+  ngôn ngữ thường), Cài đặt, và Tài liệu (changelog, trang Nexus và các trang `docs/`). Cách hoạt
+  động đặt ở `docs/`, không đặt trong README.
 - Ghi chú kỹ thuật (offset, cách một hệ thống của game vận hành) đặt ở `mods/<tên>/docs/`.
 - README và CHANGELOG bằng tiếng Anh. Mỗi mod có thêm `README.vi.md` và giữ đồng bộ.
 - CHANGELOG theo [Keep a Changelog](https://keepachangelog.com): mỗi thay đổi một dòng ngắn,
