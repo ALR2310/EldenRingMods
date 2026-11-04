@@ -14,6 +14,7 @@
 //! `shared/docs/overlay.md`.
 
 use std::ffi::c_void;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use hudhook::mh::{MH_ApplyQueued, MhHook};
@@ -114,6 +115,33 @@ unsafe fn vtable_fn(obj: *mut c_void, slot: usize) -> usize {
     unsafe { *(*(obj as *const *const usize)).add(slot) }
 }
 
+/// Lets a mod that also works on the game's input (Toolbox's input bridge) share these hooks:
+/// a second `MhHook` on the same DirectInput / `user32` function would fail, so the mod hands
+/// over its logic instead and the hooks here call it.
+#[derive(Clone, Copy)]
+pub struct InputExtension {
+    /// Called after every `GetDeviceState` (`size` = the device's state size, `data` the buffer,
+    /// `hr` the result); returns the result to give the game. May edit `data`.
+    pub device_state: fn(size: u32, data: *mut c_void, hr: i32) -> i32,
+    /// Same for `GetDeviceData` (buffered reads): `in_out` is the event count.
+    pub device_data:
+        fn(obj_size: u32, data: *mut c_void, in_out: *mut u32, flags: u32, hr: i32) -> i32,
+    /// Whether `ClipCursor` / `SetCursorPos` should be neutralized, as they are while the menu is open.
+    pub unpin_cursor: fn() -> bool,
+}
+
+static EXTENSION: OnceLock<InputExtension> = OnceLock::new();
+
+/// Registers the extension; call before [`super::install_input_hooks`].
+pub fn set_extension(extension: InputExtension) {
+    let _ = EXTENSION.set(extension);
+}
+
+/// `unpin_cursor` of the extension, `false` without one.
+pub(super) fn extension_unpins_cursor() -> bool {
+    EXTENSION.get().is_some_and(|e| (e.unpin_cursor)())
+}
+
 fn menu_open() -> bool {
     MENU_OPEN.load(Ordering::Relaxed)
 }
@@ -123,11 +151,10 @@ unsafe extern "C" fn mouse_poll_hook(this: *mut u8) -> u8 {
     let orig = unsafe {
         std::mem::transmute::<usize, MousePollFn>(MOUSE_POLL_ORIG.load(Ordering::Relaxed))
     };
-    // SAFETY: the original function, called with the argument the game passed.
+    // SAFETY: the original function, called with the arguments the game passed.
     let ok = unsafe { orig(this) };
     if menu_open() && !this.is_null() {
-        // SAFETY: `this` is the game's mouse device; its state buffers sit at these offsets on
-        // every build the pattern is unique on.
+        // SAFETY: the buffer is the one the caller passed, at least that many bytes long.
         unsafe {
             std::ptr::write_bytes(this.add(MOUSE_STATE_OFFSET), 0, DIMOUSESTATE2_SIZE as usize);
             std::ptr::write_bytes(this.add(MOUSE_FLOAT_AXES_OFFSET), 0, 12);
@@ -146,7 +173,10 @@ macro_rules! state_hook {
                 )
             };
             // SAFETY: the original function, called with the arguments the game passed.
-            let hr = unsafe { orig(this, size, data) };
+            let mut hr = unsafe { orig(this, size, data) };
+            if let Some(ext) = EXTENSION.get() {
+                hr = (ext.device_state)(size, data, hr);
+            }
             if matches!(size, DIMOUSESTATE_SIZE | DIMOUSESTATE2_SIZE) {
                 remember_mouse(this);
                 if hr >= 0 && menu_open() && !data.is_null() {
@@ -179,7 +209,10 @@ macro_rules! data_hook {
                 )
             };
             // SAFETY: the original function, called with the arguments the game passed.
-            let hr = unsafe { orig(this, obj_size, data, in_out, flags) };
+            let mut hr = unsafe { orig(this, obj_size, data, in_out, flags) };
+            if let Some(ext) = EXTENSION.get() {
+                hr = (ext.device_data)(obj_size, data, in_out, flags, hr);
+            }
             if hr >= 0 && menu_open() && !in_out.is_null() && is_mouse(this) {
                 // SAFETY: `in_out` is the non-null event count the caller passed.
                 unsafe { *in_out = 0 };
@@ -215,7 +248,7 @@ fn dinput_device_fns(
     iid: &Guid,
     dev_guid: &Guid,
 ) -> Option<(usize, usize)> {
-    // SAFETY: plain Win32 calls with NUL-terminated names and valid buffers.
+    // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
     unsafe {
         let hinst = GetModuleHandleA(std::ptr::null());
         let mut di: *mut c_void = std::ptr::null_mut();
@@ -243,14 +276,14 @@ fn dinput_device_fns(
 
 fn load_system_dinput8() -> *mut c_void {
     let mut buf = [0u16; 260];
-    // SAFETY: plain Win32 calls with NUL-terminated names and valid buffers.
+    // SAFETY: the buffer is valid for the length passed.
     let len = unsafe { GetSystemDirectoryW(buf.as_mut_ptr(), buf.len() as u32) } as usize;
     if len == 0 || len >= buf.len() {
         return std::ptr::null_mut();
     }
     let dir = String::from_utf16_lossy(&buf[..len]);
     let full: Vec<u16> = format!("{dir}\\dinput8.dll\0").encode_utf16().collect();
-    // SAFETY: plain Win32 calls with NUL-terminated names and valid buffers.
+    // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
     unsafe { LoadLibraryW(full.as_ptr()) }
 }
 
@@ -272,7 +305,7 @@ fn install_dinput() -> usize {
     // dinput8.dll proxy that unloads itself after forwarding to System32), then
     // also probe the default `dinput8.dll` module.
     let sys_mod = load_system_dinput8();
-    // SAFETY: plain Win32 calls with NUL-terminated names and valid buffers.
+    // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
     let local_mod = unsafe { LoadLibraryA(c"dinput8.dll".as_ptr() as *const u8) };
 
     let mut hooked = 0;
@@ -280,7 +313,7 @@ fn install_dinput() -> usize {
         if module.is_null() {
             continue;
         }
-        // SAFETY: plain Win32 calls with NUL-terminated names and valid buffers.
+        // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
         let create = unsafe { GetProcAddress(module, c"DirectInput8Create".as_ptr() as *const u8) };
         if create.is_null() {
             continue;
@@ -314,7 +347,7 @@ fn install_dinput() -> usize {
 
 fn install_mouse_poll_hook() -> bool {
     let Some(target) = memscan::find_pattern_in_module(MOUSE_POLL_AOB) else {
-        logger::warn("Overlay: DLUID::MouseDevice::Poll AOB not found");
+        logger::warn("Menu: DLUID::MouseDevice::Poll AOB not found");
         return false;
     };
     hook(target as usize, mouse_poll_hook as *mut c_void, &MOUSE_POLL_ORIG)
@@ -329,11 +362,11 @@ pub fn install() {
     let applied = unsafe { MH_ApplyQueued() }.ok().is_ok();
     if applied && (poll || dinput > 0) {
         logger::log(&format!(
-            "Overlay: mouse block hooks applied (MousePoll {poll}, DirectInput {dinput})"
+            "Menu: mouse block hooks applied (MousePoll {poll}, DirectInput {dinput})"
         ));
     } else {
         logger::error(&format!(
-            "Overlay: mouse block hooks incomplete (MousePoll {poll}, DirectInput {dinput}, applied {applied})"
+            "Menu: mouse block hooks incomplete (MousePoll {poll}, DirectInput {dinput}, applied {applied})"
         ));
     }
 }
