@@ -214,8 +214,8 @@ fn stack_frames(rsp: usize) -> Vec<String> {
         return Vec::new();
     }
     let mut frames = Vec::new();
-    for word in stack.chunks_exact(8) {
-        let value = u64::from_le_bytes(word.try_into().unwrap()) as usize;
+    for word in stack.as_chunks::<8>().0 {
+        let value = u64::from_le_bytes(*word) as usize;
         if looks_like_return_address(value) {
             frames.push(describe(value));
             if frames.len() == MAX_FRAMES {
@@ -247,8 +247,8 @@ fn outer_frames() -> Vec<String> {
         return Vec::new();
     }
     let mut frames = Vec::new();
-    for word in stack.chunks_exact(8).rev() {
-        let value = u64::from_le_bytes(word.try_into().unwrap()) as usize;
+    for word in stack.as_chunks::<8>().0.iter().rev() {
+        let value = u64::from_le_bytes(*word) as usize;
         if looks_like_return_address(value) {
             frames.push(describe(value));
             if frames.len() == MAX_FRAMES {

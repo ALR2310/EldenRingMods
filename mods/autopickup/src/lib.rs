@@ -23,16 +23,17 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
 
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
-        let report = config::init(&format!("{dir}\\AutoPickup.toml"));
+        let name = shared::dll_stem(hmodule);
+        let report = config::init(&format!("{dir}\\{name}.toml"));
 
         logger::set_enabled(config::get().logging.log_file);
-        logger::init(&dir, "AutoPickup.log");
+        logger::init(&dir, &format!("{name}.log"));
         logger::install_panic_hook();
 
         // The menu host accepts registrations only in its first seconds.
         menu::start(hmodule);
 
-        report.log("AutoPickup.toml");
+        report.log(&format!("{name}.toml"));
 
         std::thread::spawn(|| {
             shared::reload::run(
@@ -48,7 +49,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         });
 
         shared::diag::log_environment_when_game_ready();
-        pickup::run();
+        pickup::run(&name);
     });
 
     true

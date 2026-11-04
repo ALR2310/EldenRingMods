@@ -4,14 +4,13 @@ members = ["shared", "mods/*"]
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.99.1"
 license = "MIT"
 authors = ["ALR2310"]
 publish = false
 
 [workspace.dependencies]
 # Rust bindings for the game's engine structs: https://github.com/vswarte/fromsoftware-rs
-# Pinned to one revision so every mod builds against the same version.
 eldenring = { git = "https://github.com/vswarte/fromsoftware-rs", rev = "57023153d786c4b13fe95d9170e6dcd9d35093ea" }
 fromsoftware-shared = { git = "https://github.com/vswarte/fromsoftware-rs", rev = "57023153d786c4b13fe95d9170e6dcd9d35093ea" }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
