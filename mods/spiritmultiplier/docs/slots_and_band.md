@@ -69,6 +69,12 @@ character heap) was not searched for.
 - **Inferred, not confirmed**: right after one side reloads an area, only part of the spirits
   sometimes sync (11 of 30, 13 of 30). It looks like engine or Seamless network sync.
 
+## Diagnostics
+
+`Logging.SlotProbe` (`src/probe/slots.rs`, off by default) logs the summon ChrSet's capacity, the length histogram of
+the vanilla chains (`{1: 58, 2: 18, 3: 8, 4: 4, 5: 6}`), the slot layout whenever it changes, `last_buddy_slot`
+and the stone fields. It is what located the cap.
+
 ## Rejected paths
 
 - Reallocating the live `entries` array of the ChrSet: high risk (the engine may cache pointers and

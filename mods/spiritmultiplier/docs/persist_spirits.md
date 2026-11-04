@@ -90,6 +90,14 @@ Tested host plus second instance: both players' spirits survive a rest.
 - Seamless remote copies of spirits also disappear through `sub_1404B7080` (removal on a network event of
   `sub_14050E410`, only in a session); that path is not touched.
 
+## Diagnostics
+
+`Logging.PersistProbe` (`src/probe/persist.rs`, off by default) logs on every change the block the player is in,
+the owner key of each spirit group (flags, HP, raw flag bytes), the player's and the first spirit's SpEffects and
+the manager's request fields, and counts the calls of the group-destroy and `DisappearAll` sites with counting
+stubs (a `call` redirect, nothing runs in Rust inside the hook). Reading it around a rest tells which path
+removed the spirits.
+
 ## Fast travel: rejected
 
 Solo test (summon, then fast travel to the very grace being rested at) with the diagnostics on: while the
