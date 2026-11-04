@@ -27,6 +27,7 @@ mods/<tên>/
 ├── README.md           tiếng Anh: chức năng, cách hoạt động, giới hạn
 ├── README.vi.md        bản tiếng Việt
 ├── CHANGELOG.md        ghi chú phát hành cho người chơi (tiếng Anh)
+├── nexus_page.bbcode   phần mô tả cho trang Nexus của mod (BBCode), nếu mod có trang
 ├── license-notice.txt  tuỳ chọn; mọi file *license*.txt / *notice*.txt ở đây hoặc trong assets/
 │                       được scripts/build-mod.ps1 đóng gói cùng DLL
 └── src/
@@ -121,8 +122,10 @@ ví dụ `Menu: registered`. Lỗi kèm lý do. Không in danh sách dài ở m�
 - Ghi chú kỹ thuật (offset, cách một hệ thống của game vận hành) đặt ở `mods/<tên>/docs/`.
 - README và CHANGELOG bằng tiếng Anh. Mỗi mod có thêm `README.vi.md` và giữ đồng bộ.
 - CHANGELOG theo [Keep a Changelog](https://keepachangelog.com): mỗi thay đổi một dòng ngắn,
-  ví dụ `Added X option.` hoặc `Fixed crash when Y.` Phiên bản theo [SemVer](https://semver.org). Tăng `version` trong `Cargo.toml` của mod
-  trong cùng commit biến `[Unreleased]` thành một bản phát hành.
+  ví dụ `Added X option.` hoặc `Fixed crash when Y.` Chỉ ghi tính năng và bản sửa người dùng
+  thấy được: không ghi thay đổi về log, debug, build hay phát triển. Phiên bản theo
+  [SemVer](https://semver.org). Tăng `version` trong `Cargo.toml` của mod trong cùng commit biến
+  `[Unreleased]` thành một bản phát hành.
 
 ## Git
 

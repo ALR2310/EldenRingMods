@@ -27,6 +27,7 @@ mods/<name>/
 ├── README.md           English: what it does, how it works, limits
 ├── README.vi.md        Vietnamese translation
 ├── CHANGELOG.md        user-facing release notes (English)
+├── nexus_page.bbcode   description for the mod's Nexus page (BBCode), when it has one
 ├── license-notice.txt  optional; any *license*.txt / *notice*.txt here or in assets/ is
 │                       packed with the DLL by scripts/build-mod.ps1
 └── src/
@@ -125,7 +126,8 @@ PascalCase so the DLL gets the right file name (`#![allow(non_snake_case)]` in `
 - README and CHANGELOG are English. Add a Vietnamese README (`README.vi.md`) for each mod and
   keep it in sync.
 - CHANGELOG follows [Keep a Changelog](https://keepachangelog.com): one short line per change,
-  such as `Added X option.` or `Fixed crash when Y.` Versions follow
+  such as `Added X option.` or `Fixed crash when Y.` Only user-facing features and fixes belong
+  there: leave out log, debug, build and other development changes. Versions follow
   [SemVer](https://semver.org). Bump `version` in the mod's `Cargo.toml` in the same commit
   that turns `[Unreleased]` into a release.
 
