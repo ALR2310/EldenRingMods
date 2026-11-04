@@ -29,6 +29,7 @@ and a reload key applies changes without restarting the game.
 | [**AutoPickup**](mods/autopickup) | Picks up materials, items, corpse loot and runes when you stand in reach | [11470](https://www.nexusmods.com/eldenring/mods/11470) |
 | [**AutoRegen**](mods/autoregen) | Restores HP, FP and Stamina over time or when you land a hit | [10548](https://www.nexusmods.com/eldenring/mods/10548) |
 | [**DropMultiplier**](mods/dropmultiplier) | Adjusts how often enemies drop items and how many materials you get | [11075](https://www.nexusmods.com/eldenring/mods/11075) |
+| [**FasterRevival**](mods/fasterrevival) | Respawn sooner after dying, without waiting on the death animation or "YOU DIED" | [11160](https://www.nexusmods.com/eldenring/mods/11160) |
 | [**SpeedMultiplier**](mods/speedmultiplier) | Speeds up or slows down the player, Torrent, spirits and enemies per kind of action | [11173](https://www.nexusmods.com/eldenring/mods/11173) |
 
 Each mod's page describes how it works and its limits, and its `CHANGELOG.md` has the release notes.

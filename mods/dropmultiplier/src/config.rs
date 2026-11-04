@@ -4,9 +4,7 @@
 use std::sync::{Arc, OnceLock};
 
 use serde::{Deserialize, Serialize};
-use toml_edit::{DocumentMut, Value};
-
-use shared::toml_config::{LoadReport, Migration, Step, TomlConfig, set_value};
+use shared::toml_config::{LoadReport, Migration, Step, TomlConfig};
 
 pub const TEMPLATE: &str = include_str!("../DropMultiplier.toml");
 
@@ -60,45 +58,19 @@ pub struct Logging {
 /// The settings of the `.ini` file the 1.x releases used, laid over the template. The ini keys had
 /// no section; `ChancePercent` is the old name of `Percentage`.
 pub fn import_ini(ini: &str) -> String {
-    let template: DocumentMut = TEMPLATE.parse().expect("the template is valid TOML");
-    let mut doc = template.clone();
-    for line in ini.lines() {
-        let Some((key, text)) = line.trim().split_once('=') else { continue };
-        let path = match key.trim() {
-            "ReloadKey" | "ReloadBanner" => format!("General.{}", key.trim()),
-            "Mode" | "Multiplier" | "Percentage" => format!("Drop.{}", key.trim()),
-            "ChancePercent" => "Drop.Percentage".to_string(),
-            "Crafting" | "Upgrade" | "Unique" => format!("Materials.{}", key.trim()),
-            "LogFile" => "Logging.LogFile".to_string(),
-            _ => continue,
-        };
-        if let Some(value) = typed_like_template(&template, &path, text.trim()) {
-            set_value(&mut doc, &template, &path, value);
-        }
-    }
-    doc.to_string()
-}
-
-/// `text` as the kind of value the template holds at `path`; `None` if it is not one.
-fn typed_like_template(template: &DocumentMut, path: &str, text: &str) -> Option<Value> {
-    let (section, key) = path.split_once('.')?;
-    match template.get(section)?.get(key)?.as_value()? {
-        Value::Boolean(_) => text.parse::<bool>().ok().map(Value::from),
-        Value::Integer(_) => text.parse::<i64>().ok().map(Value::from),
-        Value::Float(_) => text.parse::<f64>().ok().map(Value::from),
-        Value::String(_) => Some(Value::from(text)),
+    shared::toml_config::import_ini(TEMPLATE, ini, |key| match key {
+        "ReloadKey" | "ReloadBanner" => Some(format!("General.{key}")),
+        "Mode" | "Multiplier" | "Percentage" => Some(format!("Drop.{key}")),
+        "ChancePercent" => Some("Drop.Percentage".to_string()),
+        "Crafting" | "Upgrade" | "Unique" => Some(format!("Materials.{key}")),
+        "LogFile" => Some("Logging.LogFile".to_string()),
         _ => None,
-    }
+    })
 }
 
-/// 1.x kept its settings in `<name>.ini`; writes them as the new file when there is none yet.
+/// 1.x kept its settings in `<name>.ini`; they become the new file when there is none yet.
 pub fn adopt_ini(path: &str, ini_path: &str) {
-    if std::path::Path::new(path).exists() {
-        return;
-    }
-    if let Ok(ini) = std::fs::read_to_string(ini_path) {
-        let _ = std::fs::write(path, import_ini(&ini));
-    }
+    shared::toml_config::adopt_ini(path, ini_path, import_ini);
 }
 
 static CONFIG: OnceLock<TomlConfig<Config>> = OnceLock::new();

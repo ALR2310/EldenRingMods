@@ -1,0 +1,39 @@
+[package]
+name = "fasterrevival"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "FasterRevival"
+crate-type = ["cdylib"]
+
+[dependencies]
+shared = { path = "../../shared" }
+eldenring.workspace = true
+fromsoftware-shared.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+toml.workspace = true
+
+[build-dependencies]
+winresource = "0.1"
+
+[lints]
+workspace = true
+
+# The DLL creates its config on first run, so a release ships the DLL alone
+# (scripts/build-mod.ps1 reads this).
+[package.metadata.release]
+ship-config = false
+
+# Windows version resource (DLL properties), see build.rs
+[package.metadata.winresource]
+ProductName = "Faster Revival"
+FileDescription = "Elden Ring mod"
+InternalName = "FasterRevival"
+OriginalFilename = "FasterRevival.dll"
+LegalCopyright = "Copyright (c) 2026 ALR2310"

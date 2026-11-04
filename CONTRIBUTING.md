@@ -66,7 +66,9 @@ cargo clippy --workspace --all-targets
 ```
 
 To build and package a mod: `pwsh scripts/build-mod.ps1 -Mod <Mod> [-Zip]` (output in
-`builds/<crate>/`).
+`builds/<crate>/`). The zip holds the DLL and its config; a mod that creates its config on first run
+and should ship the DLL alone sets `ship-config = false` under `[package.metadata.release]` in its
+`Cargo.toml`.
 
 Scripts in `scripts/` are PowerShell for simple build and packaging steps. Use Python (3.10+,
 standard library only where possible) when a script needs real logic, such as parsing JSON or
