@@ -30,6 +30,10 @@ dbg_macro = "deny"
 todo = "warn"
 print_stdout = "warn"
 
+# hudhook 0.9.3 plus an HDR colour conversion in the DX12 pixel shader (vendor/README.md).
+[patch.crates-io]
+hudhook = { path = "vendor/hudhook" }
+
 [profile.release]
 lto = true
 codegen-units = 1

@@ -15,6 +15,10 @@ serde_json.workspace = true
 toml.workspace = true
 toml_edit.workspace = true
 vtable-rs.workspace = true
+hudhook = { version = "0.9.3", default-features = false, features = ["dx12"], optional = true }
+
+[features]
+overlay = ["dep:hudhook"]
 
 [lints]
 workspace = true
