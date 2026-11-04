@@ -4,15 +4,15 @@ import ghidra.program.model.listing.Instruction;
 import java.io.FileOutputStream;
 import java.io.PrintWriter;
 
-// Dumps raw bytes + disassembly of a function's first N bytes, to design a
-// safe trampoline patch length (must land on an instruction boundary).
+// Dumps the raw bytes and disassembly of a function's first N bytes, to choose a hook length
+// that ends on an instruction boundary.
 public class DumpFnPrologue extends GhidraScript {
     @Override
     public void run() throws Exception {
         String[] args = getScriptArgs();
         Address addr = currentProgram.getAddressFactory().getAddress(args[0]);
         int window = args.length > 1 ? Integer.parseInt(args[1]) : 40;
-        String outPath = args.length > 2 ? args[2] : "D:/tmp/fn_prologue.txt";
+        String outPath = args.length > 2 ? args[2] : System.getProperty("java.io.tmpdir") + "/fn_prologue.txt";
         PrintWriter out = new PrintWriter(new FileOutputStream(outPath));
 
         Address end = addr.add(window);

@@ -1,17 +1,17 @@
-"""Đếm số vị trí khớp 1 hay nhiều mẫu AOB trong exe (kiểm tra tính duy nhất).
+"""Count the places where one or more AOB patterns match in the exe (uniqueness check).
 
-Dùng:
-    run.ps1 aob "48 8B 05 ?? ?? ?? ?? 48 85 C0" ["mẫu 2" ...] [--text] [--all=N]
-    run.ps1 aob -Version all "mẫu..."      # so sánh giữa mọi bản exe
+Usage:
+    run.ps1 aob "48 8B 05 ?? ?? ?? ?? 48 85 C0" ["pattern 2" ...] [--text] [--all=N]
+    run.ps1 aob -Version all "pattern..."      # compare across every exe version
 
-    --text     chỉ tìm trong section chạy code (.text); mặc định tìm cả image
-    --all=N    liệt kê tối đa N vị trí khớp (mặc định 8)
+    --text     search only the code section (.text); by default the whole image is searched
+    --all=N    list at most N matches (default 8)
 
-`?` và `??` là wildcard 1 byte. Mỗi mẫu in 1 dòng `RESULT` (run.ps1 gom lại
-khi chạy -Version all): `RESULT UNIQUE ...` nếu đúng 1 vị trí, `RESULT MULTI(n)`
-nếu nhiều hơn, `RESULT NONE` nếu không có. Vị trí in dạng RVA kèm tên hàm.
-Mẫu lấy từ `common::memscan::find_pattern_in_module` của mod phải UNIQUE ở mọi
-bản exe mod hỗ trợ.
+`?` and `??` are one-byte wildcards. Each pattern prints one `RESULT` line (run.ps1 collects
+them with -Version all): `RESULT UNIQUE ...` for exactly one match, `RESULT MULTI(n)` for
+more, `RESULT NONE` for none. Positions are RVAs followed by the function name.
+A pattern passed to `common::memscan::find_pattern_in_module` must be UNIQUE in every exe
+version the mod supports.
 """
 import os
 import sys
@@ -36,9 +36,9 @@ def ranges(text_only):
 def find_all(pattern, text_only, limit):
     patt = ida_bytes.compiled_binpat_vec_t()
     ok = ida_bytes.parse_binpat_str(patt, common.BASE, pattern.replace("??", "?"), 16)
-    # IDA 9.x: True / chuỗi rỗng khi thành công, False / chuỗi lỗi khi thất bại.
+    # IDA 9.x returns True or an empty string on success, False or an error string on failure.
     if ok is False or (isinstance(ok, str) and ok):
-        raise ValueError("mẫu không hợp lệ: %r (%s)" % (pattern, ok))
+        raise ValueError("invalid pattern: %r (%s)" % (pattern, ok))
     flags = ida_bytes.BIN_SEARCH_FORWARD | ida_bytes.BIN_SEARCH_NOBREAK | ida_bytes.BIN_SEARCH_NOSHOW
     hits = []
     total = 0
@@ -59,7 +59,7 @@ def find_all(pattern, text_only, limit):
 def main():
     pos, flags = common.parse_args()
     if not pos:
-        common.die("thiếu mẫu AOB; xem docstring")
+        common.die("missing AOB pattern; see the docstring")
     limit = int(flags.get("all", 8))
     out = common.open_out("aob.txt")
     for pat in pos:

@@ -6,15 +6,14 @@ import ghidra.program.model.listing.Function;
 import java.io.FileOutputStream;
 import java.io.PrintWriter;
 
-// Decompiles 1 function by entry address, plus its direct callers (xrefs)
-// and callees, for manual inspection - used to identify the real
-// "ApplyDamage" function among FindDamagePath.java's candidates.
+// Decompiles one function by entry address, listing its direct callers, for manual
+// inspection. Args: <address> [output file].
 public class DecompileFn extends GhidraScript {
     @Override
     public void run() throws Exception {
         String[] args = getScriptArgs();
         String addrStr = args[0];
-        String outPath = args.length > 1 ? args[1] : "D:/tmp/decompiled_fn.txt";
+        String outPath = args.length > 1 ? args[1] : System.getProperty("java.io.tmpdir") + "/decompiled_fn.txt";
         PrintWriter out = new PrintWriter(new FileOutputStream(outPath));
 
         Address addr = currentProgram.getAddressFactory().getAddress(addrStr);

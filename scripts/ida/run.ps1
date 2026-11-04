@@ -1,24 +1,25 @@
 <#
 .SYNOPSIS
-    Chạy 1 script IDAPython của scripts/ida/ trên database eldenring.exe.i64 có sẵn.
+    Runs one IDAPython script from scripts/ida/ on an existing eldenring.exe.i64 database.
 
 .DESCRIPTION
-    Dùng idat (headless): idat -A -S"<script> <args>" -L<log> <db>.i64.
-    Database nằm ở dumps/eldenring/<version>/eldenring.exe.i64 (version = FileVersion
-    của exe, vd. 2.7.1.0 = patch 1.17.1). Output của script ghi vào
-    dumps/eldenring/<version>/out/ (biến môi trường ER_OUT). Không mở database đang
-    được IDA GUI giữ - đóng GUI trước.
+    Uses idat (headless): idat -A -S"<script> <args>" -L<log> <db>.i64.
+    Databases live in dumps/eldenring/<version>/eldenring.exe.i64 (version = the exe's
+    FileVersion). The script's output goes to dumps/eldenring/<version>/out/ (environment
+    variable ER_OUT). Do not use a database that the IDA GUI has open; close the GUI first.
+
+    idat is taken from the ER_IDAT environment variable, otherwise from PATH.
 
 .PARAMETER Script
-    Tên file trong scripts/ida/ (vd. decompile.py), có hoặc không có đuôi .py.
+    File name in scripts/ida/ (for example decompile.py), with or without the .py extension.
 
 .PARAMETER Version
-    Thư mục version trong dumps/eldenring/ (vd. 2.7.1.0), hoặc `all` để chạy lần lượt
-    mọi version có .i64. Mặc định: version mới nhất.
+    Version folder in dumps/eldenring/ (for example 2.7.1.0), or `all` to run every version
+    that has an .i64 in turn. Default: the latest version.
 
 .PARAMETER Arguments
-    Tham số truyền cho script (RVA, mẫu AOB, cờ --x...). Đặt trong dấu nháy nếu
-    có khoảng trắng; với aob.py mỗi mẫu là 1 chuỗi nháy kép riêng.
+    Arguments passed to the script (RVAs, AOB patterns, --x flags...). Quote those that
+    contain spaces; with aob.py each pattern is its own double-quoted string.
 
 .EXAMPLE
     pwsh scripts/ida/run.ps1 decompile 1e92100 --callees
@@ -36,24 +37,24 @@ $Here = $PSScriptRoot
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $Here)
 $IdaRoot = Join-Path $RepoRoot "dumps\eldenring"
 
-$Idat = if ($env:ER_IDAT) { $env:ER_IDAT } else { "D:\Programs\IDA Professional 9.3\idat.exe" }
-if (-not (Test-Path $Idat)) { throw "Không thấy idat.exe ($Idat). Đặt biến môi trường ER_IDAT." }
+$Idat = if ($env:ER_IDAT) { $env:ER_IDAT } else { (Get-Command idat -ErrorAction SilentlyContinue).Source }
+if (-not $Idat -or -not (Test-Path $Idat)) { throw "idat.exe not found. Set the ER_IDAT environment variable to its full path." }
 
 if (-not $Script.EndsWith(".py")) { $Script += ".py" }
 $ScriptPath = Join-Path $Here $Script
-if (-not (Test-Path $ScriptPath)) { throw "Không thấy script '$Script' trong $Here" }
+if (-not (Test-Path $ScriptPath)) { throw "Script '$Script' not found in $Here" }
 
 $All = Get-ChildItem $IdaRoot -Directory |
     Where-Object { Test-Path (Join-Path $_.FullName "eldenring.exe.i64") } |
     Sort-Object { try { [version]$_.Name } catch { [version]"0.0" } }
-if (-not $All) { throw "Không có database nào trong $IdaRoot" }
+if (-not $All) { throw "No database found in $IdaRoot" }
 
 $Targets = if ($Version -eq "all") { $All }
 elseif ($Version) { $All | Where-Object Name -eq $Version }
 else { $All | Select-Object -Last 1 }
-if (-not $Targets) { throw "Không thấy version '$Version'. Có: $($All.Name -join ', ')" }
+if (-not $Targets) { throw "Version '$Version' not found. Available: $($All.Name -join ', ')" }
 
-# Ghép tham số thành 1 chuỗi cho -S; tham số có khoảng trắng được bọc nháy kép.
+# Join the arguments into one string for -S; arguments with spaces get double quotes.
 $Joined = ($Arguments | ForEach-Object { if ($_ -match '\s') { '\"' + $_ + '\"' } else { $_ } }) -join " "
 
 foreach ($T in $Targets) {
@@ -66,8 +67,8 @@ foreach ($T in $Targets) {
     Write-Host "==> [$($T.Name)] $Script $Joined" -ForegroundColor Cyan
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $p = Start-Process -FilePath $Idat -ArgumentList $cmdline -Wait -PassThru -NoNewWindow
-    Write-Host ("    xong sau {0:N0}s (exit {1}), output: {2}" -f $sw.Elapsed.TotalSeconds, $p.ExitCode, $Out)
-    # Dòng RESULT (aob.py, ...) in lại để so sánh nhanh giữa các version.
+    Write-Host ("    finished in {0:N0}s (exit {1}), output: {2}" -f $sw.Elapsed.TotalSeconds, $p.ExitCode, $Out)
+    # Echo the RESULT lines (aob.py, ...) so versions can be compared at a glance.
     Get-ChildItem $Out -Filter "*.txt" |
         Where-Object { $_.LastWriteTime -gt (Get-Date).AddSeconds(-($sw.Elapsed.TotalSeconds + 5)) } |
         ForEach-Object { Select-String -Path $_.FullName -Pattern '^RESULT ' | ForEach-Object { "    [$($T.Name)] $($_.Line)" } }

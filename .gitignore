@@ -1,24 +1,20 @@
-/.docs
 /target
 /builds
-/.env
 
-.smithbox/
+# Local-only material: reverse-engineering dumps, personal notes, API keys
+/.local/
+/dumps/
+.env
+
+# Local tooling
+.claude/*
+.vscode/settings.json
+.idea/
+
+# Game assets that must never be committed
 regulation.bin
 regulation.bin.prev
-*.zip
+*.dmp
 
-# Python
 __pycache__/
 *.pyc
-*.pyo
-
-/.claude/scheduled_tasks.lock
-/.claude/settings.local.json
-tmp/
-
-
-dumps/*
-!dumps/seamless-diff/
-# Smithbox project of risearcher (holds a local game path); copy project.json.example
-/mods/risearcher/project.json

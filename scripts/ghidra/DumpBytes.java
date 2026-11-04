@@ -4,15 +4,13 @@ import ghidra.program.model.mem.Memory;
 import java.io.PrintWriter;
 import java.io.FileOutputStream;
 
-// Dumps raw hex bytes at a given RVA (relative to image base) so an AOB
-// pattern can be hand-built for a function we only know the RVA of from
-// prior Ghidra decompiles (avoids hardcoding a raw runtime address in the
-// mod, matching how every other hook in this project resolves via AOB).
+// Dumps raw hex bytes at a given RVA (relative to the image base), to build an AOB pattern
+// by hand for a function that is only known by its RVA.
 public class DumpBytes extends GhidraScript {
     @Override
     public void run() throws Exception {
         String[] args = getScriptArgs();
-        String outPath = args.length > 0 ? args[0] : "D:/tmp/bytes_dump.txt";
+        String outPath = args.length > 0 ? args[0] : System.getProperty("java.io.tmpdir") + "/bytes_dump.txt";
         long rva = args.length > 1 ? Long.decode(args[1]) : 0xd23090L;
         int length = args.length > 2 ? Integer.decode(args[2]) : 48;
 
