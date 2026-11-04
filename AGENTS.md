@@ -1,6 +1,6 @@
 # Project guidelines
 
-Rust workspace of Elden Ring mods (one crate per DLL, shared code in `common`). Read
+Rust workspace of Elden Ring mods (one crate per DLL, shared code in `shared`). Read
 [CONTRIBUTING.md](CONTRIBUTING.md) for layout, build commands and the full conventions; this
 file covers how to approach a change.
 
@@ -9,7 +9,8 @@ file covers how to approach a change.
 - Read 3 to 5 existing files that already do something similar and match their structure,
   naming and error handling. Copying the project's habits matters more than any written rule.
   Good references: see the list at the bottom.
-- Look for an existing helper in `common` before writing a new one.
+- Look for an existing helper in `shared` before writing a new one.
+- For research or reverse-engineering notes, follow `docs/research/README.md`.
 
 ## Coding philosophy
 
@@ -29,6 +30,8 @@ Mods run inside the game process, so "avoid excessive checks" does not apply to 
 - Game pointers and singletons can be null or not yet initialized; check them.
 - Nothing that can panic, allocate or lock runs inside a hook.
 - Find game functions by AOB pattern, never a hard-coded RVA.
+- Hook stubs go in `codepatch::alloc_executable` memory, never in a `static` made executable, and
+  the DLL exports `DllMain` only; both draw antivirus detections (see CONTRIBUTING.md).
 
 Everywhere else (internal calls between our own functions, values we just validated) do not
 add redundant checks.
@@ -44,10 +47,11 @@ add redundant checks.
 
 ## Reference files
 
-Filled in once the first mods are migrated (pick the cleanest, one per kind):
+The cleanest example of each kind:
 
-- Mod entry point (`lib.rs`):
-- Feature module with a game hook:
-- Feature module without a hook:
-- Config handling:
-- Mod README:
+- Mod entry point (`lib.rs`): `mods/autopickup/src/lib.rs`
+- Feature module with a game hook: `mods/autopickup/src/hook.rs`
+- Feature module without a hook: `mods/autopickup/src/range.rs`
+- Config handling: `mods/autopickup/src/config.rs`
+- Mod README: `mods/autopickup/README.md`
+- Research note: `mods/autopickup/docs/exec_action_button.md`

@@ -14,7 +14,7 @@ DLL.
 
 | Mod | What it does |
 | --- | --- |
-| _coming soon_ | |
+| [AutoPickup](mods/autopickup) | Picks up materials, items, corpse loot and runes when you stand in reach |
 
 ## Installation
 

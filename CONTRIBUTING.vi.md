@@ -11,7 +11,7 @@ Nếu dùng trợ lý AI, cho nó đọc [AGENTS.md](AGENTS.md) và chạy promp
 ## Cấu trúc repo
 
 ```
-common/            crate dùng chung cho mọi mod (config, log, quét bộ nhớ, hook, ...)
+shared/            mã dùng chung cho mọi mod (config, log, quét bộ nhớ, hook, ...)
 mods/<tên>/        một mod = một crate = một DLL
 docs/              tài liệu chung của dự án
 scripts/           script build và phát hành
@@ -35,7 +35,8 @@ mods/<tên>/
 ```
 
 Nội dung dài hơn README (ghi chú nghiên cứu, offset, cách một hệ thống của game vận hành)
-đặt ở `mods/<tên>/docs/<chủ đề>.md`.
+đặt ở `mods/<tên>/docs/<chủ đề>.md`. Viết theo [docs/research/README.md](docs/research/README.md):
+nhãn bằng chứng, bản build đã thử cho từng phát hiện, và giữ lại các hướng đã bị loại.
 
 ## Build
 
@@ -74,10 +75,10 @@ nhiên.
 - `lib.rs` giữ mỏng: nạp config, khởi tạo log, đăng ký tính năng.
 - Mỗi tính năng một module. File vượt khoảng 400 dòng thì tìm chỗ để tách.
 - Ưu tiên hàm nhỏ và return sớm thay vì lồng nhiều tầng.
-- `common` lớn dần theo các mod: chỉ chuyển một module sang khi mod đang thêm vào cần nó.
-- Logic dùng chung nằm ở `common`. Không sao chép hàm giữa các mod; cũng không đưa code
-  lên `common` cho tới khi có mod thứ hai thật sự cần.
-- Mod link tĩnh với `common` và không chia sẻ trạng thái lúc chạy với mod khác.
+- `shared` lớn dần theo các mod: chỉ chuyển một module sang khi mod đang thêm vào cần nó.
+- Logic dùng chung nằm ở `shared`. Không sao chép hàm giữa các mod; cũng không đưa code
+  lên `shared` cho tới khi có mod thứ hai thật sự cần.
+- Mod link tĩnh với `shared` và không chia sẻ trạng thái lúc chạy với mod khác.
 
 **Lỗi và panic.** Mod chạy trong tiến trình game nên không được làm game sập. Dùng `Result`
 và ghi log lỗi; chỉ dùng `unwrap`/`expect` cho điều kiện bất biến không thể sai. Không có gì
@@ -85,11 +86,20 @@ có thể panic bên trong hook.
 
 **An toàn theo phiên bản game.**
 
-- Tìm hàm của game bằng AOB (`common::memscan`), không hard-code RVA, để bản cập nhật game
+- Tìm hàm của game bằng AOB (`shared::memscan`), không hard-code RVA, để bản cập nhật game
   không âm thầm làm hỏng mod. Kiểm pattern mới là duy nhất trên mọi bản exe được hỗ trợ.
 - Không gọi `eldenring::rva::get()`: bảng chỉ phủ một số bản và sẽ panic ở bản khác.
 - Không đặt hardware breakpoint (debug register) từ DLL: game sẽ crash.
 - Inline hook không được cấp phát bộ nhớ hay lấy khoá.
+
+**Phần mềm diệt virus.** Mod sửa bộ nhớ game nên vài cờ là không tránh được, nhưng một số thói
+quen làm tăng cờ rất nhiều:
+
+- Không chạy mã từ một `static` đã được cấp quyền thực thi; dùng
+  `shared::codepatch::alloc_executable`. DLL nhảy vào vùng dữ liệu của chính nó bị nhiều engine
+  gắn cờ.
+- Không xuất gì ngoài `DllMain`. Dùng `sym` trong `global_asm!` thay vì `#[no_mangle]`.
+- Không đóng gói, làm rối hay mã hoá DLL.
 
 **Config.** TOML, một file cạnh DLL, tạo từ bản mặc định nhúng sẵn ở lần chạy đầu. Khoá còn
 thiếu được thêm từ bản mặc định mà không đụng vào comment hay giá trị của người dùng. Mỗi khoá
@@ -123,5 +133,7 @@ ví dụ `Menu: registered`. Lỗi kèm lý do. Không in danh sách dài ở m�
   một thay đổi logic.
 - Không commit binary, file game, `regulation.bin`, crash dump, API key hay đường dẫn máy cá
   nhân.
+- `.local/` (ghi chú cá nhân, danh sách TODO, file nháp) và `dumps/` được git bỏ qua. Để ở đó
+  mọi thứ không dành cho repo.
 - Thử trong game trước khi mở PR và nói rõ đã thử với bản game nào, cấu hình mod nào (vanilla,
   Seamless Co-op, ...).

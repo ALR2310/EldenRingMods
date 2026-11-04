@@ -1,13 +1,10 @@
 [workspace]
 resolver = "2"
-members = [
-    # "common",
-    # "mods/*",
-]
+members = ["shared", "mods/*"]
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "MIT"
 authors = ["ALR2310"]
 publish = false

@@ -11,7 +11,7 @@ If you use an AI assistant, point it at [AGENTS.md](AGENTS.md) and run the promp
 ## Repository layout
 
 ```
-common/            shared crate used by every mod (config, logging, memory scanning, hooks, ...)
+shared/            code used by every mod (config, logging, memory scanning, hooks, ...)
 mods/<name>/       one mod = one crate = one DLL
 docs/              project-wide documentation
 scripts/           build and release helpers
@@ -35,7 +35,9 @@ mods/<name>/
 ```
 
 Anything that needs more than a README (research notes, offsets, how a game system works) goes
-in `mods/<name>/docs/<topic>.md`.
+in `mods/<name>/docs/<topic>.md`. Write it the way [docs/research/README.md](docs/research/README.md)
+describes: evidence labels, the build each finding was tested on, and rejected paths kept on the
+page.
 
 ## Building
 
@@ -74,10 +76,10 @@ explain a constraint, a game quirk, or a decision that is not obvious from the c
 - `lib.rs` stays thin: load config, start logging, register features.
 - One feature per module. If a file passes roughly 400 lines, look for a seam to split on.
 - Prefer small functions with early returns over deep nesting.
-- `common` grows with the mods: bring a module over only when the mod being added needs it.
-- Shared logic lives in `common`. Do not copy a helper between mods; do not move code into
-  `common` until a second mod actually needs it.
-- Mods are linked statically against `common` and share no runtime state with each other.
+- `shared` grows with the mods: bring a module over only when the mod being added needs it.
+- Shared logic lives in `shared`. Do not copy a helper between mods; do not move code into
+  `shared` until a second mod actually needs it.
+- Mods are linked statically against `shared` and share no runtime state with each other.
 
 **Errors and panics.** A mod runs inside the game process, so it must not take the game down.
 Use `Result` and log the failure; reserve `unwrap`/`expect` for invariants that cannot fail.
@@ -85,12 +87,21 @@ Nothing that can panic runs inside a hook.
 
 **Game version safety.**
 
-- Locate game functions with AOB patterns (`common::memscan`), never hard-coded RVAs, so a game
+- Locate game functions with AOB patterns (`shared::memscan`), never hard-coded RVAs, so a game
   update does not silently break the mod. Check that a new pattern is unique on every supported
   executable version.
 - Do not call `eldenring::rva::get()`; the table only covers some versions and panics on others.
 - Do not set hardware breakpoints (debug registers) from a DLL; the game crashes.
 - Inline hooks must not allocate or take locks.
+
+**Antivirus detections.** Mods edit game memory, so some detections are unavoidable, but a few
+habits add many more:
+
+- Do not run code from a `static` that was made executable; use
+  `shared::codepatch::alloc_executable`. A DLL that jumps into its own data section is flagged by
+  several engines.
+- Do not export anything except `DllMain`. Use `sym` in `global_asm!` instead of `#[no_mangle]`.
+- Do not pack, obfuscate or encrypt the DLL.
 
 **Config.** TOML, one file next to the DLL, created from the embedded default on first run.
 Missing keys are added from the default without touching the user's comments or values. Every
@@ -126,5 +137,7 @@ PascalCase so the DLL gets the right file name (`#![allow(non_snake_case)]` in `
   as scope: `fix(autoregen): stop healing while dead`. Subject in the imperative, under 72
   characters. One logical change per commit.
 - Do not commit binaries, game files, `regulation.bin`, crash dumps, API keys or local paths.
+- `.local/` (personal notes, a TODO list, scratch files) and `dumps/` are ignored by git. Keep
+  anything that is not meant for the repository there.
 - Test a change in the game before opening a PR, and say which game version and mod setup you
   tried (vanilla, Seamless Co-op, ...).

@@ -12,7 +12,7 @@ lúc đang chạy, cấu hình bằng một file TOML đặt cạnh DLL.
 
 | Mod | Chức năng |
 | --- | --- |
-| _sắp có_ | |
+| [AutoPickup](mods/autopickup) | Tự nhặt nguyên liệu, vật phẩm, đồ trên xác và rune khi đứng trong tầm |
 
 ## Cài đặt
 
