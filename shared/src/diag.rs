@@ -123,6 +123,12 @@ pub fn loaded_modules() -> Vec<ModuleInfo> {
     module_handles().into_iter().filter_map(module_info).collect()
 }
 
+/// Whether a module with this file name (for example `ersc.dll`) is loaded.
+pub fn is_module_loaded(name: &str) -> bool {
+    // SAFETY: the name is a NUL-terminated wide string that outlives the call.
+    !unsafe { GetModuleHandleW(wide(name).as_ptr()) }.is_null()
+}
+
 /// The loaded module whose image contains `addr`, if any.
 pub fn module_containing(addr: usize) -> Option<ModuleInfo> {
     let handle = module_handles().into_iter().find(|&h| {
@@ -215,6 +221,13 @@ pub fn log_environment_when_game_ready() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn is_module_loaded_matches_by_file_name() {
+        assert!(is_module_loaded("kernel32.dll"));
+        assert!(is_module_loaded("KERNEL32.DLL"));
+        assert!(!is_module_loaded("no_such_module.dll"));
+    }
 
     #[test]
     fn lists_own_process_modules() {

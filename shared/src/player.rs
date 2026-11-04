@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use eldenring::cs::{SoloParamRepository, WorldChrMan};
+use eldenring::cs::{ChrIns, ChrLoadStatus, ChrSet, SoloParamRepository, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
 /// The main player's `ChrIns` address, `None` at the title screen or while loading.
@@ -31,5 +31,25 @@ pub fn wait_for_solo_param_repository() -> &'static mut SoloParamRepository {
             crate::logger::log("SoloParamRepository: waiting for world");
         }
         std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+/// Calls `f` on every character of `set` that is safe to touch. Only `Active` and
+/// `ReadyForActivation` entries are dereferenced: any other entry can be stale.
+pub fn for_each_active_chr(set: &ChrSet<ChrIns>, mut f: impl FnMut(&mut ChrIns)) {
+    for slot in 0..set.capacity {
+        // SAFETY: `slot` is below the set's capacity, so the entry is inside its allocation.
+        let entry = unsafe { set.entries.add(slot as usize).as_ref() };
+        let Some(mut chr) = entry.chr_ins else {
+            continue;
+        };
+        if !matches!(
+            entry.chr_load_status,
+            ChrLoadStatus::Active | ChrLoadStatus::ReadyForActivation
+        ) {
+            continue;
+        }
+        // SAFETY: the entry is active, so its character is alive for this frame.
+        f(unsafe { chr.as_mut() });
     }
 }
