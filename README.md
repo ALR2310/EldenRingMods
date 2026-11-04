@@ -28,6 +28,7 @@ and a reload key applies changes without restarting the game.
 | [**AnimCancel**](mods/animcancel) | Cuts the animation that is playing with guard, dodge, jump or a weapon swap | [11328](https://www.nexusmods.com/eldenring/mods/11328) |
 | [**AutoPickup**](mods/autopickup) | Picks up materials, items, corpse loot and runes when you stand in reach | [11470](https://www.nexusmods.com/eldenring/mods/11470) |
 | [**AutoRegen**](mods/autoregen) | Restores HP, FP and Stamina over time or when you land a hit | [10548](https://www.nexusmods.com/eldenring/mods/10548) |
+| [**DropMultiplier**](mods/dropmultiplier) | Adjusts how often enemies drop items and how many materials you get | [11075](https://www.nexusmods.com/eldenring/mods/11075) |
 | [**SpeedMultiplier**](mods/speedmultiplier) | Speeds up or slows down the player, Torrent, spirits and enemies per kind of action | [11173](https://www.nexusmods.com/eldenring/mods/11173) |
 
 Each mod's page describes how it works and its limits, and its `CHANGELOG.md` has the release notes.

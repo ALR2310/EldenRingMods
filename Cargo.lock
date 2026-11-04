@@ -156,6 +156,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6579ea71cdf01b8ec995719df66f69ea2a08ea6406d0a4485a666a55f234c1a"
 
 [[package]]
+name = "dropmultiplier"
+version = "1.1.0"
+dependencies = [
+ "eldenring",
+ "fromsoftware-shared",
+ "serde",
+ "shared",
+ "toml",
+ "toml_edit",
+ "winresource",
+]
+
+[[package]]
 name = "eldenring"
 version = "0.14.0"
 source = "git+https://github.com/vswarte/fromsoftware-rs?rev=57023153d786c4b13fe95d9170e6dcd9d35093ea#57023153d786c4b13fe95d9170e6dcd9d35093ea"
