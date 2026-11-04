@@ -33,6 +33,7 @@ nạp lại để áp dụng thay đổi mà không cần khởi động lại g
 | [**InfiniteAilment**](mods/infiniteailment) | Chỉnh thời lượng và sát thương của Poison, Scarlet Rot, Black Flame và Destined Death | [11087](https://www.nexusmods.com/eldenring/mods/11087) |
 | [**RuneMultiplier**](mods/runemultiplier) | Nhân hệ số lên số rune nhận được từ mọi nguồn | [10630](https://www.nexusmods.com/eldenring/mods/10630) |
 | [**SpeedMultiplier**](mods/speedmultiplier) | Tăng hoặc giảm tốc độ của người chơi, Torrent, spirit và kẻ địch theo từng loại hành động | [11173](https://www.nexusmods.com/eldenring/mods/11173) |
+| [**WeightMultiplier**](mods/weightmultiplier) | Nhân Trọng Tải với một hệ số, hoặc đặt cứng nó bằng một số | [10549](https://www.nexusmods.com/eldenring/mods/10549) |
 
 Trang của mỗi mod mô tả cách hoạt động và giới hạn, còn `CHANGELOG.md` có ghi chú phát hành.
 
