@@ -1,7 +1,5 @@
-//! Whether the game considers the player in combat: the flag read from the `CSSound` singleton
-//! (`+0x328` -> a struct whose byte `+4` is set while the combat music plays). Read once per
-//! frame by the tick, never in the pickup hook (the singleton lookup is not hook-safe). How well
-//! the offsets are verified: `docs/exec_action_button.md`.
+//! The game's "player is in combat" flag from the `CSSound` singleton. Read once per frame in the
+//! tick, not in the hook: the singleton lookup is not hook-safe. See `docs/exec_action_button.md`.
 
 use fromsoftware_shared::{FromStatic, singleton};
 
@@ -18,7 +16,6 @@ struct CSSound {
     combat: *const CombatState,
 }
 
-/// `None` when the singleton or the struct isn't there (title screen, loading).
 pub fn in_combat() -> Option<bool> {
     // SAFETY: called from a game task; `instance` returns `Err` while the singleton does not exist.
     let sound = unsafe { CSSound::instance() }.ok()?;

@@ -1,9 +1,6 @@
-//! `NoPickupAnimation`: stops the animation that plays when something is picked up. Each animation
-//! ID is replaced by one the game doesn't have (999999):
-//! `GameSystemCommonParam.msbEventGeomTreasureInfo_itemGetAnimId_{shine, corpse, box}` (glowing
-//! items on the ground, remains, chests) and `PlayerCommonParam.animeID_DropItemPick` (dropped
-//! items). The game's own values are kept from the first call, so switching the option off
-//! restores them. See `docs/pickup_animation.md`.
+//! `NoPickupAnimation`: replaces the pickup animation IDs (treasure shine, corpse, chest, dropped
+//! item) with one the game doesn't have, and restores the game's own values when switched off.
+//! See `docs/pickup_animation.md`.
 
 use std::sync::Mutex;
 
@@ -11,10 +8,8 @@ use eldenring::cs::{GameSystemCommonParam, PlayerCommonParam, SoloParamRepositor
 
 use shared::{logger, params};
 
-/// An animation ID the game doesn't have.
 const NO_ANIMATION: i32 = 999_999;
 
-/// The game's own IDs, read before the first write.
 #[derive(Clone, Copy)]
 struct Vanilla {
     drop_item_pick: i32,
@@ -25,12 +20,10 @@ struct Vanilla {
 
 static VANILLA: Mutex<Option<Vanilla>> = Mutex::new(None);
 
-/// The ID to put in the param for the option's state.
 fn target(vanilla: i32, disable: bool) -> i32 {
     if disable { NO_ANIMATION } else { vanilla }
 }
 
-/// Writes the animation IDs for `disable`.
 pub fn apply(repo: &mut SoloParamRepository, disable: bool) -> Result<(), String> {
     params::check::<PlayerCommonParam>(repo)?;
     params::check::<GameSystemCommonParam>(repo)?;
@@ -74,7 +67,6 @@ pub fn apply(repo: &mut SoloParamRepository, disable: bool) -> Result<(), String
     Ok(())
 }
 
-/// The four IDs as they are in the param now, for the probe log.
 pub fn current(repo: &mut SoloParamRepository) -> Option<String> {
     let drop_item_pick =
         repo.get_row_by_index_mut::<PlayerCommonParam>(0)?.anime_id_drop_item_pick();

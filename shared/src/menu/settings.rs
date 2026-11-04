@@ -11,17 +11,14 @@ use super::abi::*;
 use super::host::{Provider, REGISTRATION, Registration};
 use crate::logger;
 
-/// One menu row bound to a config key. Pass it as the row's `user_data` (via
-/// [`Setting::user_data`]) together with [`setting_changed`] as the callback: a change is
-/// applied at once with `apply` (if any) and written to the config by the saver started with
-/// [`start_saver`].
+/// One menu row bound to a config key. Pass it as the row's `user_data` with [`setting_changed`]
+/// as the callback; a change is applied at once with `apply` and saved by [`start_saver`].
 pub struct Setting {
     /// The config key, e.g. `"Section.Key"`.
     pub key: &'static str,
     /// The row's byte as the text stored in the config.
     pub format: fn(u8) -> String,
-    /// Runs on the host's worker thread right when the player changes the row
-    /// (keep it short); `None` when the mod only needs the saved value.
+    /// Runs on the host's worker thread when the player changes the row (keep it short).
     pub apply: Option<fn(u8)>,
 }
 
@@ -49,13 +46,10 @@ static SAVER: OnceLock<Sender<Pending>> = OnceLock::new();
 /// How long the player must stop changing rows before the config is written.
 const SAVE_DELAY: Duration = Duration::from_millis(1000);
 
-/// Starts the thread that saves menu changes once the player has stopped changing rows for a
-/// second, then calls `on_saved` (for example to make the mod re-read its config). The thread
-/// sleeps until there is something to save. Call once, before registering rows.
-///
-/// `write` gets the changed `(key, text)` pairs (the latest per key) and returns whether they
-/// were saved. `Setting::key` is whatever `write` expects, `"Section.Key"` for
-/// [`crate::toml_config::TomlConfig::save_values`].
+/// Starts the thread that saves menu changes once the player has stopped for a second, then calls
+/// `on_saved`. Call once, before registering rows. `write` gets the changed `(key, text)` pairs
+/// (the latest per key) and returns whether they were saved; keys are whatever `write` expects,
+/// `"Section.Key"` for [`crate::toml_config::TomlConfig::save_values`].
 pub fn start_saver(
     mut write: impl FnMut(&[(&'static str, String)]) -> bool + Send + 'static,
     on_saved: Option<fn()>,
@@ -94,12 +88,11 @@ pub fn start_saver(
     });
 }
 
-/// Value-changed callback for rows whose `user_data` is a [`Setting`]. Runs on
-/// the host's worker thread; never panics across the C ABI.
+/// Value-changed callback for rows whose `user_data` is a [`Setting`]; never panics across the C
+/// ABI.
 ///
 /// # Safety
-/// `user_data` must be null or [`Setting::user_data`] of a `static` [`Setting`]
-/// (the host hands back the pointer given when the row was added).
+/// `user_data` must be null or [`Setting::user_data`] of a `static` [`Setting`].
 pub unsafe extern "C" fn setting_changed(user_data: *mut c_void, value: u8) {
     let _ = std::panic::catch_unwind(|| {
         if user_data.is_null() {
@@ -133,11 +126,9 @@ pub struct NumberSetting {
     pub last: AtomicU64,
     /// Step of the native slider (`0` = text row only, see [`NumberSetting::stepped`]).
     pub step: f64,
-    /// Range of the native slider when it is narrower than `min..max`
-    /// ([`NumberSetting::slider`]); `None` = the slider covers `min..max`.
+    /// Range of the native slider when narrower than `min..max`; `None` = `min..max`.
     pub slider_range: Option<(f64, f64)>,
-    /// Set by `add_number`: `0` for a text row, else the slider's decimal
-    /// places plus one.
+    /// Set by `add_number`: 0 for a text row, else the slider's decimal places plus one.
     slider: AtomicU32,
 }
 
@@ -179,28 +170,23 @@ impl NumberSetting {
         }
     }
 
-    /// Makes the row a native slider from `min` to `max` in steps of `step`
-    /// when the host has API 1.2 (a text row otherwise). The range must hold
-    /// 2 to 256 positions and `step` at most six decimals; if not, the row
-    /// stays a text row.
+    /// Makes the row a native slider in steps of `step` when the host has API 1.2. The range must
+    /// hold 2 to 256 positions and `step` at most six decimals; otherwise it stays a text row.
     pub const fn stepped(mut self, step: f64) -> Self {
         self.step = step;
         self
     }
 
-    /// Like [`NumberSetting::stepped`] for a setting whose accepted range
-    /// (`min..max`, used by the typed text row and for clamping) is much wider
-    /// than what a slider can show: the slider covers `from..=to` in steps of
-    /// `step`. A value outside it is shown at the nearest end; the config is
-    /// only changed when the player moves the slider.
+    /// Like [`NumberSetting::stepped`] when the accepted range is much wider than a slider can
+    /// show: the slider covers `from..=to`. A value outside it is shown at the nearest end, and the
+    /// config only changes when the player moves the slider.
     pub const fn slider(mut self, from: f64, to: f64, step: f64) -> Self {
         self.step = step;
         self.slider_range = Some((from, to));
         self
     }
 
-    /// The slider's exact range, or `None` when this setting has no step or the
-    /// range cannot be a native slider.
+    /// The slider's exact range, or `None` if there is no step or the range can't be a slider.
     fn slider_plan(&self) -> Option<SliderPlan> {
         if self.step <= 0.0 {
             return None;
@@ -245,9 +231,8 @@ impl NumberSetting {
     }
 }
 
-/// Shortest text that reads back as `value` (`1`, `0.5`, never `1e-7`),
-/// rounded to six decimals so a value that went through `f32` (`1.2` read back
-/// as `1.2000000476837158`) shows as the number the player typed.
+/// Shortest text that reads back as `value`, rounded to six decimals so a value that went through
+/// `f32` (`1.2` read back as `1.2000000476837158`) shows as the number the player typed.
 fn number_text(value: f64) -> String {
     let rounded = if value.abs() < 1e9 { (value * 1e6).round() / 1e6 } else { value };
     format!("{rounded}")
@@ -316,12 +301,9 @@ unsafe extern "C" fn number_slider_changed(
 }
 
 impl Provider {
-    /// Adds a number row, kept in range and written to the config like any
-    /// other [`Setting`]. A setting with a step ([`NumberSetting::stepped`]) is a
-    /// native slider when the host has API 1.2; otherwise it is a text row: the
-    /// player types `1.5` (a comma works too), out-of-range values are clamped
-    /// and bad text is put back to the last good value. `initial` is the number
-    /// the row starts with.
+    /// Adds a number row, kept in range and saved like any [`Setting`]: a native slider when the
+    /// setting has a step and the host has API 1.2, otherwise a text row where the player types
+    /// `1.5` (a comma works too). Out-of-range values are clamped and bad text is put back.
     pub fn add_number(
         &self,
         page: PageHandle,

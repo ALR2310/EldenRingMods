@@ -35,16 +35,13 @@ impl Menu {
     }
 }
 
-/// [`Menu::sync`] on a menu that may not exist (no host): the body of a mod's
-/// `sync_from_config`.
+/// [`Menu::sync`] on a menu that may not exist (no host).
 pub fn sync(slot: &OnceLock<Menu>) {
     if let Some(menu) = slot.get() {
         menu.sync();
     }
 }
 
-/// Collects the rows of one mod's menu; every row added here is remembered with
-/// its reader for [`Menu::sync`].
 pub struct MenuBuilder {
     provider: Provider,
     rows: Vec<(RowHandle, ByteReader)>,
@@ -108,12 +105,9 @@ impl MenuBuilder {
     }
 }
 
-/// Registers a mod's menu on a worker thread and stores it in `slot` once the
-/// host has installed it. Call it very early in the mod's startup thread: the
-/// host only accepts registrations in its first seconds. Without the host (or on
-/// an unsupported game build) it logs one line and the mod runs from its config
-/// file exactly as before. `build` adds the rows (typically a submenu on
-/// [`MenuBuilder::root`] with everything inside).
+/// Registers a mod's menu on a worker thread and stores it in `slot` once the host has installed
+/// it. Call it very early: the host only accepts registrations in its first seconds. Without the
+/// host it logs one line and the mod runs from its config file. `build` adds the rows.
 pub fn spawn_menu(
     slot: &'static OnceLock<Menu>,
     hmodule: u64,

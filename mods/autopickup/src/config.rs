@@ -1,6 +1,5 @@
-//! `AutoPickup.toml`, loaded through `shared::toml_config`. Defaults live only in the embedded
-//! template: `Default` on these structs is the derived zero value the loader needs while parsing,
-//! never a config in use (see the test `template_sets_every_field`).
+//! `AutoPickup.toml`. Defaults live only in the embedded template; `Default` on these structs is
+//! the derived zero value the loader needs while parsing, never a config in use.
 
 use std::sync::{Arc, OnceLock};
 
@@ -8,12 +7,9 @@ use serde::{Deserialize, Serialize};
 
 use shared::toml_config::{LoadReport, Migration, Step, TomlConfig};
 
-/// Embedded verbatim at compile time - single source of truth for the
-/// default file.
 pub const TEMPLATE: &str = include_str!("../AutoPickup.toml");
 
-/// Format migration steps for `General.ConfigVersion`; none yet (1 is the
-/// first format). Append only - a released step must never change.
+/// Migration steps for `General.ConfigVersion`; a released step never changes.
 const STEPS: &[Step] = &[];
 
 const MIGRATION: Migration =
@@ -34,7 +30,6 @@ pub struct Config {
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct General {
-    /// File format version, managed by the mod.
     pub config_version: u32,
     #[serde(deserialize_with = "shared::toml_config::key_name")]
     pub reload_key: String,
@@ -43,7 +38,6 @@ pub struct General {
     pub no_pickup_animation: bool,
 }
 
-/// `[Materials]`, `[Items]`, `[CorpseLoot]`, `[LostRunes]`, `[Chests]`.
 #[derive(Deserialize, Serialize, Default, Debug, Clone, Copy, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct Group {
@@ -60,15 +54,13 @@ pub struct Logging {
 
 static CONFIG: OnceLock<TomlConfig<Config>> = OnceLock::new();
 
-/// Loads (or creates) the file at `path`. The returned report is for the
-/// caller to log once the logger is up.
+/// The report is for the caller to log once the logger is up.
 pub fn init(path: &str) -> LoadReport {
     let (config, report) = TomlConfig::load_or_create(path, TEMPLATE, MIGRATION);
     let _ = CONFIG.set(config);
     report
 }
 
-/// The config in use (a cheap `Arc` snapshot).
 pub fn get() -> Arc<Config> {
     match CONFIG.get() {
         Some(config) => config.get(),
@@ -76,12 +68,10 @@ pub fn get() -> Arc<Config> {
     }
 }
 
-/// The template's values: what a fresh install runs on.
 pub fn template() -> Config {
     shared::toml_config::defaults(TEMPLATE)
 }
 
-/// Re-reads the file; on an error the last good config stays in use.
 pub fn reload() -> Result<(), String> {
     match CONFIG.get() {
         Some(config) => config.reload(),
@@ -89,8 +79,7 @@ pub fn reload() -> Result<(), String> {
     }
 }
 
-/// Writes `("Section.Key", text)` pairs into the file (comments kept) and re-reads it;
-/// for the in-game menu. Returns whether it was saved.
+/// For the in-game menu: writes the pairs into the file and re-reads it.
 pub fn save(values: &[(&str, String)]) -> bool {
     match CONFIG.get() {
         Some(config) => config.save_values(values).is_ok(),
@@ -114,7 +103,6 @@ mod tests {
         assert_eq!(config.general.config_version, 1);
         assert!(config.general.pause_in_combat);
         assert!(config.general.no_pickup_animation);
-        // Twice the game's own reach out of the box.
         for group in
             [config.materials, config.items, config.corpse_loot, config.lost_runes, config.chests]
         {
@@ -123,7 +111,6 @@ mod tests {
         for group in [config.materials, config.items, config.corpse_loot, config.lost_runes] {
             assert!(group.enabled);
         }
-        // Chests stay shut by default: a mimic opens the same way.
         assert!(!config.chests.enabled);
         assert!(config.logging.log_file);
         assert!(!config.logging.pickup_probe);

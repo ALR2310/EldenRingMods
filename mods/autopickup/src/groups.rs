@@ -1,10 +1,5 @@
-//! The `ActionButtonParam` rows of the interactions that get picked up automatically, by group.
-//! The IDs were checked against the vanilla and an overhaul mod's `ActionButtonParam` tables and
-//! corrected: the DLC materials added, chests in a group of their own, "Pillage" rows counted as
-//! corpse loot. Levers, doors, graces and talking are in none of them. See
-//! `docs/exec_action_button.md`.
+//! The `ActionButtonParam` rows picked up automatically, by group (`docs/exec_action_button.md`).
 
-/// One group of interactions, switched on and scaled together.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Group {
     Materials,
@@ -18,12 +13,10 @@ impl Group {
     pub const ALL: [Group; 5] =
         [Group::Materials, Group::Items, Group::CorpseLoot, Group::LostRunes, Group::Chests];
 
-    /// This group's bit in the enabled mask the hook reads.
     pub const fn bit(self) -> u8 {
         1 << self as u8
     }
 
-    /// The group's row IDs, ascending.
     pub const fn ids(self) -> &'static [u32] {
         match self {
             Group::Materials => &MATERIALS,
@@ -62,8 +55,7 @@ const CHESTS: [u32; 1] = [4300];
 /// Your dropped runes after dying.
 const LOST_RUNES: [u32; 1] = [1000];
 
-/// The group `id` belongs to. Plain slice searches: the hook calls this, so no
-/// allocation.
+/// The hook calls this, so it only searches slices and never allocates.
 pub fn classify(id: u32) -> Option<Group> {
     Group::ALL.into_iter().find(|group| group.ids().binary_search(&id).is_ok())
 }

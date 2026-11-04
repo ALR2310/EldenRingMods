@@ -110,7 +110,8 @@ key in the default file has a one-line comment.
 
 **Logging.** One log file per mod, written next to the DLL. Messages are short and technical:
 `Component: state`, for example `Menu: registered`. Failures include the reason. Do not dump
-long lists at normal verbosity.
+long lists at normal verbosity. Log lines are for developers, not players; the exception is a
+deliberate hint such as `game may need a mod update, check Nexus`.
 
 **Naming.** Rust standard: `snake_case` functions and modules, `UpperCamelCase` types,
 `SCREAMING_SNAKE_CASE` constants. The only exception is the crate's `[lib] name`, which is

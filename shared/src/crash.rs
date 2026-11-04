@@ -1,11 +1,8 @@
 //! Logs fatal-looking exceptions (access violation, stack overflow, fast fail, ...) to the mod's
-//! log, so a crash the game swallows (no WER dump, no event) still leaves the faulting address and
-//! a stack. Installed by [`crate::logger::install_panic_hook`].
-//!
-//! It never handles anything: the vectored handler only logs and returns "continue search", so
-//! the game's own handlers run as before. These are first-chance exceptions, so a line here is
-//! not always the crash; the last one before the log ends is. A top-level unhandled-exception
-//! filter does not work here because the game's CRT replaces it.
+//! log, so a crash the game swallows still leaves the faulting address and a stack. It never
+//! handles anything: the vectored handler only logs and continues the search. These are
+//! first-chance exceptions, so the last line before the log ends is the crash. A top-level filter
+//! does not work here: the game's CRT replaces it.
 
 use std::cell::Cell;
 use std::ffi::c_void;
@@ -18,7 +15,6 @@ const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
 const FROM_ADDRESS_UNCHANGED: u32 = 0x6;
 /// Distinct (code, address) pairs logged per process; the rest is noise.
 const MAX_LOGGED: usize = 16;
-/// Bytes of stack scanned for return addresses.
 const STACK_BYTES: usize = 0x400;
 const MAX_FRAMES: usize = 12;
 /// x64 `CONTEXT` size, and the offsets of `Rsp` / `Rip` in it.
@@ -26,9 +22,7 @@ const CONTEXT_SIZE: usize = 0x4D0;
 const CONTEXT_RSP: usize = 0x98;
 const CONTEXT_RIP: usize = 0xF8;
 const STACK_OVERFLOW: u32 = 0xC000_00FD;
-/// Bytes scanned at the top of the stack for the outermost frames.
 const OUTER_BYTES: usize = 0x1000;
-/// Bytes shown from the faulting instruction.
 const CODE_BYTES: usize = 16;
 
 #[repr(C)]
@@ -76,7 +70,6 @@ thread_local! {
     static IN_HANDLER: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Registers the handler (once per DLL copy).
 pub fn install() {
     // SAFETY: `handler` has the signature the API expects and stays valid for the life of the process.
     INSTALLED.call_once(|| unsafe {
@@ -97,7 +90,6 @@ fn exception_name(code: u32) -> Option<&'static str> {
     })
 }
 
-/// Reads `len` bytes at `addr` without faulting (false when unreadable).
 fn read_bytes(addr: usize, buf: &mut [u8]) -> bool {
     let mut read = 0usize;
     // SAFETY: reads this process's own memory into `buf`; an unreadable address makes the call fail instead of faulting.
@@ -145,8 +137,8 @@ fn preceded_by_call(before: &[u8; 8]) -> bool {
         || (before[5] == 0xFF && matches!(before[6], 0x50..=0x57))
 }
 
-/// `[lowest, highest)` address of the current thread's stack, from the TEB
-/// (`DeallocationStack` / `StackBase`), so the unwinder never walks outside it.
+/// `[lowest, highest)` address of the current thread's stack, from the TEB, so the unwinder never
+/// walks outside it.
 fn stack_bounds() -> (usize, usize) {
     let (low, high): (usize, usize);
     // SAFETY: gs:[...] is the x64 TEB of the current thread.
@@ -162,9 +154,8 @@ fn stack_bounds() -> (usize, usize) {
     (low, high)
 }
 
-/// Walks the stack with the `.pdata` unwind tables (exact frames, unlike the
-/// scan below). Starts at the faulting instruction. Stops at the first frame
-/// whose stack pointer leaves the thread's stack or does not grow.
+/// Walks the stack with the `.pdata` unwind tables (exact frames), starting at the faulting
+/// instruction, until a frame leaves the thread's stack or does not grow.
 fn unwind_frames(context: *const u8) -> Vec<String> {
     let mut ctx = Context([0; CONTEXT_SIZE]);
     // SAFETY: the caller passes a CONTEXT record of CONTEXT_SIZE bytes.
@@ -215,9 +206,8 @@ fn unwind_frames(context: *const u8) -> Vec<String> {
     frames
 }
 
-/// Heuristic fallback: values on the first `STACK_BYTES` of the stack that
-/// look like a return address. Used when unwinding is not safe (stack
-/// overflow) or yields nothing.
+/// Heuristic fallback: values on the stack that look like a return address, for when unwinding
+/// is not safe (stack overflow) or yields nothing.
 fn stack_frames(rsp: usize) -> Vec<String> {
     let mut stack = vec![0u8; STACK_BYTES];
     if !read_bytes(rsp, &mut stack) {
@@ -245,9 +235,8 @@ fn looks_like_return_address(value: usize) -> bool {
     read_bytes(value - 8, &mut before) && preceded_by_call(&before)
 }
 
-/// The outermost frames (thread start up to where a runaway recursion began),
-/// scanned from the top of the stack downwards. After a stack overflow the
-/// innermost frames are all the same loop; these show who entered it.
+/// The outermost frames, scanned from the top of the stack: after a stack overflow the innermost
+/// frames are all the same loop, these show who entered it.
 fn outer_frames() -> Vec<String> {
     let (low, high) = stack_bounds();
     if high <= low || high - low < OUTER_BYTES {

@@ -1,17 +1,5 @@
-//! Optional in-game menu via the ERNativeUI host (see `shared::menu`).
-//! Without `ERNativeUI.dll` the mod works exactly as before, from the TOML
-//! file only. Layout (System > Game Options):
-//!
-//! ```text
-//! Auto Pickup                -> opens a page with:
-//!   Materials / Items / Corpse loot / Lost runes / Chests -> each a page with: Enabled, Range
-//!   Pause in combat          on/off
-//!   Log file                 on/off
-//! ```
-//!
-//! Changes are written to `AutoPickup.toml` (comments kept) once the player
-//! stops for a second, and the mod applies them when it re-reads the file right
-//! after (about a second after the player stops).
+//! Optional in-game menu through the ERNativeUI host; without it the mod runs from the TOML file.
+//! Changes are saved to `AutoPickup.toml` a second after the player stops, then re-read.
 
 use std::sync::OnceLock;
 
@@ -22,10 +10,8 @@ use shared::menu::{self, MenuBuilder, NumberSetting, Setting};
 use crate::config;
 use crate::range::{MAX_RANGE, MIN_RANGE};
 
-/// Slider step: 100 positions from 0.1 to 10.
 const RANGE_STEP: f64 = 0.1;
 
-/// The two settings of one group's page; `$section` is its TOML section.
 struct GroupSettings {
     enabled: Setting,
     range: NumberSetting,
@@ -52,25 +38,21 @@ static LOG_FILE: Setting = Setting::flag("Logging.LogFile");
 
 static MENU: OnceLock<menu::Menu> = OnceLock::new();
 
-/// The menu texts, one file per language (`locales/`); English is the fallback.
 static TEXT: Catalog = Catalog::new(&[
     ("english", include_str!("../locales/en.json")),
     ("vietnamese", include_str!("../locales/vi.json")),
 ]);
 
-/// The text of `key` in the host language.
 fn t(key: &str) -> String {
     TEXT.tr(key)
 }
 
-/// After the file is written (and re-read): the mod follows its config on its
-/// own, so only the log switch needs following here.
+/// The mod follows its config on its own; only the log switch needs following here.
 fn saved() {
     logger::set_enabled(config::get().logging.log_file);
 }
 
-/// One group's page: the switch, then the range. A macro because the row
-/// readers must be plain `fn`s (no captures).
+/// A macro because the row readers must be plain `fn`s (no captures).
 macro_rules! group_page {
     ($b:expr, $parent:expr, $title:expr, $help:expr, $settings:expr, $field:ident) => {{
         let page = $b.submenu($parent, $title, $help)?;
@@ -103,14 +85,12 @@ fn build(b: &mut MenuBuilder) -> Result<(), String> {
     })
 }
 
-/// Registers the menu on a worker thread. Must start early: the host closes
-/// registration shortly after startup.
+/// Must start early: the host closes registration shortly after startup.
 pub fn start(hmodule: u64) {
     menu::start_saver(config::save, Some(saved));
     menu::spawn_menu(&MENU, hmodule, "auto-pickup", "Auto Pickup", build);
 }
 
-/// After a config reload: show the reloaded values in the menu.
 pub fn sync_from_config() {
     menu::sync(&MENU);
 }
@@ -124,8 +104,7 @@ mod tests {
         assert_eq!((MATERIALS.range.min, MATERIALS.range.max), (MIN_RANGE, MAX_RANGE));
     }
 
-    /// Every key the menu passes to `t` is in every language file, and the files
-    /// have the same keys (nothing missing, nothing left over).
+    /// Every key the menu uses is in every language file, and the files have the same keys.
     #[test]
     fn language_files_match_the_menu_keys() {
         TEXT.assert_matches_source(include_str!("menu.rs"), 21);

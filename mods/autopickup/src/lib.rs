@@ -13,8 +13,7 @@ mod range;
 use shared::{dll_dir, logger};
 
 /// # Safety
-/// This is exposed this way so the library loader can call it. Do not call it
-/// yourself.
+/// Called by the loader only.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     const DLL_PROCESS_ATTACH: u32 = 1;
@@ -26,13 +25,11 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         let dir = dll_dir(hmodule);
         let report = config::init(&format!("{dir}\\AutoPickup.toml"));
 
-        // [Logging] LogFile gates the log file entirely - see shared::logger.
         logger::set_enabled(config::get().logging.log_file);
         logger::init(&dir, "AutoPickup.log");
         logger::install_panic_hook();
 
-        // Registers the in-game menu right away: the host only accepts
-        // registrations in its first seconds. No-op without ERNativeUI.
+        // The menu host accepts registrations only in its first seconds.
         menu::start(hmodule);
 
         report.log("AutoPickup.toml");

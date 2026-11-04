@@ -1,12 +1,8 @@
 //! Detects code another mod already hooked and tells the user: an ERROR log line naming the other
-//! DLL, plus one message box per mod listing every feature it turned off.
-//!
-//! A foreign hook is a jump at the patch site (`E9 rel32`, `FF 25` through a pointer, or
-//! `mov r64, imm64; jmp r64`) that leaves the game executable. Its owner is the module that
-//! contains the destination; when the destination is a stub the other mod allocated itself, the
-//! owner is guessed from pointers inside the stub. Only hooks installed before ours are seen.
-//! The first conflict opens a short collection window so features that fail one after another
-//! share one box, which is shown on its own thread to keep the loader lock free.
+//! DLL, plus one message box per mod listing every feature it turned off. A foreign hook is a jump
+//! at the patch site (`E9 rel32`, `FF 25` through a pointer, or `mov r64, imm64; jmp r64`) that
+//! leaves the game executable; only hooks installed before ours are seen. Conflicts reported close
+//! together share one box, shown on its own thread to keep the loader lock free.
 
 use std::ffi::c_void;
 use std::sync::Mutex;
@@ -46,12 +42,10 @@ const MB_ICONWARNING: u32 = 0x30;
 const MB_SETFOREGROUND: u32 = 0x1_0000;
 const MB_TOPMOST: u32 = 0x4_0000;
 
-/// How long the first conflict waits for more before the box is shown, so
-/// features installed one after another land in the same box.
+/// The first conflict waits this long for more, so features that fail one after another share a box.
 const COLLECT_WINDOW: Duration = Duration::from_millis(2000);
 
-/// Conflicts waiting for the box: `(feature, other mod's DLL if known)`. Each
-/// mod DLL has its own copy, which is what makes the box per mod.
+/// Conflicts waiting for the box: `(feature, other mod's DLL if known)`. One list per mod DLL.
 static PENDING: Mutex<Vec<(String, Option<String>)>> = Mutex::new(Vec::new());
 
 /// Bytes read at a hook site: enough for `mov r64, imm64; jmp r64` (12) and the
@@ -62,30 +56,23 @@ const MEM_COMMIT: u32 = 0x1000;
 const PAGE_NOACCESS: u32 = 0x01;
 const PAGE_GUARD: u32 = 0x100;
 
-/// How much of a stub outside any module is searched for a pointer back to
-/// the DLL that allocated it.
+/// How much of a stub outside any module is searched for a pointer back to its DLL.
 const STUB_SCAN_LEN: usize = 128;
 
-/// Bytes at the hook site that go into the log line.
 const HEAD_LOG_LEN: usize = 12;
 
-/// A jump another mod already planted at the site.
 pub struct ForeignHook {
     pub site: usize,
     pub dest: usize,
     /// File name of the DLL that owns `dest`; `None` if it couldn't be found.
     pub owner: Option<String>,
-    /// `dest` is a stub outside any module and `owner` is a guess from the
-    /// pointers inside it.
+    /// `dest` is a stub outside any module and `owner` is a guess from pointers inside it.
     pub via_stub: bool,
-    /// The first bytes at `site`, for the log.
     pub head: Vec<u8>,
 }
 
-/// Where the jump at the start of `code` goes, if `code` begins with one of the
-/// shapes mods use to hook: `E9 rel32`, `FF 25 rel32` (through a pointer), or
-/// `mov r64, imm64` followed by `jmp r64`. `site` is the address of `code[0]`.
-/// `pointer` reads the 8-byte pointer a `FF 25` jumps through.
+/// Where the jump at the start of `code` goes, if it is one of the shapes mods hook with. `site`
+/// is the address of `code[0]`; `pointer` reads the 8-byte pointer a `FF 25` jumps through.
 fn jump_destination(
     site: usize,
     code: &[u8; SITE_READ_LEN],
@@ -107,8 +94,8 @@ fn jump_destination(
     }
 }
 
-/// The foreign hook at `site`, if its first bytes are a jump out of the game
-/// image. A jump that lands in the game exe is the game's own code, not a hook.
+/// The foreign hook at `site`, if its first bytes jump out of the game image (a jump into the
+/// game exe is the game's own code).
 ///
 /// # Safety
 /// `site..site + 13` must be readable memory of this process.
@@ -124,7 +111,6 @@ pub unsafe fn foreign_hook_at(site: *const u8) -> Option<ForeignHook> {
 }
 
 /// A hook at `site` jumping to `dest`, unless `dest` is inside the game exe.
-/// For callers that found the jump by their own pattern.
 pub fn foreign_hook(site: usize, dest: usize) -> Option<ForeignHook> {
     let owner = diag::module_containing(dest).map(|m| m.name);
     if owner.as_deref().is_some_and(is_game_exe) {
@@ -144,8 +130,7 @@ fn is_game_exe(name: &str) -> bool {
     name.to_lowercase().ends_with(".exe")
 }
 
-/// Bytes readable from `addr` to the end of its committed region, 0 if it
-/// isn't readable.
+/// Bytes readable from `addr` to the end of its committed region, 0 if unreadable.
 pub(crate) fn readable_len(addr: usize) -> usize {
     // SAFETY: `MemoryBasicInformation` holds only integers, for which all-zero is valid.
     let mut info = unsafe { std::mem::zeroed::<MemoryBasicInformation>() };
@@ -159,10 +144,8 @@ pub(crate) fn readable_len(addr: usize) -> usize {
     (info.base_address + info.region_size).saturating_sub(addr)
 }
 
-/// Names the mod that owns a stub allocated outside any module: such a stub
-/// calls or jumps back into its DLL, so the first non-game, non-system module
-/// that an 8-byte pointer or an `E8`/`E9 rel32` in it lands in is taken as the
-/// owner. A guess: a stub that only jumps back into the game gives nothing.
+/// Names the mod that owns a stub allocated outside any module: the first non-game, non-system
+/// module that a pointer or `E8`/`E9 rel32` in the stub lands in. A guess.
 fn owner_from_stub(stub: usize) -> Option<String> {
     let len = readable_len(stub).min(STUB_SCAN_LEN);
     // SAFETY: `readable_len` checked `stub..stub + len` is committed, readable memory.
@@ -183,9 +166,8 @@ fn owner_from_stub(stub: usize) -> Option<String> {
     })
 }
 
-/// Logs `hook` and queues it for the mod's message box.
-/// `feature` is what the mod turns off, `log_file` the name the user should
-/// look at. Conflicts reported within [COLLECT_WINDOW] share one box.
+/// Logs `hook` and queues it for the mod's message box; `feature` is what the mod turns off and
+/// `log_file` the file the user should look at.
 pub fn report(mod_name: &str, feature: &str, log_file: &str, hook: &ForeignHook) {
     let owner = match (&hook.owner, hook.via_stub) {
         (Some(name), true) => format!("{name}, from its stub"),
@@ -206,10 +188,8 @@ fn pending() -> std::sync::MutexGuard<'static, Vec<(String, Option<String>)>> {
     PENDING.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Adds a conflict to [PENDING]; the first one starts the thread that, after
-/// [COLLECT_WINDOW], shows everything collected by then in one box. A modal
-/// box on the caller's thread could stall the game or a loader lock, hence
-/// the thread.
+/// The first conflict starts the thread that shows everything collected after [COLLECT_WINDOW] in
+/// one box. A modal box on the caller's thread could stall the game.
 fn queue_box(mod_name: &str, log_file: &str, feature: &str, owner: Option<String>) {
     let first = {
         let mut queue = pending();
@@ -227,8 +207,7 @@ fn queue_box(mod_name: &str, log_file: &str, feature: &str, owner: Option<String
     });
 }
 
-/// Body of the message box: one sentence for a single conflict, a list for
-/// several; the same shape for every mod and feature, details are in the log.
+/// One sentence for a single conflict, a list for several; details are in the log.
 fn box_text(mod_name: &str, entries: &[(String, Option<String>)], log_file: &str) -> String {
     let who = |owner: &Option<String>| owner.clone().unwrap_or_else(|| "another mod".to_string());
     match entries {
@@ -256,7 +235,6 @@ fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-/// Shows a modal warning box; returns when the user closes it.
 fn show(title: &str, text: &str) {
     let (title, text) = (wide(title), wide(text));
     // SAFETY: `title` and `text` are NUL-terminated UTF-16 strings that outlive the call.
@@ -347,7 +325,7 @@ mod tests {
 
     #[test]
     fn ordinary_code_is_not_a_jump() {
-        // movaps xmm0,xmm6; mov rbx,[r11+0x10]: the weightmultiplier site
+        // movaps xmm0,xmm6; mov rbx,[r11+0x10]: a real hook site
         assert_eq!(
             jump_destination(0x1000, &code(&[0x0F, 0x28, 0xC6, 0x49, 0x8B, 0x5B, 0x10]), |_| None),
             None

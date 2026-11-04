@@ -1,7 +1,5 @@
-//! Per-mod log file. Logging is off by default and is switched with [set_enabled]; while it is
-//! off no file is created or written. The first line written after switching it on creates the
-//! file, truncating the previous run's log. The flag is checked on every write, so a config
-//! reload takes effect at once.
+//! Per-mod log file, off by default ([set_enabled]). While off no file is created; the first line
+//! after switching on truncates the previous run's log.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -9,9 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, Mutex, MutexGuard, Once};
 
 struct LogState {
-    /// Set by [init]; `None` until then.
     path: Option<String>,
-    /// Opened by the first write while logging is enabled.
     file: Option<File>,
 }
 
@@ -20,19 +16,16 @@ static LOG: LazyLock<Mutex<LogState>> =
 static PANIC_HOOK_INSTALLED: Once = Once::new();
 static ENABLED: AtomicBool = AtomicBool::new(false);
 
-/// Turns the log file on or off. Call it after loading the config and after every reload.
+/// Call it after loading the config and after every reload.
 pub fn set_enabled(enabled: bool) {
     ENABLED.store(enabled, Ordering::Relaxed);
 }
 
-/// Locks the log state. A poisoned lock is still usable: logging must never panic, least of
-/// all from the panic hook.
+/// A poisoned lock is still usable: logging must never panic, least of all from the panic hook.
 fn state() -> MutexGuard<'static, LogState> {
     LOG.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Records where the log goes (`file_name` inside `log_dir`) without touching the disk.
-/// Does nothing if already initialized.
 pub fn init(log_dir: &str, file_name: &str) {
     let mut guard = state();
     if guard.path.is_none() {
@@ -40,18 +33,15 @@ pub fn init(log_dir: &str, file_name: &str) {
     }
 }
 
-/// Truncates and opens the log file at `path`.
 fn open(path: &str) -> Option<File> {
     if let Some(dir) = std::path::Path::new(path).parent() {
         let _ = fs::create_dir_all(dir);
     }
     let _ = File::create(path);
-    // Append mode keeps writes at the real end of the file even if something else (the user
-    // clearing it in an editor) resized it meanwhile.
+    // Append mode, in case something else (the user clearing it in an editor) resized the file.
     OpenOptions::new().create(true).append(true).open(path).ok()
 }
 
-/// Writes one line as `[timestamp] [LEVEL] message`.
 fn write_line(level: &str, message: &str) {
     if !ENABLED.load(Ordering::Relaxed) {
         return;
@@ -69,25 +59,22 @@ fn write_line(level: &str, message: &str) {
     }
 }
 
-/// Informational line.
 pub fn log(message: &str) {
     write_line("INFO", message);
 }
 
-/// Something unexpected that the mod recovered from or keeps retrying: the feature is not lost.
+/// Something unexpected that the mod recovered from or keeps retrying.
 pub fn warn(message: &str) {
     write_line("WARN", message);
 }
 
-/// A feature failed and stays disabled for the rest of the session. The level already says
-/// "error", so the message should not repeat it.
+/// A feature failed and stays disabled. The level already says "error".
 pub fn error(message: &str) {
     write_line("ERROR", message);
 }
 
-/// Installs a process-wide panic hook that logs thread, location and message before running the
-/// previous hook. Without it a panic on a background thread ends that thread and the log just
-/// stops. Call once, early in `DllMain`, after [init]; later calls do nothing.
+/// Logs thread, location and message of any panic before running the previous hook; without it a
+/// panic on a background thread ends the thread and the log just stops. Call once, after [init].
 pub fn install_panic_hook() {
     PANIC_HOOK_INSTALLED.call_once(|| {
         let default_hook = std::panic::take_hook();

@@ -1,7 +1,5 @@
-//! Ties the pieces together: installs the hook, applies the config (which
-//! groups are on, their `Range`) and follows reloads, and every frame tells
-//! the hook whether the player is in combat. `shared::reload` owns the reload
-//! key; this only follows `RELOAD_GENERATION`.
+//! Installs the hook, applies the config (enabled groups, `Range`) and follows reloads, and tells
+//! the hook every frame whether the player is in combat.
 
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -25,7 +23,6 @@ fn group_config(config: &Config, group: Group) -> config::Group {
     }
 }
 
-/// Bit mask of the groups switched on.
 fn enabled_mask(config: &Config) -> u8 {
     Group::ALL
         .into_iter()
@@ -33,8 +30,7 @@ fn enabled_mask(config: &Config) -> u8 {
         .fold(0, |mask, group| mask | group.bit())
 }
 
-/// The scale to write per group: the configured `Range` while the group is on,
-/// 1.0 (the game's own distance) while it is off.
+/// The scale per group: the configured `Range` while it is on, 1.0 (the game's own) while off.
 fn ranges(config: &Config) -> Vec<(Group, f32)> {
     Group::ALL
         .into_iter()
@@ -92,16 +88,15 @@ pub fn run() {
                 ranges_pending = true;
                 crate::menu::sync_from_config();
             }
-            // Not in the world (a change made from the title screen's menu):
-            // keep the request and apply it once the world is loaded.
+            // Not in the world yet (a change made from the title screen's menu): keep the request
+            // and apply it once the world is loaded.
             if ranges_pending {
                 if shared::player::main_player_chr_ins_ptr().is_none() {
                     if !waiting_logged {
                         logger::warn("Reload: deferred, not in world");
                         waiting_logged = true;
                     }
-                // SAFETY: runs on a game task; `instance_mut` returns `Err` while the singleton does not
-                // exist.
+                // SAFETY: runs on a game task; `instance_mut` is `Err` until the singleton exists.
                 } else if let Ok(repo) = unsafe { SoloParamRepository::instance_mut() } {
                     waiting_logged = false;
                     ranges_pending = false;

@@ -1,7 +1,6 @@
-//! Text of the in-game menu in more than one language. A mod keeps one JSON
-//! file per language (`locales/en.json`, `locales/vi.json`), each with the same
-//! keys; the menu code only names a key, e.g. `t("walk.label")`. A key missing
-//! in the selected language falls back to English, then to the key itself.
+//! Text of the in-game menu in several languages: one JSON file per language with the same keys;
+//! the menu code only names a key, e.g. `t("walk.label")`. A missing key falls back to English,
+//! then to the key.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -13,20 +12,17 @@ pub const ENGLISH: &str = "english";
 
 static LANGUAGE: Mutex<String> = Mutex::new(String::new());
 
-/// Sets the language from the ERNativeUI host's exact identifier (called by
-/// `erui::connect`), e.g. `"vietnamese"`. A language the mod has no file for
+/// Sets the language from the host's identifier, e.g. `"vietnamese"`; a language without a file
 /// shows English.
 pub fn set_language(identifier: &str) {
     *LANGUAGE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = identifier.to_string();
 }
 
-/// The language set by [`set_language`] (empty until the host reported one).
 pub fn language() -> String {
     LANGUAGE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
 }
 
-/// Flattens a JSON file into `dotted.key -> text`: `{"walk": {"label": "x"}}`
-/// becomes `walk.label = "x"`. Only strings are texts.
+/// Flattens a JSON file into `dotted.key -> text`; only strings are texts.
 pub fn parse_texts(text: &str) -> Result<HashMap<String, String>, String> {
     use serde_json::Value;
 
@@ -54,14 +50,7 @@ pub fn parse_texts(text: &str) -> Result<HashMap<String, String>, String> {
     Ok(texts)
 }
 
-/// One mod's translations, embedded in the DLL. Declare it as a `static`:
-///
-/// ```ignore
-/// static TEXT: Catalog = Catalog::new(&[
-///     ("english", include_str!("../locales/en.json")),
-///     ("vietnamese", include_str!("../locales/vi.json")),
-/// ]);
-/// ```
+/// One mod's translations, embedded in the DLL; declare it as a `static`.
 pub struct Catalog {
     files: &'static [(&'static str, &'static str)],
     parsed: OnceLock<HashMap<&'static str, HashMap<String, String>>>,
@@ -98,8 +87,7 @@ impl Catalog {
             .unwrap_or_else(|| key.to_string())
     }
 
-    /// The sorted keys of one language's file (for tests that compare the
-    /// files with each other and with the keys a menu uses).
+    /// The sorted keys of one language's file, for tests.
     pub fn keys(&self, language: &str) -> Vec<String> {
         let mut keys: Vec<String> =
             self.languages().get(language).map(|t| t.keys().cloned().collect()).unwrap_or_default();
@@ -107,9 +95,8 @@ impl Catalog {
         keys
     }
 
-    /// For a menu's test: every `t("key")` call in `source` (the menu's own
-    /// file, `include_str!("menu.rs")`) is in every language file and the files
-    /// hold nothing else. `min_keys` guards against the scan finding nothing.
+    /// For a menu's test: every `t("key")` in `source` is in every language file and the files
+    /// hold nothing else; `min_keys` guards against the scan finding nothing.
     pub fn assert_matches_source(&self, source: &str, min_keys: usize) {
         let mut used: Vec<String> = Vec::new();
         for (at, _) in source.match_indices("t(\"") {
