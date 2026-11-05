@@ -13,8 +13,10 @@ If you use an AI assistant, point it at [AGENTS.md](AGENTS.md) and run the promp
 ```
 shared/            code used by every mod (config, logging, memory scanning, hooks, ...)
 mods/<name>/       one mod = one crate = one DLL
-docs/              project-wide documentation
-scripts/           build and release helpers
+docs/              project-wide documentation (research conventions, shared reference tables)
+scripts/           build, release and IDA helpers
+vendor/            third-party crates patched for this project (hudhook)
+.github/workflows/ CI
 ```
 
 A mod looks like this:
@@ -24,16 +26,19 @@ mods/<name>/
 ├── Cargo.toml          must contain `[lints] workspace = true`
 ├── build.rs            embeds the Windows version resource
 ├── <Name>.toml         default config, embedded into the DLL at build time
+├── locales/            menu texts (en.json, vi.json), for a mod with an in-game menu
 ├── README.md           English: what it does, how to install it, links to the docs
 ├── README.vi.md        Vietnamese translation
 ├── CHANGELOG.md        user-facing release notes (English)
 ├── nexus_page.bbcode   description for the mod's Nexus page (BBCode), when it has one
-├── license-notice.txt  optional; any *license*.txt / *notice*.txt here or in assets/ is
+├── THIRD-PARTY-NOTICES.txt  optional; any *license*.txt / *notice*.txt here or in assets/ is
 │                       packed with the DLL by scripts/build-mod.ps1
 └── src/
     ├── lib.rs          DllMain and wiring only
     └── ...             one module per feature
 ```
+
+An internal mod that is never released (Toolbox) has no README, CHANGELOG or Nexus page.
 
 Anything that needs more than a README (research notes, offsets, how a game system works) goes
 in `mods/<name>/docs/<topic>.md`. Write it the way [docs/research/README.md](docs/research/README.md)
@@ -52,12 +57,12 @@ one; how a module works and why is explained in `shared/docs/`.
 | Memory | `memscan`, `codepatch`, `conflict` | AOB scan, code hooks, detecting another mod's hook |
 | Game engine | `task`, `alloc_hook`, `player`, `params`, `anim` | Per-frame tasks and engine lookups that survive game updates, the "player is in the world" gate, safe param access, animation groups |
 | Interaction | `input`, `reload`, `announce`, `menu` | Hotkeys, config reload, top-of-screen banner, in-game menu |
-| Overlay and HUD | `gfx`, `overlay` (feature) | Editing a Scaleform movie in memory, mouse and cursor hooks for a mod's own ImGui overlay |
+| Overlay and HUD | `gfx`, `overlay` (feature) | Editing a Scaleform movie in memory; a Dear ImGui window over DX12 (fonts, theme, saved layout) with the mouse and cursor hooks |
 
 ## Building
 
-Requirements: Windows x64, the stable Rust toolchain with the MSVC target, and the Windows SDK
-(`rc.exe` is needed for the version resource).
+Requirements: Windows x64, Rust with the MSVC target at the `rust-version` of the root
+`Cargo.toml` or newer, and the Windows SDK (`rc.exe` is needed for the version resource).
 
 ```powershell
 cargo build --release -p <crate>
@@ -67,7 +72,8 @@ cargo clippy --workspace --all-targets
 ```
 
 To build and package a mod: `pwsh scripts/build-mod.ps1 -Mod <Mod> [-Zip]` (output in
-`builds/<crate>/`). The zip holds the DLL and its config; a mod that creates its config on first run
+`builds/<crate>/`). Release builds go through this script: it remaps the source paths so the DLL carries no
+local user or toolchain path. The zip holds the DLL and its config; a mod that creates its config on first run
 and should ship the DLL alone sets `ship-config = false` under `[package.metadata.release]` in its
 `Cargo.toml`.
 
@@ -93,7 +99,6 @@ explain a constraint, a game quirk, or a decision that is not obvious from the c
 - `lib.rs` stays thin: load config, start logging, register features.
 - One feature per module. If a file passes roughly 400 lines, look for a seam to split on.
 - Prefer small functions with early returns over deep nesting.
-- `shared` grows with the mods: bring a module over only when the mod being added needs it.
 - Shared logic lives in `shared`. Do not copy a helper between mods; do not move code into
   `shared` until a second mod actually needs it.
 - Mods are linked statically against `shared` and share no runtime state with each other.
@@ -122,11 +127,12 @@ habits add many more:
 - Do not spell the mod's file names (`<Mod>.toml`, `<Mod>.log`) in the code; build them from
   `shared::dll_stem`.
 - Keep the `/PDBALTPATH:mod.pdb` line in `build.rs`, and keep the mod's name out of
-  `FileDescription`. Engines have flagged the name in each of these places.
+  `FileDescription` (`Elden Ring mod`). Engines have flagged the name in each of these places.
 
 **Config.** TOML, one file next to the DLL, created from the embedded default on first run.
 Missing keys are added from the default without touching the user's comments or values. Every
-key in the default file has a one-line comment.
+key in the default file has a short comment: what it does and its range. A mod that used to read
+an `.ini` imports it once (`import_ini`) and keeps the old values.
 
 **Logging.** One log file per mod, written next to the DLL. Messages are short and technical:
 `Component: state`, for example `Menu: registered`. Failures include the reason. Do not dump
@@ -144,7 +150,10 @@ PascalCase so the DLL gets the right file name (`#![allow(non_snake_case)]` in `
 - Every mod README is short and has the same three sections: About (what it does and its known
   limits, in plain language), Installation, and Documentation (changelog, Nexus page and the
   `docs/` pages). How it works belongs in `docs/`, not in the README.
-- Technical notes (offsets, how a game system works) go in `mods/<name>/docs/`.
+- Technical notes (offsets, how a game system works) go in `mods/<name>/docs/`; how a shared module
+  works goes in `shared/docs/`; tables more than one mod uses go in `docs/`.
+- Name another mod only when this mod deliberately supports or detects it (Seamless Co-op, for
+  example); otherwise write "a third-party mod".
 - README and CHANGELOG are English. Add a Vietnamese README (`README.vi.md`) for each mod and
   keep it in sync.
 - CHANGELOG follows [Keep a Changelog](https://keepachangelog.com): one short line per change,
@@ -161,7 +170,7 @@ PascalCase so the DLL gets the right file name (`#![allow(non_snake_case)]` in `
   as scope: `fix(autoregen): stop healing while dead`. Subject in the imperative, under 72
   characters. One logical change per commit.
 - Do not commit binaries, game files, `regulation.bin`, crash dumps, API keys or local paths.
-- `.local/` (personal notes, a TODO list, scratch files) and `dumps/` are ignored by git. Keep
+- `.local/`, `TODO.md` (personal notes, scratch files) and `dumps/` are ignored by git. Keep
   anything that is not meant for the repository there.
 - Test a change in the game before opening a PR, and say which game version and mod setup you
   tried (vanilla, Seamless Co-op, ...).
