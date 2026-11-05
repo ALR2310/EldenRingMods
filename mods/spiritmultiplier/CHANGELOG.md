@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Config file is now SpiritMultiplier.toml; settings from SpiritMultiplier.ini are kept.
+- Config file is now TOML; settings from the old INI file are kept.
 - Clean code, hoping to fix false positives.
 
 ## [1.6.0] - 2026-11-03
