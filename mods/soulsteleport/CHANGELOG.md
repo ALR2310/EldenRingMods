@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-- Config file is now SoulsTeleport.toml; settings from SoulsTeleport.ini are kept.
+## [1.1.1] - 2026-11-05
+
+- Config file is now TOML; settings from the old INI file are kept.
 - Clean code, hoping to fix false positives.
 
 ## [1.1.0] - 2026-09-26
