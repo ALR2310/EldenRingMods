@@ -77,7 +77,7 @@ dependencies = [
 
 [[package]]
 name = "autoregen"
-version = "2.6.4"
+version = "2.7.0"
 dependencies = [
  "eldenring",
  "fromsoftware-shared",
