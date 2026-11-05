@@ -13,9 +13,25 @@ A DLL mod that gives you runes passively over time just from playing, plus bonus
 
 [size=4][b][color=#C0860A]I[/color][color=#CA9623]n[/color][color=#D4A63B]s[/color][color=#DDB654]t[/color][color=#E7C66D]a[/color][color=#F1D686]l[/color][color=#F1D686]l[/color][color=#E7C66D]a[/color][color=#DDB654]t[/color][color=#D4A63B]i[/color][color=#CA9623]o[/color][color=#C0860A]n[/color][/b][/size]
 
-Any DLL mod loader works, e.g. [url=https://www.nexusmods.com/eldenring/mods/117]Elden Mod Loader[/url], [url=https://github.com/soulsmods/ModEngine2/releases]Mod Engine 2[/url], [url=https://github.com/garyttierney/me3/releases]Mod Engine 3[/url].
+Any DLL mod loader works, e.g. [url=https://github.com/garyttierney/me3/releases]Mod Engine 3[/url], [url=https://github.com/soulsmods/ModEngine2/releases]Mod Engine 2[/url], [url=https://www.nexusmods.com/eldenring/mods/117]Elden Mod Loader[/url].
 
-[b]Option 1 - [url=https://github.com/soulsmods/ModEngine2/releases]Mod Engine 2[/url] (recommended)[/b]
+[b]Option 1 - [url=https://github.com/garyttierney/me3/releases]Mod Engine 3[/url][/b]
+[list=1]
+[*]Download Mod Engine 3 from the link above and run its installer.[/*]
+[*]Download this mod and put [b]PassiveRunes.dll[/b] and [b]PassiveRunes.toml[/b] in a [b]natives[/b] folder, next to the profile file you create in the next step.[/*]
+[*]Create a profile file named [b]PassiveRunes.me3[/b] with this content (the path is relative to the profile file):
+[code]profileVersion = "v1"
+
+[[supports]]
+game = "eldenring"
+
+[[natives]]
+path = "natives/PassiveRunes.dll"[/code]
+[/*]
+[*]Launch the game by double-clicking [b]PassiveRunes.me3[/b], or run [b]me3 launch -p PassiveRunes.me3[/b].[/*]
+[/list]
+
+[b]Option 2 - [url=https://github.com/soulsmods/ModEngine2/releases]Mod Engine 2[/url][/b]
 [list=1]
 [*]Download Mod Engine 2 from the link above and extract it into your game folder (the same folder as [i]eldenring.exe[/i]).[/*]
 [*]Download this mod, then create a folder to hold it and its config file - for example, inside your game folder create a [b]natives[/b] folder.[/*]
@@ -27,7 +43,7 @@ Any DLL mod loader works, e.g. [url=https://www.nexusmods.com/eldenring/mods/117
 [*]Launch the game using Mod Engine 2's launcher, [b]modengine2_launcher.exe[/b].[/*]
 [/list]
 
-[b]Option 2 - [url=https://www.nexusmods.com/eldenring/mods/117]Elden Mod Loader[/url][/b]
+[b]Option 3 - [url=https://www.nexusmods.com/eldenring/mods/117]Elden Mod Loader[/url][/b]
 [list=1]
 [*]Download Elden Mod Loader from the link above and extract it into your game folder.[/*]
 [*]Download this mod and drag [b]PassiveRunes.dll[/b] and [b]PassiveRunes.toml[/b] into the [b]mods[/b] folder.[/*]
