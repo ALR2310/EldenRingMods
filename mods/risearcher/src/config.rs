@@ -73,7 +73,7 @@ pub struct Logging {
     pub log_file: bool,
 }
 
-/// The settings of the `.ini` file the 2.0 release used, laid over the template. The weapon keys
+/// The settings of the `.ini` file earlier DLL builds used, laid over the template. The weapon keys
 /// (`Bow.X`, `Crossbow.X`, `Ballista.X`) are the same in the table form; the ammo keys became
 /// `Bullet.ArrowMaxQuantity` and `Bullet.BoltMaxQuantity`.
 pub fn import_ini(ini: &str) -> String {
@@ -86,7 +86,7 @@ pub fn import_ini(ini: &str) -> String {
     })
 }
 
-/// 2.0 kept its settings in `<name>.ini`; they become the new file when there is none yet.
+/// Earlier DLL builds kept their settings in `<name>.ini`; they become the new file when there is none yet.
 pub fn adopt_ini(path: &str, ini_path: &str) {
     shared::toml_config::adopt_ini(path, ini_path, import_ini);
 }
