@@ -39,7 +39,7 @@ number, and the settings in use stay as they were instead of being replaced by a
 - [Nexus page](https://www.nexusmods.com/eldenring/mods/11173): downloads and comments.
 - [docs/animation_speed.md](docs/animation_speed.md): the speed field, other fields tried, hooked reads.
 - [docs/action_groups.md](docs/action_groups.md): which animations belong to which group.
-- [docs/tae_ids.md](docs/tae_ids.md): the `aNNN` animation prefixes by weapon, spell and weapon art.
+- [tae_ids](../../docs/tae_ids.md): the `aNNN` animation prefixes by weapon, spell and weapon art.
 - [docs/override_conditions.md](docs/override_conditions.md): `[[Override]]` by SpEffect or equip load.
 - [docs/enemy_speed.md](docs/enemy_speed.md): how enemies and bosses are told apart.
 - [docs/critical_victim.md](docs/critical_victim.md): the victim of a critical hit.

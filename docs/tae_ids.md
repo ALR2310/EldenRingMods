@@ -1,8 +1,8 @@
 # TAE animation ids
 
 Status: **Reference**, not a research result. Lookup table for the `aNNN` prefix of a TAE animation file
-(`aNNN_xxxxxx`) by weapon type, spell and weapon art; used by [action_groups.md](action_groups.md) to
-tell which group an animation belongs to. Conventions: [research notes](../../../docs/research/README.md).
+(`aNNN_xxxxxx`) by weapon type, spell and weapon art. Mods that sort animations by prefix use it, for
+example [SpeedMultiplier](../mods/speedmultiplier/docs/action_groups.md). Conventions: [research notes](research/README.md).
 
 ## Source
 
