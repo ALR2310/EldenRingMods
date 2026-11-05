@@ -2,9 +2,11 @@
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-05
+
 - Fixed the reload key working outside the game window.
 - Added in-game settings menu support (requires the ERNativeUI mod).
-- Config file is now PassiveRunes.toml; settings from PassiveRunes.ini are kept.
+- Config file is now TOML; settings from the old INI file are kept.
 - Clean code, hoping to fix false positives.
 
 ## [2.1.1] - 2026-09-24
