@@ -39,5 +39,7 @@ chạy được giữ nguyên thay vì bị thay bằng file lỗi.
 - [Trang Nexus](https://www.nexusmods.com/eldenring/mods/11173): tải về và bình luận.
 - [docs/animation_speed.md](docs/animation_speed.md): trường tốc độ, các trường đã thử, chỗ đọc bị hook.
 - [docs/action_groups.md](docs/action_groups.md): animation nào thuộc nhóm nào.
+- [docs/tae_ids.md](docs/tae_ids.md): các tiền tố animation `aNNN` theo vũ khí, phép và kỹ năng vũ khí.
+- [docs/override_conditions.md](docs/override_conditions.md): `[[Override]]` theo SpEffect hoặc mức tải.
 - [docs/enemy_speed.md](docs/enemy_speed.md): cách phân biệt kẻ địch và boss.
 - [docs/critical_victim.md](docs/critical_victim.md): nạn nhân của đòn chí mạng.
