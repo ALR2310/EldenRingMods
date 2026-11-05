@@ -10,8 +10,8 @@ be set per group?
 
 ## Mechanism
 
-The animation playing is read from `CSChrTimeActModule.anim_queue` as `aXXX_YYYYYY` (prefix table: [tae_ids.md](tae_ids.md)). `group_of` in
-`shared/src/anim.rs` classifies it, with a test per range.
+The animation playing is read from `CSChrTimeActModule.anim_queue` as `aXXX_YYYYYY` (prefix table: [tae_ids](../../../docs/tae_ids.md)).
+`group_of` in `shared/src/anim.rs` classifies it, with a test per range.
 
 1. **By the `XXX` prefix** for spells and weapon arts, which share the tail `04xxxx` and cannot be told
    apart by it:
