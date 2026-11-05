@@ -46,8 +46,8 @@ Each mod's page describes how it works and its limits, and its `CHANGELOG.md` ha
 
 1. Download the mod from its Nexus page above.
 2. Install a loader that can load DLLs, such as
-   [Mod Engine 2](https://github.com/soulsmods/ModEngine2/releases) (recommended),
-   [Mod Engine 3](https://github.com/garyttierney/me3/releases) or
+   [Mod Engine 3](https://github.com/garyttierney/me3/releases),
+   [Mod Engine 2](https://github.com/soulsmods/ModEngine2/releases) or
    [Elden Mod Loader](https://www.nexusmods.com/eldenring/mods/117).
 3. Put `<Mod>.dll` in the loader's mod folder and register it as the loader documents.
 4. Start the game. `<Mod>.toml` is created next to the DLL on first run; edit it to change behavior and

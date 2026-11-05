@@ -46,8 +46,8 @@ Trang của mỗi mod mô tả cách hoạt động và giới hạn, còn `CHAN
 
 1. Tải mod từ trang Nexus ở bảng trên.
 2. Cài một loader nạp được DLL, ví dụ
-   [Mod Engine 2](https://github.com/soulsmods/ModEngine2/releases) (khuyến nghị),
-   [Mod Engine 3](https://github.com/garyttierney/me3/releases) hoặc
+   [Mod Engine 3](https://github.com/garyttierney/me3/releases),
+   [Mod Engine 2](https://github.com/soulsmods/ModEngine2/releases) hoặc
    [Elden Mod Loader](https://www.nexusmods.com/eldenring/mods/117).
 3. Đặt `<Mod>.dll` vào thư mục mod của loader và khai báo theo hướng dẫn của loader.
 4. Chạy game. `<Mod>.toml` được tạo cạnh DLL ở lần chạy đầu; sửa file đó để đổi hành vi, rồi bấm `F5`
