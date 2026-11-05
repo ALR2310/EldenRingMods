@@ -2,9 +2,11 @@
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-11-05
+
 - Added in-game settings menu support (requires the ERNativeUI mod).
 - Fixed the reload key working outside the game window.
-- Config file is now AutoRegen.toml; settings from AutoRegen.ini are kept.
+- Config file is now TOML; settings from the old INI file are kept.
 - Clean code, hoping to fix false positives.
 
 ## [2.6.4] - 2026-10-10
