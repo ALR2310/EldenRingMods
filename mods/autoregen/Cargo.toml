@@ -25,6 +25,10 @@ winresource = "0.1"
 [lints]
 workspace = true
 
+# Files packed with the DLL in the release zip (scripts/build-mod.ps1 reads this).
+[package.metadata.archive]
+files = ["AutoRegen.toml"]
+
 # Windows version resource (DLL properties), see build.rs
 [package.metadata.winresource]
 ProductName = "Auto Regen"

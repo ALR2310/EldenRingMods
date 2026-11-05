@@ -27,8 +27,8 @@ workspace = true
 
 # The DLL creates its config on first run, so a release ships the DLL alone
 # (scripts/build-mod.ps1 reads this).
-[package.metadata.release]
-ship-config = false
+[package.metadata.archive]
+files = []
 
 # Windows version resource (DLL properties), see build.rs
 [package.metadata.winresource]

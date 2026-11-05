@@ -72,8 +72,10 @@ cargo clippy --workspace --all-targets
 
 Build và đóng gói một mod: `pwsh scripts/build-mod.ps1 -Mod <Mod> [-Zip]` (kết quả ở
 `builds/<crate>/`). Bản phát hành build qua script này: nó ánh xạ lại đường dẫn nguồn để DLL không
-mang đường dẫn người dùng hay toolchain cục bộ. File zip gồm DLL và config của nó; mod tự tạo config ở lần chạy đầu và chỉ cần
-phát hành DLL thì đặt `ship-config = false` dưới `[package.metadata.release]` trong `Cargo.toml`.
+mang đường dẫn người dùng hay toolchain cục bộ. File zip gồm DLL và `files` trong `[package.metadata.archive]` của `Cargo.toml` của
+mod: đường dẫn tương đối theo thư mục mod, cho phép `*`, thư mục nghĩa là cả cây bên dưới, mỗi file
+giữ đường dẫn tương đối của nó. Mọi mod đều phải khai báo, ví dụ `files = ["<Mod>.toml", "THIRD-PARTY-NOTICES.txt"]`;
+`files = []` chỉ có DLL (mod tự tạo config ở lần chạy đầu).
 
 Script trong `scripts/` dùng PowerShell cho các bước build và đóng gói đơn giản. Dùng Python
 (3.10+, ưu tiên chỉ thư viện chuẩn) khi script cần logic thật, như đọc JSON hoặc gọi API.
