@@ -13,8 +13,10 @@ Nếu dùng trợ lý AI, cho nó đọc [AGENTS.md](AGENTS.md) và chạy promp
 ```
 shared/            mã dùng chung cho mọi mod (config, log, quét bộ nhớ, hook, ...)
 mods/<tên>/        một mod = một crate = một DLL
-docs/              tài liệu chung của dự án
-scripts/           script build và phát hành
+docs/              tài liệu chung của dự án (quy ước nghiên cứu, bảng tra dùng chung)
+scripts/           script build, phát hành và IDA
+vendor/            crate bên thứ ba đã vá cho dự án (hudhook)
+.github/workflows/ CI
 ```
 
 Một mod gồm:
@@ -24,16 +26,19 @@ mods/<tên>/
 ├── Cargo.toml          phải có `[lints] workspace = true`
 ├── build.rs            nhúng version resource của Windows
 ├── <Tên>.toml          config mặc định, nhúng vào DLL lúc build
+├── locales/            văn bản menu (en.json, vi.json), cho mod có menu trong game
 ├── README.md           tiếng Anh: chức năng, cách cài, link tới tài liệu
 ├── README.vi.md        bản tiếng Việt
 ├── CHANGELOG.md        ghi chú phát hành cho người chơi (tiếng Anh)
 ├── nexus_page.bbcode   phần mô tả cho trang Nexus của mod (BBCode), nếu mod có trang
-├── license-notice.txt  tuỳ chọn; mọi file *license*.txt / *notice*.txt ở đây hoặc trong assets/
+├── THIRD-PARTY-NOTICES.txt  tuỳ chọn; mọi file *license*.txt / *notice*.txt ở đây hoặc trong assets/
 │                       được scripts/build-mod.ps1 đóng gói cùng DLL
 └── src/
     ├── lib.rs          chỉ DllMain và nối các phần với nhau
     └── ...             mỗi tính năng một module
 ```
+
+Mod nội bộ không phát hành (Toolbox) không có README, CHANGELOG hay trang Nexus.
 
 Nội dung dài hơn README (ghi chú nghiên cứu, offset, cách một hệ thống của game vận hành)
 đặt ở `mods/<tên>/docs/<chủ đề>.md`. Viết theo [docs/research/README.md](docs/research/README.md):
@@ -51,12 +56,12 @@ khi viết mới; cách mỗi module hoạt động và lý do thiết kế nằ
 | Bộ nhớ | `memscan`, `codepatch`, `conflict` | Quét AOB, hook mã máy, phát hiện hook của mod khác |
 | Game engine | `task`, `alloc_hook`, `player`, `params`, `anim` | Task chạy theo frame và tra cứu engine không vỡ khi game cập nhật, cổng "người chơi đã vào thế giới", đọc param an toàn, nhóm animation |
 | Tương tác | `input`, `reload`, `announce`, `menu` | Phím nóng, nạp lại config, banner đầu màn hình, menu trong game |
-| Overlay và HUD | `gfx`, `overlay` (feature) | Chỉnh movie Scaleform trong bộ nhớ, hook chuột và con trỏ cho overlay ImGui riêng của mod |
+| Overlay và HUD | `gfx`, `overlay` (feature) | Chỉnh movie Scaleform trong bộ nhớ; cửa sổ Dear ImGui trên DX12 (font, giao diện, bố cục đã lưu) cùng hook chuột và con trỏ |
 
 ## Build
 
-Yêu cầu: Windows x64, Rust stable với target MSVC, Windows SDK (cần `rc.exe` cho version
-resource).
+Yêu cầu: Windows x64, Rust với target MSVC ở bản `rust-version` của `Cargo.toml` gốc hoặc mới
+hơn, Windows SDK (cần `rc.exe` cho version resource).
 
 ```powershell
 cargo build --release -p <crate>
@@ -66,7 +71,8 @@ cargo clippy --workspace --all-targets
 ```
 
 Build và đóng gói một mod: `pwsh scripts/build-mod.ps1 -Mod <Mod> [-Zip]` (kết quả ở
-`builds/<crate>/`). File zip gồm DLL và config của nó; mod tự tạo config ở lần chạy đầu và chỉ cần
+`builds/<crate>/`). Bản phát hành build qua script này: nó ánh xạ lại đường dẫn nguồn để DLL không
+mang đường dẫn người dùng hay toolchain cục bộ. File zip gồm DLL và config của nó; mod tự tạo config ở lần chạy đầu và chỉ cần
 phát hành DLL thì đặt `ship-config = false` dưới `[package.metadata.release]` trong `Cargo.toml`.
 
 Script trong `scripts/` dùng PowerShell cho các bước build và đóng gói đơn giản. Dùng Python
@@ -91,7 +97,6 @@ nhiên.
 - `lib.rs` giữ mỏng: nạp config, khởi tạo log, đăng ký tính năng.
 - Mỗi tính năng một module. File vượt khoảng 400 dòng thì tìm chỗ để tách.
 - Ưu tiên hàm nhỏ và return sớm thay vì lồng nhiều tầng.
-- `shared` lớn dần theo các mod: chỉ chuyển một module sang khi mod đang thêm vào cần nó.
 - Logic dùng chung nằm ở `shared`. Không sao chép hàm giữa các mod; cũng không đưa code
   lên `shared` cho tới khi có mod thứ hai thật sự cần.
 - Mod link tĩnh với `shared` và không chia sẻ trạng thái lúc chạy với mod khác.
@@ -118,12 +123,13 @@ quen làm tăng cờ rất nhiều:
 - Không đóng gói, làm rối hay mã hoá DLL.
 - Không viết thẳng tên file của mod (`<Mod>.toml`, `<Mod>.log`) trong code; ghép từ
   `shared::dll_stem`.
-- Giữ dòng `/PDBALTPATH:mod.pdb` trong `build.rs`, và không để tên mod trong `FileDescription`.
+- Giữ dòng `/PDBALTPATH:mod.pdb` trong `build.rs`, và không để tên mod trong `FileDescription` (`Elden Ring mod`).
   Mỗi chỗ này đã từng bị engine gắn cờ.
 
 **Config.** TOML, một file cạnh DLL, tạo từ bản mặc định nhúng sẵn ở lần chạy đầu. Khoá còn
 thiếu được thêm từ bản mặc định mà không đụng vào comment hay giá trị của người dùng. Mỗi khoá
-trong file mặc định có một dòng comment.
+trong file mặc định có comment ngắn: nó làm gì và khoảng giá trị. Mod từng đọc `.ini` nhập nó
+một lần (`import_ini`) và giữ giá trị cũ.
 
 **Log.** Mỗi mod một file log cạnh DLL. Thông điệp ngắn và kỹ thuật: `Thành phần: trạng thái`,
 ví dụ `Menu: registered`. Lỗi kèm lý do. Không in danh sách dài ở mức log bình thường. Log viết
@@ -141,7 +147,10 @@ cho dev, không cho người chơi; ngoại lệ là lời nhắn cố ý như
 - README của mọi mod ngắn và có cùng ba mục: Giới thiệu (mod làm gì và các giới hạn đã biết, bằng
   ngôn ngữ thường), Cài đặt, và Tài liệu (changelog, trang Nexus và các trang `docs/`). Cách hoạt
   động đặt ở `docs/`, không đặt trong README.
-- Ghi chú kỹ thuật (offset, cách một hệ thống của game vận hành) đặt ở `mods/<tên>/docs/`.
+- Ghi chú kỹ thuật (offset, cách một hệ thống của game vận hành) đặt ở `mods/<tên>/docs/`; cách một
+  module chung hoạt động đặt ở `shared/docs/`; bảng tra nhiều mod cùng dùng đặt ở `docs/`.
+- Chỉ nêu tên mod khác khi mod này cố ý hỗ trợ hoặc phát hiện nó (ví dụ Seamless Co-op); còn lại
+  viết "a third-party mod".
 - README và CHANGELOG bằng tiếng Anh. Mỗi mod có thêm `README.vi.md` và giữ đồng bộ.
 - CHANGELOG theo [Keep a Changelog](https://keepachangelog.com): mỗi thay đổi một dòng ngắn,
   ví dụ `Added X option.` hoặc `Fixed crash when Y.` Chỉ ghi tính năng và bản sửa người dùng
@@ -158,7 +167,7 @@ cho dev, không cho người chơi; ngoại lệ là lời nhắn cố ý như
   một thay đổi logic.
 - Không commit binary, file game, `regulation.bin`, crash dump, API key hay đường dẫn máy cá
   nhân.
-- `.local/` (ghi chú cá nhân, danh sách TODO, file nháp) và `dumps/` được git bỏ qua. Để ở đó
+- `.local/`, `TODO.md` (ghi chú cá nhân, file nháp) và `dumps/` được git bỏ qua. Để ở đó
   mọi thứ không dành cho repo.
 - Thử trong game trước khi mở PR và nói rõ đã thử với bản game nào, cấu hình mod nào (vanilla,
   Seamless Co-op, ...).
