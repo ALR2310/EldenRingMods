@@ -1,16 +1,18 @@
 <#
 .SYNOPSIS
-    Builds one mod in release mode and copies its DLL and config to builds/<crate>/. A mod whose
-    Cargo.toml has `ship-config = false` under [package.metadata.release] ships the DLL alone: it
-    creates its config on first run.
+    Builds one mod in release mode and copies what a release ships to builds/<crate>/.
+
+    The DLL is always shipped. What goes next to it is `files` under [package.metadata.archive]
+    in the mod's Cargo.toml, which every mod must declare: paths relative to the mod folder,
+    wildcards allowed, a folder meaning everything below it. Each file keeps its relative path in
+    the output and the zip. `files = []` ships the DLL alone.
 
 .PARAMETER Mod
     PascalCase mod name, the same as its [lib] name in Cargo.toml (for example AutoPickup).
     The crate and folder name is this value in lowercase.
 
 .PARAMETER Zip
-    Also create builds/<crate>/<Mod>-<version>.zip containing the DLL, config and any
-    license/notice .txt files.
+    Also create builds/<crate>/<Mod>-<version>.zip with the shipped files.
 
 .PARAMETER Version
     Version used in the zip name. Defaults to the version in the mod's Cargo.toml.
@@ -26,6 +28,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $root = Split-Path -Parent $PSScriptRoot
 $crate = $Mod.ToLower()
@@ -35,8 +38,30 @@ $config = "$Mod.toml"
 if (-not (Test-Path $crateDir)) { throw "No crate at '$crateDir'." }
 if (-not (Test-Path (Join-Path $crateDir $config))) { throw "Missing '$config' in '$crateDir'." }
 
-$manifest = Get-Content (Join-Path $crateDir "Cargo.toml") -Raw
-$shipConfig = $manifest -notmatch '(?m)^ship-config\s*=\s*false'
+# Cargo parses the manifest, so `files` can be written any way TOML allows.
+$package = (cargo metadata --no-deps --format-version 1 --manifest-path (Join-Path $root "Cargo.toml") |
+    ConvertFrom-Json).packages | Where-Object name -eq $crate
+if (-not $package) { throw "Cargo does not know a package named '$crate'." }
+$archive = $package.metadata.archive
+if (-not ($archive -and $archive.PSObject.Properties.Name -contains "files")) {
+    throw "'$crate' has no 'files' list under [package.metadata.archive] in its Cargo.toml."
+}
+
+# Paths of the files to ship next to the DLL, relative to the mod folder.
+function Resolve-Shipped {
+    $found = @(foreach ($pattern in @($archive.files)) {
+        if ([IO.Path]::IsPathRooted($pattern) -or $pattern -match '(^|[\\/])\.\.([\\/]|$)') {
+            throw "files entry '$pattern' must be inside the mod folder."
+        }
+        $items = @(Get-ChildItem -Path (Join-Path $crateDir $pattern) -ErrorAction SilentlyContinue)
+        if (-not $items) { throw "files entry '$pattern' matches nothing in '$crateDir'." }
+        foreach ($item in $items) {
+            if ($item.PSIsContainer) { Get-ChildItem $item.FullName -Recurse -File } else { $item }
+        }
+    })
+    $found | ForEach-Object { [IO.Path]::GetRelativePath($crateDir, $_.FullName).Replace('\', '/') } | Sort-Object -Unique
+}
+$shipped = @(Resolve-Shipped)
 
 # Panic locations of this repo and of the dependencies would otherwise embed the build
 # machine's paths (including the user name) in the DLL.
@@ -55,23 +80,28 @@ if (-not (Test-Path $dll)) { throw "'$dll' was not produced; check [lib] name in
 
 $out = Join-Path $root "builds/$crate"
 New-Item -ItemType Directory -Force $out | Out-Null
-# License and notice files (e.g. license-notice.txt) in the crate folder or its assets/ folder
-# ship next to the DLL.
-$notices = @(foreach ($dir in $crateDir, (Join-Path $crateDir "assets")) {
-    if (Test-Path $dir) { Get-ChildItem $dir -File | Where-Object Name -match '(license|notice).*\.txt$' }
-})
-$shipped = @($dll) + @(if ($shipConfig) { Join-Path $crateDir $config }) + @($notices | ForEach-Object FullName)
-Copy-Item $shipped -Destination $out -Force
-if (-not $shipConfig) { Remove-Item (Join-Path $out $config) -ErrorAction SilentlyContinue }
-Write-Host "Built $out/$Mod.dll"
+Get-ChildItem $out -Exclude *.zip | Remove-Item -Recurse -Force
+Copy-Item $dll -Destination $out
+foreach ($file in $shipped) {
+    $target = Join-Path $out $file
+    New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
+    Copy-Item (Join-Path $crateDir $file) -Destination $target
+}
+Write-Host "Built $out/$Mod.dll (+ $($shipped.Count) file(s))"
 
 if ($Zip) {
     if (-not $Version) {
-        if ($manifest -notmatch '(?m)^version\s*=\s*"([^"]+)"') { throw "No version in $crate's Cargo.toml." }
-        $Version = $Matches[1]
+        $Version = $package.version
     }
     $zipPath = Join-Path $out "$Mod-$Version.zip"
-    $files = @("$Mod.dll") + @(if ($shipConfig) { $config }) + @($notices | ForEach-Object Name) | ForEach-Object { Join-Path $out $_ }
-    Compress-Archive -Path $files -DestinationPath $zipPath -Force
+    Remove-Item $zipPath -ErrorAction SilentlyContinue
+    $zipFile = [IO.Compression.ZipFile]::Open($zipPath, "Create")
+    try {
+        foreach ($name in @("$Mod.dll") + $shipped) {
+            $null = [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipFile, (Join-Path $out $name), $name)
+        }
+    } finally {
+        $zipFile.Dispose()
+    }
     Write-Host "Created $zipPath"
 }

@@ -73,9 +73,10 @@ cargo clippy --workspace --all-targets
 
 To build and package a mod: `pwsh scripts/build-mod.ps1 -Mod <Mod> [-Zip]` (output in
 `builds/<crate>/`). Release builds go through this script: it remaps the source paths so the DLL carries no
-local user or toolchain path. The zip holds the DLL and its config; a mod that creates its config on first run
-and should ship the DLL alone sets `ship-config = false` under `[package.metadata.release]` in its
-`Cargo.toml`.
+local user or toolchain path. The zip holds the DLL plus `files` from `[package.metadata.archive]` in the mod's
+`Cargo.toml`: paths relative to the mod folder, `*` allowed, a folder meaning everything below it, each
+file keeping its relative path. Every mod declares it, for example `files = ["<Mod>.toml", "THIRD-PARTY-NOTICES.txt"]`;
+`files = []` ships the DLL alone (a mod that creates its config on first run).
 
 Scripts in `scripts/` are PowerShell for simple build and packaging steps. Use Python (3.10+,
 standard library only where possible) when a script needs real logic, such as parsing JSON or
