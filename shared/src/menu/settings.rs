@@ -228,8 +228,10 @@ impl NumberSetting {
         (plan.step > 0 && span % plan.step == 0 && (2..=256).contains(&positions)).then_some(plan)
     }
 
-    /// `value` as the row accepts it: clamped to the range.
+    /// `value` as the row accepts it: clamped to the range, and rounded for a whole-number key
+    /// (`1.5` would not parse as an integer when the config is read back).
     fn normalize(&self, value: f64) -> f64 {
+        let value = if self.decimal_point { value } else { value.round() };
         value.clamp(self.min, self.max)
     }
 
@@ -448,6 +450,15 @@ mod tests {
         assert_eq!(setting.normalize(-1.0), 0.0);
         assert_eq!(setting.text(2.0), "2.0"); // keeps a TOML float field a float
         assert_eq!(setting.text(0.5), "0.5");
+    }
+
+    #[test]
+    fn a_whole_number_row_rounds_what_was_typed() {
+        let whole = NumberSetting::whole("B", -5.0, 5.0, None);
+        assert_eq!(whole.normalize(1.5), 2.0);
+        assert_eq!(whole.normalize(-9.0), -5.0);
+        assert_eq!(whole.normalize(4.4), 4.0);
+        assert_eq!(whole.text(whole.normalize(1.5)), "2");
     }
 
     #[test]
