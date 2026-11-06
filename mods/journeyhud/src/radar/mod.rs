@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use eldenring::cs::{
     BossHealthDisplayEntry, CSCamera, CSEventFlagMan, CSFade, CSFeManHudState, CSFeManImp,
-    SoloParamRepository, WorldAreaTime, WorldChrMan, WorldMapPieceParam,
+    CSMenuManImp, SoloParamRepository, WorldAreaTime, WorldChrMan, WorldMapPieceParam,
 };
 use fromsoftware_shared::FromStatic;
 
@@ -91,6 +91,8 @@ pub struct Snapshot {
     pub fade: f32,
     /// False while a menu has the HUD hidden or changed.
     pub hud_visible: bool,
+    /// A cutscene is playing.
+    pub in_cutscene: bool,
     /// A boss health bar is on screen.
     pub boss_fight: bool,
     /// The player is in a cave, catacomb or other dungeon block.
@@ -169,6 +171,13 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
     // SAFETY: the accessor returns `Err` while the singleton does not exist.
     let fe = unsafe { CSFeManImp::instance() }.ok();
     let hud_visible = fe.as_ref().is_none_or(|fe| fe.hud_state == CSFeManHudState::Default);
+    // Both bytes of the menu manager's `unk18` are 0 for the length of a cutscene (the HUD hiding
+    // itself when idle does not touch them), and 1 otherwise.
+    // SAFETY: the accessor returns `Err` while the singleton does not exist; the offset is inside the object.
+    let in_cutscene = unsafe { CSMenuManImp::instance() }.is_ok_and(|menu| unsafe {
+        let base = std::ptr::from_ref(menu).cast::<u8>();
+        *base.add(0x18) == 0 && *base.add(0x19) == 0
+    });
     // A boss health bar is on screen while one of its slots names a character.
     let boss_fight = fe.is_some_and(|fe| {
         fe.boss_health_displays.iter().any(|boss| !boss.field_ins_handle.is_empty())
@@ -266,6 +275,7 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
         camera_forward: [view.2.0, view.2.2],
         fade,
         hud_visible,
+        in_cutscene,
         boss_fight,
         in_cave,
         at_roundtable,
