@@ -33,6 +33,12 @@ Ideas taken from an MIT-licensed minimap mod (see `THIRD-PARTY-NOTICES.txt`):
 - **Hidden when** `CSFeManImp.hud_state != Default` (a menu is changing the HUD) or `CSFade` covers the screen
   (loading, warp; the maximum of `fade_plates[i].current_color.a`): it fades, then hides, because menus and the
   world map are drawn where the radar sits.
+- **Cutscenes** (`Snapshot::in_cutscene`): the minimap also fades while bytes `+0x18` and `+0x19` of
+  `CSMenuManImp` (`unk18`) are both 0; they are 1 otherwise. Found on 2.7.2.0 by diffing the bytes of
+  `CSFeManImp`, `CSMenuManImp`, `CSCamera` and the player between two marks set at the start and end of a
+  boss intro; confirmed on two boss intros and the opening cutscene. What the bytes mean is unknown. Not
+  usable: `hud_state` and `CSCamera::camera_mask` do not change; the flags of `CSFeManImp` (`+0x94`, `+0xa8`
+  `enable_equip_hud`, ...) and `CSMenuManImp::ui_states[23]` follow the HUD's own auto-hide when idle.
 - **hudhook**: loading a texture at a strange moment can hang the loading screen, and every reload leaks a
   buffer; JourneyHUD loads textures exactly once at start-up and the radar uses none.
 

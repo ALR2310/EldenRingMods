@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Added an option to hide the minimap in Roundtable Hold.
+- Fixed the minimap showing during cutscenes.
 - Clean code, hoping to fix false positives.
 
 ## [1.2.0] - 2026-11-03

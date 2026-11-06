@@ -186,7 +186,7 @@ impl Radar {
         show_map: bool,
     ) {
         let dt = ui.io().delta_time;
-        let in_control = snapshot.is_some_and(|s| s.hud_visible && s.fade < 0.05);
+        let in_control = snapshot.is_some_and(|s| s.hud_visible && !s.in_cutscene && s.fade < 0.05);
         self.in_control = in_control;
         let hidden = snapshot.is_some_and(|s| {
             (settings::minimap_hide_in_caves() && s.in_cave)
