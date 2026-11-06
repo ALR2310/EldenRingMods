@@ -1,6 +1,6 @@
 # Animation speed
 
-Status: **Confirmed** on 2.6.2.0, 2.7.0.0 and 2.7.1.0. Conventions:
+Status: **Confirmed** on 2.6.2.0, 2.7.0.0, 2.7.1.0 and 2.7.2.0. Conventions:
 [research notes](../../../docs/research/README.md).
 
 ## Question

@@ -60,8 +60,8 @@ Mod level (`builder.rs`, `settings.rs`):
   `(key, text)` pairs and then `on_saved`. With `TomlConfig` pass `save_values` and a
   `"Section.Key"` key.
 - Numbers: `NumberSetting` with `MenuBuilder::number`. The player types `1.5` (a comma also
-  works); the value is clamped to `[min, max]` and text that is not a number puts the previous
-  value back. The value is written with a decimal point (`2.0`) so a TOML float stays a float,
+  works); the value is clamped to `[min, max]` (and rounded for `NumberSetting::whole`, a key stored
+  as a TOML integer) and text that is not a number puts the previous value back. The value is written with a decimal point (`2.0`) so a TOML float stays a float,
   and shown rounded to six decimals so a value that went through `f32` reads `1.2`.
   `stepped(step)` makes the row a native numeric slider when the host has API 1.2 and the range
   has 2 to 256 positions that the step reaches exactly; `slider(from, to, step)` does the
