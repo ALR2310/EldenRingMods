@@ -584,6 +584,7 @@ dependencies = [
  "shared",
  "texture2ddecoder",
  "toml",
+ "toml_edit",
  "winresource",
 ]
 

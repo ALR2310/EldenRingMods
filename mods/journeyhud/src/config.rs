@@ -7,14 +7,29 @@ use std::sync::{Arc, OnceLock};
 
 use serde::{Deserialize, Serialize};
 
-use shared::toml_config::{LoadReport, Migration, Step, TomlConfig};
+use toml_edit::DocumentMut;
+
+use shared::toml_config::{LoadReport, Migration, Step, TomlConfig, rename_key};
 
 /// Embedded verbatim at compile time - single source of truth for the default file.
 pub const TEMPLATE: &str = include_str!("../JourneyHUD.toml");
 
-/// Format migration steps for `General.ConfigVersion`; none yet (1 is the first
-/// format). Append only - a released step must never change.
-const STEPS: &[Step] = &[];
+/// Format migration steps for `General.ConfigVersion`. Append only - a released step must
+/// never change.
+const STEPS: &[Step] = &[v1_to_v2];
+
+/// 1 -> 2: the `[Layout]` section went away; its offsets moved to the minimap and the target
+/// panel, and the rune counter has its own section.
+fn v1_to_v2(doc: &mut DocumentMut, template: &DocumentMut) {
+    for (old, new) in [
+        ("Layout.OffsetX", "Minimap.OffsetX"),
+        ("Layout.OffsetY", "Minimap.OffsetY"),
+        ("Layout.TargetOffsetX", "Target.OffsetX"),
+        ("Layout.TargetOffsetY", "Target.OffsetY"),
+    ] {
+        rename_key(doc, template, old, new);
+    }
+}
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
@@ -22,7 +37,8 @@ pub struct Config {
     pub general: General,
     pub target: Target,
     pub player: Player,
-    pub layout: Layout,
+    #[serde(rename = "HUD")]
+    pub hud: Hud,
     pub minimap: Minimap,
     pub rendering: Rendering,
     pub logging: Logging,
@@ -52,6 +68,9 @@ pub struct Target {
     pub numbers: bool,
     pub buildup: bool,
     pub effects: bool,
+    pub boss_bar: bool,
+    pub offset_x: i32,
+    pub offset_y: i32,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
@@ -64,17 +83,25 @@ pub struct Player {
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
-pub struct Layout {
+pub struct Hud {
+    pub rune_counter: RuneCounter,
+}
+
+#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
+#[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
+pub struct RuneCounter {
+    pub enabled: bool,
+    pub scale: f64,
     pub offset_x: i32,
     pub offset_y: i32,
-    pub target_offset_x: i32,
-    pub target_offset_y: i32,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct Minimap {
     pub enabled: bool,
+    pub offset_x: i32,
+    pub offset_y: i32,
     pub size: i32,
     pub scale: f64,
     pub range: i32,
@@ -219,6 +246,33 @@ mod tests {
         assert_eq!(STEPS.len() as i64, current - 1);
     }
 
+    /// A version 1 file keeps the places the player dragged the minimap and the panel to.
+    #[test]
+    fn version_1_offsets_move_to_the_minimap_and_the_target() {
+        let old = "[General]
+ConfigVersion = 1
+
+[Layout]
+OffsetX = 300
+OffsetY = 90
+TargetOffsetX = 5
+TargetOffsetY = -7
+";
+        let path =
+            std::env::temp_dir().join(format!("journeyhud_migrate_{}.toml", std::process::id()));
+        std::fs::write(&path, old).unwrap();
+        let (loaded, report) =
+            TomlConfig::<Config>::load_or_create(&path.to_string_lossy(), TEMPLATE, MIGRATION);
+        let config = loaded.get();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(report.migrated, Some((1, 2)));
+        assert!(report.unknown.is_empty(), "{:?}", report.unknown);
+        assert_eq!((config.minimap.offset_x, config.minimap.offset_y), (300, 90));
+        assert_eq!((config.target.offset_x, config.target.offset_y), (5, -7));
+        assert!(!text.contains("[Layout]"), "{text}");
+    }
+
     #[test]
     fn missing_keys_fall_back_to_the_template() {
         let parsed: Config =
@@ -281,7 +335,7 @@ mod tests {
     fn the_drag_key_is_f7_and_the_target_starts_under_the_minimap() {
         let template = template();
         assert_eq!(shared::input::parse_virtual_key(&template.general.drag_key, 0), 0x76);
-        assert_eq!((template.layout.target_offset_x, template.layout.target_offset_y), (0, 0));
+        assert_eq!((template.target.offset_x, template.target.offset_y), (0, 0));
     }
 
     #[test]

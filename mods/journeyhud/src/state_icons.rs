@@ -192,7 +192,7 @@ unsafe extern "system" fn gauge_update(view: *mut u8, index: i64, model: *const 
 ///
 /// # Safety
 /// `value` must be a live clip value of the game.
-unsafe fn display_of(value: *mut u8) -> Option<[f64; 5]> {
+pub unsafe fn display_of(value: *mut u8) -> Option<[f64; 5]> {
     // SAFETY: the value holds its object interface at 24 and the data at 40, as `sub_140D872C0` reads.
     unsafe {
         let interface = *(value.add(24) as *const *mut u8);
@@ -238,13 +238,51 @@ unsafe fn set_rotation(value: *mut u8, degrees: f64) {
 /// # Safety
 /// `view` must be the game's gauge view.
 unsafe fn clip_of(view: *mut u8) -> *mut u8 {
-    // SAFETY: the component sits at a fixed offset of the view; its vtable's second entry returns the clip's value.
+    // SAFETY: the same, with the gauge's component.
+    unsafe { clip_at(view, GAUGE_ROOT) }
+}
+
+/// The root clip's value of the component at `view + offset`.
+///
+/// # Safety
+/// `view + offset` must be a component of the game's that holds a clip (bound with `sub_14076B7C0`).
+pub unsafe fn clip_at(view: *mut u8, offset: usize) -> *mut u8 {
+    // SAFETY: the component's vtable's second entry returns the clip's value.
     unsafe {
-        let component = view.add(GAUGE_ROOT);
+        let component = view.add(offset);
         let value_of: ValueOfFn =
             std::mem::transmute(*(*(component as *const *const usize)).add(1));
         value_of(component)
     }
+}
+
+/// Sets `_x` and `_y` of a clip; `false` while the game's function is not found yet.
+///
+/// # Safety
+/// `value` must be a live clip value of the game.
+pub unsafe fn set_clip_position(value: *mut u8, x: f32, y: f32) -> bool {
+    let set_pos = SET_POS.load(Ordering::Acquire);
+    if set_pos == 0 {
+        return false;
+    }
+    // SAFETY: `set_pos` is the game's function; the caller gives a live clip.
+    unsafe { std::mem::transmute::<usize, SetPosFn>(set_pos)(value, x, y) };
+    true
+}
+
+/// Sets `_xscale` and `_yscale` of a clip to `scale` times 100 percent; `false` while the game's function is not found yet.
+///
+/// # Safety
+/// `value` must be a live clip value of the game.
+pub unsafe fn set_clip_scale(value: *mut u8, scale: f32) -> bool {
+    let set_scale = SET_SCALE.load(Ordering::Acquire);
+    if set_scale == 0 {
+        return false;
+    }
+    let factors = [scale, scale];
+    // SAFETY: `set_scale` is the game's function; the caller gives a live clip.
+    unsafe { std::mem::transmute::<usize, SetScaleFn>(set_scale)(value, factors.as_ptr()) };
+    true
 }
 
 /// The place of gauge `index` in its list, from the root the layout has.

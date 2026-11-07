@@ -18,7 +18,7 @@ use crate::map::layer::{Icon, MapLayer};
 use crate::radar::ui::{self as radar_ui, Placement, Radar};
 use crate::radar::{self, Snapshot as RadarSnapshot};
 use crate::settings;
-use crate::target::{self, Buildup, Effect, Target};
+use crate::target::{self, Boss, Buildup, Effect, Target};
 use crate::text;
 use crate::textures::{self, Textures};
 
@@ -74,6 +74,22 @@ const GAME_ICONS_ROW_PITCH: f32 = 41.0;
 const GAME_ICONS_BOTTOM: f32 = 146.0;
 /// Space between the times under the game's icons and the player's buildup gauge.
 const GAUGE_UNDER_ICONS_GAP: f32 = 6.0;
+/// The game's boss health bar, in 1080p pixels of its picture (measured on screenshots): the fill
+/// with the line under it runs from x 466 to 1465 and ends at y 876. The boss's bars go right under it (`boss_rect`).
+const BOSS_BAR_LEFT: f32 = 466.0;
+const BOSS_BAR_WIDTH: f32 = 999.0;
+const BOSS_BAR_BOTTOM: f32 = 876.0;
+const BOSS_BAR_GAP: f32 = 3.0;
+/// The fill of the game's boss bar is this high; the line it has under it is this far above the
+/// posture bar.
+const BOSS_BAR_HEIGHT: f32 = 9.0;
+const BOSS_LINE_ABOVE: f32 = 1.5;
+/// Each further boss bar stacks this far above the one before (more when `boss_list` spreads them).
+const BOSS_BAR_PITCH: f32 = 55.0;
+/// The game's boss health bars at most.
+const BOSS_SLOTS: usize = 3;
+/// Scale of the textures of the game's boss bar line: its cap (art 39 texels wide) is about 18 px.
+const BOSS_DECO_SCALE: f32 = 0.46;
 /// The icon fades over its last seconds.
 const EFFECT_FADE_SECONDS: f32 = 5.0;
 /// One color per status, in the order of `target::BUILDUP`.
@@ -147,6 +163,8 @@ struct HudRenderLoop {
     trail: Trail,
     /// The same for the posture bar.
     poise_trail: Trail,
+    /// The posture trail of each boss bar, by slot.
+    boss_trails: [Trail; BOSS_SLOTS],
     /// 0 to 1: follows whether the game is in normal play, so the panel goes with its menus.
     panel_alpha: f32,
     /// 0 to 1: follows whether the game shows its row of status icons, for the times under it.
@@ -310,6 +328,21 @@ impl ImguiRenderLoop for HudRenderLoop {
         if self.drag.on() {
             self.drag.render(ui, self.area, target_rect(&self.area, self.s, layout.width));
         }
+        // The posture of each boss bar, locked on or not.
+        let bosses =
+            if self.panel_alpha > 0.01 && !hidden { target::bosses_now() } else { Vec::new() };
+        for (slot, trail) in self.boss_trails.iter_mut().enumerate() {
+            match bosses.iter().find(|boss| boss.slot == slot) {
+                Some(boss) => {
+                    match boss.poise {
+                        Some((poise, max)) => trail.update(boss.id, poise, max, dt),
+                        None => trail.id = 0,
+                    }
+                    draw_boss(ui, boss, trail, &layout);
+                }
+                None => trail.id = 0,
+            }
+        }
         let Some(target) = target::current() else {
             self.trail.id = 0;
             self.poise_trail.id = 0;
@@ -351,7 +384,7 @@ impl ImguiRenderLoop for HudRenderLoop {
 /// resizes the bar, not where it sits.
 fn target_rect(area: &[f32; 4], s: f32, width: f32) -> [f32; 4] {
     let res = area[3] / BASE_HEIGHT;
-    let [offset_x, offset_y] = settings::offset();
+    let [offset_x, offset_y] = settings::column_offset();
     let [target_x, target_y] = settings::target_offset();
     let right = area[0] + area[2] - (offset_x + target_x) * res;
     // It only takes the minimap's room when the minimap hides while the bar is where it started.
@@ -359,6 +392,24 @@ fn target_rect(area: &[f32; 4], s: f32, width: f32) -> [f32; 4] {
         + (offset_y + target_y) * res
         + radar_ui::column_height(res, target_x == 0.0 && target_y == 0.0);
     [right - width * s, y, width * s, (HP_HEIGHT + BAR_GAP + POISE_HEIGHT) * s]
+}
+
+fn boss_pitch() -> f32 {
+    BOSS_BAR_PITCH + crate::boss_list::extra_px()
+}
+
+/// Where the bars of the boss in slot `slot` start, under its game health bar: `[x, y, w]`. The place
+/// follows the screen only, like the game's bar; `s` sizes the bars, not where they sit.
+fn boss_rect(area: &[f32; 4], slot: usize) -> [f32; 3] {
+    let res = area[3] / BASE_HEIGHT;
+    [
+        area[0] + BOSS_BAR_LEFT * res,
+        area[1]
+            + (BOSS_BAR_BOTTOM + crate::boss_list::drop_px() - slot as f32 * boss_pitch()
+                + BOSS_BAR_GAP)
+                * res,
+        BOSS_BAR_WIDTH * res,
+    ]
 }
 
 /// The largest 16:9 rectangle centered in a `w` x `h` display: `[x, y, w, h]`.
@@ -408,9 +459,50 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
     let right = left + width;
 
     let draw = ui.get_foreground_draw_list();
-    let label = format!("{} / {}", target.hp, target.max_hp);
+    // A boss has the game's own health bar, and its posture and effects under it (`draw_boss`): the
+    // panel keeps the buildup. Otherwise: the bars, the effects, then the buildup.
+    let boss = target.boss.filter(|_| settings::boss_bar());
+    let mut row_top = y;
+    if boss.is_none() {
+        let bottom = draw_bars(ui, &draw, target, [trail, poise_trail], [left, y, width], layout);
+        // Under the tan line.
+        row_top = bottom + (LINE + BUILDUP_GAP) * s;
+        if settings::effects_target() && !target.effects.is_empty() {
+            let size = s * TARGET_EFFECTS_SCALE;
+            let per_row = (((right - left) / (EFFECT_CELL * size)).floor() as usize)
+                .clamp(1, PLAYER_EFFECTS_PER_ROW);
+            let cells = Cells {
+                origin: [right, row_top],
+                right_aligned: true,
+                s: size,
+                text: EFFECT_TIME_TARGET * s,
+                per_row,
+            };
+            draw_effects(ui, &draw, &target.effects, cells, layout);
+            let rows = target.effects.len().div_ceil(per_row).min(EFFECT_ROWS);
+            row_top += rows as f32 * EFFECT_ROW * size + EFFECTS_GAP * s;
+        }
+    }
+    for buildup in &target.buildup {
+        draw_buildup(ui, &draw, buildup, [left, row_top, right], layout);
+        row_top += BUILDUP_ROW * s;
+    }
+    anchor_gauges();
+}
 
-    let top = y;
+/// The health and posture bars of the panel with their frames, from `[left, y, width]`; returns
+/// the bottom of the last bar.
+fn draw_bars(
+    ui: &Ui,
+    draw: &DrawListMut<'_>,
+    target: &Target,
+    [trail, poise_trail]: [&Trail; 2],
+    [left, y, width]: [f32; 3],
+    layout: &Layout,
+) -> f32 {
+    let s = layout.s;
+    let right = left + width;
+    let label = format!("{} / {}", target.hp, target.max_hp);
     let max_hp = target.max_hp as f32;
     let trail_fraction = (trail.from > target.hp as f32).then(|| trail.from / max_hp);
     let hp_bottom = y + HP_HEIGHT * s;
@@ -427,62 +519,122 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
         s,
         textures: layout.textures,
     };
-    draw_bar(&draw, &hp_bar);
+    draw_bar(draw, &hp_bar);
     if layout.show_numbers {
         draw_bar_number(ui, &label, [left, right, y, hp_bottom], BAR_NUMBER * s, s);
     }
 
     let mut bottom = hp_bottom;
     let mut poise_top = None;
-    if let Some((poise, max)) = target.poise {
+    if let Some(poise) = target.poise {
         let poise_from = hp_bottom + BAR_GAP * s;
         poise_top = Some(poise_from);
         bottom = poise_from + POISE_HEIGHT * s;
-        let poise_bar = Bar {
-            from: [left, poise_from],
-            to: [right, bottom],
-            fraction: poise / max,
-            trail: (poise_trail.from > poise).then(|| poise_trail.from / max),
-            trail_tint: TRAIL_TINT,
-            trail_color: TRAIL_COLOR,
-            glow: poise_trail.glow(),
-            core: POISE_CORE,
-            edge: POISE_EDGE,
-            s,
-            textures: layout.textures,
-        };
-        draw_bar(&draw, &poise_bar);
-        if layout.show_numbers {
-            let label = format!("{poise:.0} / {max:.0}");
-            draw_bar_number(ui, &label, [left, right, poise_from, bottom], BAR_NUMBER * s, s);
-        }
+        draw_poise_bar(ui, draw, poise, poise_trail, [left, right, poise_from, bottom], layout);
     }
     // A frame for each bar, drawn over both so one bar's does not hide the other's.
-    frame(&draw, left, right, top, hp_bottom, s, layout.textures);
+    frame(draw, left, right, y, hp_bottom, s, layout.textures);
     if let Some(poise_from) = poise_top {
-        frame(&draw, left, right, poise_from, bottom, s, layout.textures);
+        frame(draw, left, right, poise_from, bottom, s, layout.textures);
     }
+    bottom
+}
 
-    // Under the tan line.
-    let mut row_top = bottom + (LINE + BUILDUP_GAP) * s;
-    for buildup in &target.buildup {
-        draw_buildup(ui, &draw, buildup, [left, row_top, right], layout);
-        row_top += BUILDUP_ROW * s;
+/// The posture bar in `[left, right, top, bottom]`, with its number when shown.
+fn draw_poise_bar(
+    ui: &Ui,
+    draw: &DrawListMut<'_>,
+    (poise, max): (f32, f32),
+    poise_trail: &Trail,
+    [left, right, top, bottom]: [f32; 4],
+    layout: &Layout,
+) {
+    let s = layout.s;
+    let poise_bar = Bar {
+        from: [left, top],
+        to: [right, bottom],
+        fraction: poise / max,
+        trail: (poise_trail.from > poise).then(|| poise_trail.from / max),
+        trail_tint: TRAIL_TINT,
+        trail_color: TRAIL_COLOR,
+        glow: poise_trail.glow(),
+        core: POISE_CORE,
+        edge: POISE_EDGE,
+        s,
+        textures: layout.textures,
+    };
+    draw_bar(draw, &poise_bar);
+    if layout.show_numbers {
+        let label = format!("{poise:.0} / {max:.0}");
+        draw_bar_number(ui, &label, [left, right, top, bottom], BAR_NUMBER * s, s);
     }
-    if settings::effects_target() && !target.effects.is_empty() {
+}
+
+/// A boss, on the game's health bar of its slot: its numbers on the bar, and its posture bar under
+/// the line the game draws under it. The game's cap at the left end of that line rises from it
+/// (`MENU_FL_BarDeco_L`) and so does its round ornament at the right end (`MENU_FL_BarDeco`); the
+/// same pieces turned upside down hang from the line over the posture bar, making a mirror image.
+fn draw_boss(ui: &Ui, boss: &Boss, trail: &Trail, layout: &Layout) {
+    let draw = ui.get_foreground_draw_list();
+    let s = layout.s;
+    let res = layout.area[3] / BASE_HEIGHT;
+    let [left, top, width] = boss_rect(&layout.area, boss.slot);
+    let right = left + width;
+    if layout.show_numbers {
+        let label = format!("{} / {}", boss.hp, boss.max_hp);
+        // The fill of the game's bar is 9 px high and ends where the posture bar's gap starts.
+        let bar = [top - (BOSS_BAR_GAP + BOSS_BAR_HEIGHT) * res, top - BOSS_BAR_GAP * res];
+        draw_bar_number(ui, &label, [left, right, bar[0], bar[1]], BAR_NUMBER * s, s);
+    }
+    // The effects, right to left from the end of the bar, under the posture bar.
+    if !boss.effects.is_empty() {
         let size = s * TARGET_EFFECTS_SCALE;
-        let per_row = (((right - left) / (EFFECT_CELL * size)).floor() as usize)
-            .clamp(1, PLAYER_EFFECTS_PER_ROW);
+        let poise_height = if boss.poise.is_some() { POISE_HEIGHT * s } else { 0.0 };
         let cells = Cells {
-            origin: [right, row_top + EFFECTS_GAP * s],
+            origin: [right, top + poise_height + EFFECTS_GAP * s],
             right_aligned: true,
             s: size,
             text: EFFECT_TIME_TARGET * s,
-            per_row,
+            per_row: (((right - left) / (EFFECT_CELL * size)).floor() as usize)
+                .clamp(1, PLAYER_EFFECTS_PER_ROW * EFFECT_ROWS),
         };
-        draw_effects(ui, &draw, &target.effects, cells, layout);
+        draw_effects(ui, &draw, &boss.effects, cells, layout);
     }
-    anchor_gauges();
+    let Some(poise) = boss.poise else {
+        return;
+    };
+    let bottom = top + POISE_HEIGHT * s;
+    draw_poise_bar(ui, &draw, poise, trail, [left, right, top, bottom], layout);
+    let Some(textures) = layout.textures else {
+        return;
+    };
+    let k = BOSS_DECO_SCALE * res;
+    let [cap_w, cap_h] = textures::DECO_LEFT_SIZE;
+    let [_, art_right, _, art_bottom] = textures::DECO_ART;
+    // The game's line is a little above the bar. Upside down, the cap's base (its old bottom row)
+    // is at the top and goes on it.
+    let line_y = top - BOSS_LINE_ABOVE * res;
+    let y0 = line_y - (cap_h - art_bottom) * k;
+    // The game's cap ends a little inside its bar.
+    let x0 = left + 2.5 * res - art_right * k;
+    let white = fade([1.0, 1.0, 1.0, 1.0]);
+    draw.add_image(textures.deco_left, [x0, y0], [x0 + cap_w * k, y0 + cap_h * k])
+        .uv_min([0.0, 1.0])
+        .uv_max([1.0, 0.0])
+        .col(white)
+        .build();
+    // The end of the line with its ornament, upside down with the line on the game's: the part of
+    // the texture that spans from the cap to the right end of the bar.
+    let [line_w, line_h] = textures::DECO_SIZE;
+    let x_end = right + (line_w - textures::DECO_ART_END) * k;
+    let x_start = left;
+    let u0 = 1.0 - (x_end - x_start) / k / line_w;
+    let y1 = line_y - (line_h - textures::DECO_LINE_ROW) * k;
+    draw.add_image(textures.deco, [x_start, y1], [x_end, y1 + line_h * k])
+        .uv_min([u0, 1.0])
+        .uv_max([1.0, 0.0])
+        .col(white)
+        .build();
 }
 
 /// Tells the game's buildup gauge of the player where it goes: at the left, under the game's row of
@@ -632,8 +784,8 @@ fn draw_effects(
     }
 }
 
-/// One buildup bar: the game's icon of the status, then a bar filled with what has built up, with
-/// `built / max` in it when the numbers are shown.
+/// One buildup bar filled with what has built up, with `built / max` in it when the numbers are
+/// shown, and the game's icon of the status at its right end.
 fn draw_buildup(
     ui: &Ui,
     draw: &DrawListMut<'_>,
@@ -643,7 +795,7 @@ fn draw_buildup(
 ) {
     let s = layout.s;
     let middle = top + BUILDUP_ROW * s / 2.0;
-    let mut bar_left = left;
+    let mut bar_right = right;
     if let Some(icon) =
         layout.icons.and_then(|map| Icon::buildup(buildup.kind).and_then(|icon| map.icon(icon)))
     {
@@ -651,18 +803,18 @@ fn draw_buildup(
         let width = height * icon.size[0] / icon.size[1];
         draw.add_image(
             icon.texture,
-            [left, middle - height / 2.0],
-            [left + width, middle + height / 2.0],
+            [right - width, middle - height / 2.0],
+            [right, middle + height / 2.0],
         )
         .col(fade([1.0, 1.0, 1.0, 1.0]))
         .build();
-        bar_left = left + width + BUILDUP_ICON_GAP * s;
+        bar_right = right - width - BUILDUP_ICON_GAP * s;
     }
     let color = BUILDUP_COLORS[buildup.kind];
     let half = BUILDUP_BAR * s / 2.0;
     let bar = Bar {
-        from: [bar_left, middle - half],
-        to: [right, middle + half],
+        from: [left, middle - half],
+        to: [bar_right, middle + half],
         fraction: buildup.built as f32 / buildup.max as f32,
         trail: None,
         trail_tint: TRAIL_TINT,
@@ -679,7 +831,7 @@ fn draw_buildup(
         draw_bar_number(
             ui,
             &label,
-            [bar_left, right, middle - half, middle + half],
+            [left, bar_right, middle - half, middle + half],
             BAR_NUMBER * s,
             s,
         );

@@ -133,7 +133,7 @@ impl Default for Radar {
 pub fn circle(area: &[f32; 4]) -> ([f32; 2], f32) {
     let res = area[3] / 1080.0;
     let radius = settings::minimap_size() * res * settings::minimap_scale();
-    let [offset_x, offset_y] = settings::offset();
+    let [offset_x, offset_y] = settings::column_offset();
     ([area[0] + area[2] - offset_x * res - radius, area[1] + offset_y * res + radius], radius)
 }
 

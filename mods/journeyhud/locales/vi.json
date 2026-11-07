@@ -34,6 +34,18 @@
     "label": "Cỡ thanh tích tụ của bạn",
     "help": "Kích thước thanh tích tụ của bản thân (độc, thối đỏ...) ở góc trái trên. 1 = đúng cỡ của game."
   },
+  "boss_bar": {
+    "label": "Thanh của boss",
+    "help": "Dời thanh máu boss của game xuống thấp, thêm posture và hiệu ứng của boss bên dưới. Cần khởi động lại."
+  },
+  "rune_counter": {
+    "label": "Bộ đếm rune ở góc trên phải",
+    "help": "Dời bộ đếm rune của game lên góc trên bên phải. Kéo bằng phím kéo thả."
+  },
+  "rune_counter_scale": {
+    "label": "Cỡ bộ đếm rune",
+    "help": "Cỡ bộ đếm rune đã dời. 1 = cỡ của game."
+  },
   "buildup": {
     "label": "Tích tụ trạng thái",
     "help": "Hiện độ tích tụ độc, thối đỏ, chảy máu, tử khí, đóng băng, ngủ và điên loạn của mục tiêu."

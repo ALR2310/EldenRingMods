@@ -11,6 +11,8 @@ const EDGE: &[u8] = include_bytes!("../assets/BarEdge.png");
 const GLOW: &[u8] = include_bytes!("../assets/BarEdge2.png");
 const WAKU: &[u8] = include_bytes!("../assets/BarWaku.png");
 const WAKU_LEFT: &[u8] = include_bytes!("../assets/BarWakuL.png");
+const DECO: &[u8] = include_bytes!("../assets/BarDeco.png");
+const DECO_LEFT: &[u8] = include_bytes!("../assets/BarDecoL.png");
 
 /// Rows of `Bar.png` / `BarBG.png` that are visible (of 26, the rest is
 /// transparent padding), used to size the other textures against the bar.
@@ -32,6 +34,17 @@ pub const WAKU_CAP_ART_END: f32 = 832.0;
 /// `BarWakuL.png` (12x48): the cap at the left end; its art is columns 5 to 12.
 pub const WAKU_LEFT_SIZE: [f32; 2] = [12.0, 48.0];
 
+/// `BarDeco.png` (2938x25, `MENU_FL_BarDeco`): the line under the game's boss health bar with a round
+/// ornament at its right end (art ends at column 2928); the line is centered on row 17.5.
+pub const DECO_SIZE: [f32; 2] = [2938.0, 25.0];
+pub const DECO_LINE_ROW: f32 = 17.5;
+pub const DECO_ART_END: f32 = 2928.0;
+/// `BarDecoL.png` (46x38, `MENU_FL_BarDeco_L`): the cap at the left end of the line under the game's
+/// boss health bar; its art is columns 4 to 42 and rows 3 to 33, with its base at the bottom. Upside
+/// down it is the cap of the posture bar under that line.
+pub const DECO_LEFT_SIZE: [f32; 2] = [46.0, 38.0];
+pub const DECO_ART: [f32; 4] = [4.0, 42.0, 3.0, 33.0];
+
 pub struct Textures {
     pub bar: TextureId,
     pub background: TextureId,
@@ -39,6 +52,8 @@ pub struct Textures {
     pub glow: TextureId,
     pub waku: TextureId,
     pub waku_left: TextureId,
+    pub deco: TextureId,
+    pub deco_left: TextureId,
 }
 
 pub fn load(ctx: &mut dyn RenderContext) -> Result<Textures, String> {
@@ -53,6 +68,8 @@ pub fn load(ctx: &mut dyn RenderContext) -> Result<Textures, String> {
         glow: upload("BarEdge2", GLOW)?,
         waku: upload("BarWaku", WAKU)?,
         waku_left: upload("BarWakuL", WAKU_LEFT)?,
+        deco: upload("BarDeco", DECO)?,
+        deco_left: upload("BarDecoL", DECO_LEFT)?,
     })
 }
 
@@ -83,6 +100,8 @@ mod tests {
             (GLOW, (98, 40)),
             (WAKU, (840, 48)),
             (WAKU_LEFT, (12, 48)),
+            (DECO, (2938, 25)),
+            (DECO_LEFT, (46, 38)),
         ] {
             let (pixels, w, h) = decode(png).unwrap();
             assert_eq!((w, h), size);

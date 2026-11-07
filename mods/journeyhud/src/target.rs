@@ -6,8 +6,8 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use eldenring::cs::{
-    CSChrDataModule, CSChrSuperArmorModule, CSTaskGroupIndex, ChrIns, ChrInsModuleContainer,
-    ChrSet, FieldInsHandle, PlayerIns, SpecialEffectEntry, WorldChrMan,
+    CSChrDataModule, CSChrSuperArmorModule, CSFeManImp, CSTaskGroupIndex, ChrIns,
+    ChrInsModuleContainer, ChrSet, FieldInsHandle, PlayerIns, SpecialEffectEntry, WorldChrMan,
 };
 use eldenring::fd4::FD4TaskData;
 use fromsoftware_shared::FromStatic;
@@ -81,6 +81,8 @@ pub struct Target {
     /// The chr's address: stable for one enemy, differs between enemies.
     pub id: usize,
     pub npc_param_id: i32,
+    /// The slot of the game's boss health bars that shows it (0 is the lowest bar), when it has one.
+    pub boss: Option<usize>,
     /// Meters from the player along the world's X and Z axes.
     pub offset: [f32; 2],
     pub hp: i32,
@@ -91,6 +93,32 @@ pub struct Target {
     pub buildup: Vec<Buildup>,
     /// The effects it has that show an icon, in the order the game keeps them.
     pub effects: Vec<Effect>,
+}
+
+/// A boss that has a health bar of the game: `slot` is its place among those bars (0 is the
+/// lowest), `id` tells it from another boss.
+#[derive(Clone)]
+pub struct Boss {
+    pub slot: usize,
+    pub id: usize,
+    pub hp: i32,
+    pub max_hp: i32,
+    /// The value and the maximum of the posture; `None` for a boss without a posture bar.
+    pub poise: Option<(f32, f32)>,
+    /// The effects it has that show an icon, as for the target.
+    pub effects: Vec<Effect>,
+}
+
+/// The bosses with a health bar, kept like [OWN].
+static BOSSES: Mutex<Option<(Vec<Boss>, Instant)>> = Mutex::new(None);
+
+/// The bosses with a health bar, `[]` when stale.
+pub fn bosses_now() -> Vec<Boss> {
+    let Ok(guard) = BOSSES.lock() else { return Vec::new() };
+    match guard.as_ref() {
+        Some((bosses, at)) if at.elapsed() < STALE_AFTER => bosses.clone(),
+        _ => Vec::new(),
+    }
 }
 
 /// The latest target and when it was read; [current] drops it once stale
@@ -170,6 +198,9 @@ pub fn run() {
                 logger::log(&format!("Effects: player {}", describe(&own)));
                 last_own = ids;
             }
+            if let Ok(mut guard) = BOSSES.lock() {
+                *guard = Some((read_bosses(), Instant::now()));
+            }
             if let Ok(mut guard) = OWN.lock() {
                 *guard = Some((shown_effects(own, MAX_EFFECTS), Instant::now()));
             }
@@ -226,11 +257,55 @@ fn own_effects() -> Vec<Effect> {
     world_chr_man.main_player.as_ref().map_or_else(Vec::new, |player| read_effects(&player.chr_ins))
 }
 
+/// Each boss that has a health bar of the game (`Target.BossBar`), whether it is locked on or not.
+fn read_bosses() -> Vec<Boss> {
+    if !settings::enabled() || !settings::boss_bar() {
+        return Vec::new();
+    }
+    // SAFETY: the accessors return `Err` while the singletons do not exist.
+    let (Ok(world_chr_man), Ok(fe)) =
+        (unsafe { WorldChrMan::instance() }, unsafe { CSFeManImp::instance() })
+    else {
+        return Vec::new();
+    };
+    fe.boss_health_displays
+        .iter()
+        .enumerate()
+        .filter(|(_, boss)| !boss.field_ins_handle.is_empty())
+        .filter_map(|(slot, boss)| {
+            let chr = chr_by_handle(world_chr_man, boss.field_ins_handle)?;
+            let max_hp = chr.modules.data.max_hp;
+            let armor = &chr.modules.super_armor;
+            (max_hp > 0).then(|| Boss {
+                slot,
+                id: chr as *const ChrIns as usize,
+                hp: chr.modules.data.hp.max(0),
+                max_hp,
+                poise: (armor.sa_durability_max > 0.0 && armor.sa_durability_max.is_finite())
+                    .then_some((armor.sa_durability.max(0.0), armor.sa_durability_max)),
+                effects: if settings::effects_target() {
+                    shown_effects(read_effects(chr), MAX_EFFECTS)
+                } else {
+                    Vec::new()
+                },
+            })
+        })
+        .collect()
+}
+
 fn read() -> Option<Target> {
     // SAFETY: the accessor returns `Err` while the singleton does not exist.
     let world_chr_man = unsafe { WorldChrMan::instance() }.ok()?;
     let player = world_chr_man.main_player.as_ref()?;
-    let handle = player.locked_on_enemy;
+    // SAFETY: the accessor returns `Err` while the singleton does not exist.
+    let bosses = unsafe { CSFeManImp::instance() }.ok().map(|fe| &fe.boss_health_displays);
+    let mut handle = player.locked_on_enemy;
+    // With no lock-on, the lowest boss bar's boss: its bars show without having to target it.
+    if handle.is_empty() && settings::boss_bar() {
+        handle = bosses
+            .and_then(|b| b.iter().map(|b| b.field_ins_handle).find(|h| !h.is_empty()))
+            .unwrap_or(handle);
+    }
     if handle.is_empty() {
         return None;
     }
@@ -240,9 +315,11 @@ fn read() -> Option<Target> {
         return None;
     }
     let armor = &chr.modules.super_armor;
+    let boss = bosses.and_then(|b| b.iter().position(|b| b.field_ins_handle == handle));
     Some(Target {
         id: chr as *const ChrIns as usize,
         npc_param_id: chr.npc_param_id,
+        boss,
         offset: offset_from(player, chr),
         hp: chr.modules.data.hp.max(0),
         max_hp,

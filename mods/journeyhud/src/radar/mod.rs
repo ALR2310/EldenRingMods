@@ -8,6 +8,9 @@
 mod enemies;
 pub mod ui;
 
+/// `TEAM_TYPE` of Torrent.
+const TORRENT_TEAM: u8 = 10;
+
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -220,8 +223,11 @@ fn read(target: Option<[f32; 2]>) -> Option<Snapshot> {
     };
     let mut spirits = Vec::new();
     if settings::minimap_spirits() {
+        // Torrent is in the same set (team 10): the minimap shows the spirits.
         shared::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| {
-            spirits.extend(dot(chr))
+            if chr.team_type != TORRENT_TEAM {
+                spirits.extend(dot(chr))
+            }
         });
     }
     let mut enemies = Vec::new();

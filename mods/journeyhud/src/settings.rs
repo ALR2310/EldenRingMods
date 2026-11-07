@@ -20,6 +20,11 @@ const ZOOM_LEVELS: [i32; 3] = [50, 100, 200];
 static ENABLED: AtomicBool = AtomicBool::new(true);
 static SHOW_NUMBERS: AtomicBool = AtomicBool::new(true);
 static BUILDUP: AtomicBool = AtomicBool::new(true);
+static BOSS_BAR: AtomicBool = AtomicBool::new(true);
+static RUNE_COUNTER: AtomicBool = AtomicBool::new(false);
+static RUNE_COUNTER_SCALE: AtomicU32 = AtomicU32::new(0x3F33_3333);
+static RUNE_OFFSET_X: AtomicI32 = AtomicI32::new(48);
+static RUNE_OFFSET_Y: AtomicI32 = AtomicI32::new(20);
 static EFFECTS_TARGET: AtomicBool = AtomicBool::new(true);
 static EFFECTS_PLAYER: AtomicBool = AtomicBool::new(true);
 static PLAYER_BUILDUP: AtomicBool = AtomicBool::new(true);
@@ -78,15 +83,21 @@ pub fn load(config: &Config) {
     set_enabled(target.enabled as u8);
     set_show_numbers(target.numbers as u8);
     set_buildup(target.buildup as u8);
+    set_boss_bar(target.boss_bar as u8);
+    let rune = &config.hud.rune_counter;
+    set_rune_counter(rune.enabled as u8);
+    set_rune_counter_scale(rune.scale);
+    set_rune_offset_x(f64::from(rune.offset_x));
+    set_rune_offset_y(f64::from(rune.offset_y));
     set_effects_target(target.effects as u8);
     set_effects_player(config.player.effects as u8);
     set_player_buildup(config.player.buildup as u8);
     set_player_scale(config.player.scale);
     set_width(f64::from(target.width));
-    set_offset_x(f64::from(config.layout.offset_x));
-    set_offset_y(f64::from(config.layout.offset_y));
-    set_target_offset_x(f64::from(config.layout.target_offset_x));
-    set_target_offset_y(f64::from(config.layout.target_offset_y));
+    set_offset_x(f64::from(minimap.offset_x));
+    set_offset_y(f64::from(minimap.offset_y));
+    set_target_offset_x(f64::from(target.offset_x));
+    set_target_offset_y(f64::from(target.offset_y));
     DRAG_KEY.store(parse_virtual_key(&config.general.drag_key, 0), Ordering::Relaxed);
     set_scale(target.scale);
     set_minimap_enabled(minimap.enabled as u8);
@@ -141,6 +152,16 @@ pub fn player_scale() -> f32 {
     f32::from_bits(PLAYER_SCALE.load(Ordering::Relaxed))
 }
 
+/// Whether the game's rune counter is moved to the top right.
+pub fn rune_counter() -> bool {
+    RUNE_COUNTER.load(Ordering::Relaxed)
+}
+
+/// Whether a boss gets its bars under the game's boss health bar.
+pub fn boss_bar() -> bool {
+    BOSS_BAR.load(Ordering::Relaxed)
+}
+
 /// Whether the status buildup bars of the target are shown.
 pub fn buildup() -> bool {
     BUILDUP.load(Ordering::Relaxed)
@@ -161,7 +182,46 @@ pub fn offset() -> [f32; 2] {
     [OFFSET_X.load(Ordering::Relaxed) as f32, OFFSET_Y.load(Ordering::Relaxed) as f32]
 }
 
-/// Where the target bar is moved from its place under the minimap (`TargetOffsetX/Y`).
+/// Size of the rune counter, as a fraction of the game's own.
+pub fn rune_counter_scale() -> f32 {
+    f32::from_bits(RUNE_COUNTER_SCALE.load(Ordering::Relaxed))
+}
+
+/// Where the moved rune counter sits: from the right and the top edge, in pixels at 1080p.
+pub fn rune_offset() -> [f32; 2] {
+    [RUNE_OFFSET_X.load(Ordering::Relaxed) as f32, RUNE_OFFSET_Y.load(Ordering::Relaxed) as f32]
+}
+
+/// The size of the game's rune counter at full size, in pixels at 1080p (measured on screenshots).
+pub const RUNE_BOX: [f32; 2] = [200.0, 36.0];
+/// The minimap column starts this far above the minimap's top edge: the row of the death count.
+const ROW_ABOVE_MINIMAP: f32 = 26.0;
+
+/// `offset()` with the room for the rune counter: where the minimap column is drawn. When the
+/// counter sits over the column (it starts above it and shares some of its width), the column
+/// goes down until it clears the counter.
+pub fn column_offset() -> [f32; 2] {
+    let [x, y] = offset();
+    if !rune_counter() {
+        return [x, y];
+    }
+    let scale = rune_counter_scale();
+    let [rune_x, rune_y] = rune_offset();
+    let box_right = 1920.0 - rune_x;
+    let box_left = box_right - RUNE_BOX[0] * scale;
+    let column_right = 1920.0 - x;
+    let column_left = column_right - 2.0 * minimap_size() * minimap_scale();
+    let column_top = y - ROW_ABOVE_MINIMAP;
+    let box_bottom = rune_y + RUNE_BOX[1] * scale + 2.0;
+    let covers = box_left < column_right && box_right > column_left;
+    if covers && rune_y < column_top && box_bottom > column_top {
+        [x, y + (box_bottom - column_top)]
+    } else {
+        [x, y]
+    }
+}
+
+/// Where the target bar is moved from its place under the minimap (`Target.OffsetX/Y`).
 pub fn target_offset() -> [f32; 2] {
     [TARGET_OFFSET_X.load(Ordering::Relaxed) as f32, TARGET_OFFSET_Y.load(Ordering::Relaxed) as f32]
 }
@@ -364,6 +424,26 @@ pub fn set_player_scale(value: f64) {
     PLAYER_SCALE.store((value as f32).clamp(0.5, 3.0).to_bits(), Ordering::Relaxed);
 }
 
+pub fn set_rune_offset_x(value: f64) {
+    RUNE_OFFSET_X.store(value.round().clamp(-400.0, 1800.0) as i32, Ordering::Relaxed);
+}
+
+pub fn set_rune_offset_y(value: f64) {
+    RUNE_OFFSET_Y.store(value.round().clamp(0.0, 1000.0) as i32, Ordering::Relaxed);
+}
+
+pub fn set_rune_counter_scale(value: f64) {
+    RUNE_COUNTER_SCALE.store((value as f32).clamp(0.3, 1.5).to_bits(), Ordering::Relaxed);
+}
+
+pub fn set_rune_counter(value: u8) {
+    RUNE_COUNTER.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_boss_bar(value: u8) {
+    BOSS_BAR.store(value != 0, Ordering::Relaxed);
+}
+
 pub fn set_buildup(value: u8) {
     BUILDUP.store(value != 0, Ordering::Relaxed);
 }
@@ -377,19 +457,19 @@ pub fn set_width(value: f64) {
 }
 
 pub fn set_offset_x(value: f64) {
-    OFFSET_X.store(value.round().clamp(-400.0, 400.0) as i32, Ordering::Relaxed);
+    OFFSET_X.store(value.round().clamp(-400.0, 1700.0) as i32, Ordering::Relaxed);
 }
 
 pub fn set_offset_y(value: f64) {
-    OFFSET_Y.store(value.round().clamp(0.0, 400.0) as i32, Ordering::Relaxed);
+    OFFSET_Y.store(value.round().clamp(0.0, 900.0) as i32, Ordering::Relaxed);
 }
 
 pub fn set_target_offset_x(value: f64) {
-    TARGET_OFFSET_X.store(value.round().clamp(-400.0, 400.0) as i32, Ordering::Relaxed);
+    TARGET_OFFSET_X.store(value.round().clamp(-1700.0, 1700.0) as i32, Ordering::Relaxed);
 }
 
 pub fn set_target_offset_y(value: f64) {
-    TARGET_OFFSET_Y.store(value.round().clamp(-400.0, 400.0) as i32, Ordering::Relaxed);
+    TARGET_OFFSET_Y.store(value.round().clamp(-900.0, 900.0) as i32, Ordering::Relaxed);
 }
 
 pub fn set_minimap_scale(value: f64) {
