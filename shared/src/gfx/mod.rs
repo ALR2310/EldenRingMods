@@ -314,15 +314,7 @@ pub fn extend_numbered_placements(
     count: u32,
 ) -> Result<Option<Vec<u8>>, GfxError> {
     let top = parse_tags(movie, first_tag_offset(movie)?, movie.len())?;
-    let mut scope = top.clone();
-    let mut sprite_tag = None;
-    for name in path {
-        let id = find_named(movie, &scope, name).ok_or(GfxError::PathNotFound)?;
-        let sprite = find_sprite(movie, &top, id).ok_or(GfxError::PathNotFound)?;
-        scope = parse_tags(movie, sprite.body.start + 4, sprite.body.end)?;
-        sprite_tag = Some(sprite);
-    }
-    let sprite = sprite_tag.ok_or(GfxError::PathNotFound)?;
+    let (sprite, scope) = sprite_at(movie, &top, path)?;
 
     let mut rows: Vec<(u32, Placement)> = Vec::new();
     let mut max_depth = 0;
@@ -364,16 +356,70 @@ pub fn extend_numbered_placements(
     body.extend(added);
     body.extend_from_slice(&movie[show.header..sprite.body.end]);
 
+    with_sprite_body(movie, sprite, &body).map(Some)
+}
+
+/// The sprite at `path` (instance names from the stage down) and its tags.
+fn sprite_at<'a>(
+    movie: &[u8],
+    top: &'a [Tag],
+    path: &[&str],
+) -> Result<(&'a Tag, Vec<Tag>), GfxError> {
+    let mut scope = top.to_vec();
+    let mut sprite_tag = None;
+    for name in path {
+        let id = find_named(movie, &scope, name).ok_or(GfxError::PathNotFound)?;
+        let sprite = find_sprite(movie, top, id).ok_or(GfxError::PathNotFound)?;
+        scope = parse_tags(movie, sprite.body.start + 4, sprite.body.end)?;
+        sprite_tag = Some(sprite);
+    }
+    Ok((sprite_tag.ok_or(GfxError::PathNotFound)?, scope))
+}
+
+/// The movie with the body of `sprite` (a `DefineSprite`) replaced by `body`.
+fn with_sprite_body(movie: &[u8], sprite: &Tag, body: &[u8]) -> Result<Vec<u8>, GfxError> {
     let mut out = movie[..sprite.header].to_vec();
     out.extend(tag_header(TAG_DEFINE_SPRITE, body.len()));
-    out.extend(&body);
+    out.extend(body);
     out.extend_from_slice(&movie[sprite.body.end..]);
     // Declared length counts every byte after the 8-byte head; keep the same
     // relation to the physical length as the original.
     let delta = out.len() as i64 - movie.len() as i64;
     let declared = read_u32(&out, 4)? as i64 + delta;
     out[4..8].copy_from_slice(&(declared as u32).to_le_bytes());
-    Ok(Some(out))
+    Ok(out)
+}
+
+/// Moves placements of the sprite at `path` (instance names from the stage down): each of
+/// `shifts` is `(name, dx, dy)` in twips (1/20 pixel) added to the placement with that name.
+/// Every name must be found, or `PathNotFound`. Returns the whole new movie.
+pub fn shift_placements(
+    movie: &[u8],
+    path: &[&str],
+    shifts: &[(&str, i32, i32)],
+) -> Result<Vec<u8>, GfxError> {
+    let top = parse_tags(movie, first_tag_offset(movie)?, movie.len())?;
+    let (sprite, scope) = sprite_at(movie, &top, path)?;
+    let mut body = Vec::new();
+    let mut at = sprite.body.start;
+    let mut moved = 0;
+    for tag in scope.iter().filter(|t| t.code == TAG_PLACE_OBJECT2) {
+        let bytes = &movie[tag.body.clone()];
+        let Some((_, name)) = placed_name(tag.code, bytes)? else { continue };
+        let Some(&(_, dx, dy)) = shifts.iter().find(|(n, _, _)| *n == name) else { continue };
+        let mut placement = Placement::parse(bytes)?;
+        placement.matrix.tx += dx;
+        placement.matrix.ty += dy;
+        body.extend_from_slice(&movie[at..tag.header]);
+        body.extend(placement.to_tag());
+        at = tag.body.end;
+        moved += 1;
+    }
+    if moved != shifts.len() {
+        return Err(GfxError::PathNotFound);
+    }
+    body.extend_from_slice(&movie[at..sprite.body.end]);
+    with_sprite_body(movie, sprite, &body)
 }
 
 #[cfg(test)]
@@ -515,5 +561,51 @@ mod tests {
         let after = extend_numbered_placements(&movie, &PATH, "Item_", 10).unwrap().unwrap();
         assert_eq!(rows_of(&after).len(), 10);
         std::fs::write(std::env::var("ER_HUD_GFX_OUT").unwrap(), after).unwrap();
+    }
+
+    /// The same with the boss list: `ER_HUD_GFX_OUT` gets the movie with the 2nd and 3rd boss bar
+    /// 55 pixels further apart each.
+    #[test]
+    #[ignore]
+    fn real_boss_list() {
+        let movie = std::fs::read(std::env::var("ER_HUD_GFX").unwrap()).unwrap();
+        let after = shift_placements(
+            &movie,
+            &["BossList"],
+            &[("Item_1_0", 0, -1100), ("Item_2_0", 0, -2200)],
+        )
+        .unwrap();
+        std::fs::write(std::env::var("ER_HUD_GFX_OUT").unwrap(), after).unwrap();
+    }
+
+    #[test]
+    fn shifted_placements_move_by_the_given_twips_and_nothing_else() {
+        let original = movie();
+        let before = rows_of(&original);
+        let moved = shift_placements(&original, &PATH, &[("Item_2", 0, -300), ("Item_0", 40, 100)])
+            .unwrap();
+        let after = rows_of(&moved);
+        assert_eq!(before.len(), after.len());
+        for ((name, depth, y), (name2, depth2, y2)) in before.iter().zip(&after) {
+            assert_eq!((name, depth), (name2, depth2));
+            let want = match name.as_str() {
+                "Item_2" => y - 300,
+                "Item_0" => y + 100,
+                _ => *y,
+            };
+            assert_eq!(*y2, want, "{name}");
+        }
+        let grew = moved.len() as i64 - original.len() as i64;
+        let declared = |m: &[u8]| i64::from(read_u32(m, 4).unwrap());
+        assert_eq!(declared(&moved) - declared(&original), grew);
+    }
+
+    #[test]
+    fn shifting_a_missing_name_is_an_error() {
+        let original = movie();
+        assert!(matches!(
+            shift_placements(&original, &PATH, &[("Item_9", 0, 1)]),
+            Err(GfxError::PathNotFound)
+        ));
     }
 }
