@@ -2,12 +2,12 @@
 
 ## [Unreleased]
 
-- Added an option that moves the game's boss health bars down and draws a boss's posture and effects under them (the bars are spread when several bosses are on screen).
-- The target panel now shows the effects above the buildup bars, and the buildup icons sit at the right end.
-- Added an option to move the game's rune counter to the top right and resize it; it can be dragged like the minimap.
-- The minimap and the target panel can now be dragged across the whole screen, and a right click on a part in the drag mode puts it back to its default place.
-- The `[Layout]` section of the config is gone: the offsets are now `Minimap.OffsetX/OffsetY` and `Target.OffsetX/OffsetY`, and the rune counter has its own `[HUD.RuneCounter]` section. Existing files are migrated.
-- The minimap no longer shows Torrent as a spirit.
+- Added an option that puts a boss's posture and effects under the game's boss health bar.
+- Added an option to move and resize the game's rune counter.
+- Fixed dragging the minimap and the target panel being limited to part of the screen.
+- The minimap no longer shows Torrent.
+- Fixed the overlay not working with ER Item Wheel and ER Gesture Wheel by Maldron9955.
+- Made the minimap's map and icons load much faster and reorganized the config.
 
 ## [1.3.0] - 2026-11-06
 
