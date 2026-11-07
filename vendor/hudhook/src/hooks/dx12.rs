@@ -28,6 +28,8 @@ use windows::Win32::Graphics::Dxgi::{
     DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH, DXGI_SWAP_CHAIN_FULLSCREEN_DESC,
     DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT,
 };
+use windows::Win32::Graphics::Dxgi::Common::DXGI_ALPHA_MODE_PREMULTIPLIED;
+use windows::Win32::Graphics::Dxgi::DXGI_SCALING_STRETCH;
 
 use super::DummyHwnd;
 use crate::mh::MhHook;
@@ -142,6 +144,7 @@ impl InitializationContext {
         *self = match mem::replace(self, InitializationContext::Empty) {
             InitializationContext::WithSwapChain(swap_chain) => {
                 if unsafe { Self::check_command_queue(&swap_chain, command_queue) } {
+                    crate::color::diag("hook: command queue found".to_string());
                     trace!(
                         "Found command queue matching swap chain {swap_chain:?} at \
                          {command_queue:?}"
@@ -406,6 +409,7 @@ fn validate_pending_initialization_context(swap_chain: &IDXGISwapChain3) -> Resu
         return Ok(true);
     }
 
+    crate::color::diag("hook: another swap chain presents than the captured one".to_string());
     warn!("DX12 pending initialization context belongs to a different swap chain; resetting");
     INIT_STATE.reset();
     INIT_STATE.lock().insert_swap_chain(swap_chain);
@@ -636,6 +640,12 @@ unsafe fn update_display_size_after_swap_chain_change(
 fn render(swap_chain: &IDXGISwapChain3) -> Result<()> {
     unsafe {
         crate::color::diag("hook: Present reached".to_string());
+        if let Ok(desc) = swap_chain.GetDesc() {
+            crate::color::diag(format!(
+                "hook: Present on a {}x{} swap chain",
+                desc.BufferDesc.Width, desc.BufferDesc.Height,
+            ));
+        }
         if !validate_pending_initialization_context(swap_chain)? {
             crate::color::diag("hook: waiting for a swap chain with its command queue".to_string());
             return Ok(());
@@ -961,6 +971,86 @@ unsafe extern "system" fn dxgi_factory_create_swap_chain_for_hwnd_impl(
     result
 }
 
+/// The file name (never the path: it goes to logs) of the module that holds `address`, lower case.
+fn module_of(address: usize) -> String {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::HMODULE;
+    use windows::Win32::System::LibraryLoader::{
+        GetModuleFileNameW, GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+    };
+
+    let mut module = HMODULE::default();
+    let found = unsafe {
+        GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            PCWSTR(address as *const u16),
+            &mut module,
+        )
+    };
+    if found.is_err() {
+        return String::new();
+    }
+    let mut path = [0u16; 260];
+    let len = unsafe { GetModuleFileNameW(Some(module), &mut path) } as usize;
+    let path = String::from_utf16_lossy(&path[..len.min(path.len())]).to_lowercase();
+    path.rsplit('\\').next().unwrap_or_default().to_string()
+}
+
+fn is_dxgi(address: usize) -> bool {
+    module_of(address) == "dxgi.dll"
+}
+
+/// The dummy swap chain whose vtable gives the addresses to hook. If its `Present` is not in
+/// `dxgi.dll` something wrapped it, and the addresses would be the wrapper's: a composition swap
+/// chain, which those mods do not wrap, gives DXGI's own.
+fn unwrap_dummy_swap_chain(
+    factory: &IDXGIFactory2,
+    command_queue: &ID3D12CommandQueue,
+    swap_chain: IDXGISwapChain,
+) -> IDXGISwapChain {
+    let present = swap_chain.vtable().Present as usize;
+    if is_dxgi(present) {
+        return swap_chain;
+    }
+    crate::color::diag(format!("hook: dummy swap chain wrapped by {}", module_of(present)));
+    let desc = DXGI_SWAP_CHAIN_DESC1 {
+        Width: 640,
+        Height: 480,
+        Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+        Stereo: BOOL(0),
+        SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+        BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
+        BufferCount: 2,
+        Scaling: DXGI_SCALING_STRETCH,
+        SwapEffect: DXGI_SWAP_EFFECT_FLIP_DISCARD,
+        AlphaMode: DXGI_ALPHA_MODE_PREMULTIPLIED,
+        Flags: 0,
+    };
+    let created: Result<IDXGISwapChain> = unsafe {
+        factory
+            .CreateSwapChainForComposition(command_queue, &desc, None)
+            .and_then(|swap_chain1| swap_chain1.cast())
+    };
+    match created {
+        Ok(composition) if is_dxgi(composition.vtable().Present as usize) => {
+            crate::color::diag("hook: using a composition swap chain instead".into());
+            composition
+        },
+        Ok(composition) => {
+            crate::color::diag(format!(
+                "hook: composition swap chain wrapped by {} too",
+                module_of(composition.vtable().Present as usize)
+            ));
+            swap_chain
+        },
+        Err(e) => {
+            crate::color::diag(format!("hook: no composition swap chain ({e:?})"));
+            swap_chain
+        },
+    }
+}
+
 fn get_target_addrs() -> (
     DXGIFactoryCreateSwapChainType,
     DXGIFactoryCreateSwapChainForHwndType,
@@ -1023,6 +1113,9 @@ fn get_target_addrs() -> (
         },
     };
 
+    // Local change (vendor/README.md): a mod that wraps the game's swap chains also wraps this
+    // dummy one, whose methods then are the wrapper's and not DXGI's.
+    let swap_chain = unwrap_dummy_swap_chain(&factory, &command_queue, swap_chain);
     let swap_chain2: IDXGISwapChain2 = swap_chain.cast().unwrap();
     let swap_chain3: IDXGISwapChain3 = swap_chain.cast().unwrap();
     // Local change: note the colour space given to swap chains (crate::color).
