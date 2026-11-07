@@ -134,6 +134,8 @@ pub struct MapLayer {
     map_icons: Option<MapIcons>,
     status_icons: Option<StatusIcons>,
     goblins: Goblins,
+    /// When the loader started, for the `Logging.MapProbe` timing line.
+    created: std::time::Instant,
 }
 
 impl MapLayer {
@@ -159,6 +161,7 @@ impl MapLayer {
             map_icons: None,
             status_icons: None,
             goblins: Goblins::Waiting,
+            created: std::time::Instant::now(),
         }
     }
 
@@ -205,6 +208,12 @@ impl MapLayer {
         if uploaded {
             if self.shown.is_none() {
                 logger::log("Map: first window uploaded");
+                if crate::settings::map_probe() {
+                    logger::log(&format!(
+                        "Map: first window uploaded {} ms after the loader started",
+                        self.created.elapsed().as_millis()
+                    ));
+                }
             }
             self.shown = Some((window.map, window.origin));
         } else {

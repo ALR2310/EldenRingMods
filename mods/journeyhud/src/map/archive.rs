@@ -6,6 +6,7 @@
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use aes::Aes128;
 use aes::cipher::{BlockDecrypt, KeyInit, generic_array::GenericArray};
@@ -36,15 +37,36 @@ struct Entry {
     aes_ranges: Vec<(usize, usize)>,
 }
 
+/// The decrypted headers read so far, by archive name. Decrypting one is the slow part of a lookup
+/// (RSA over every 256 bytes of it) and every file the mod reads asks for the same ones, from two
+/// threads: the lock is held while one is decrypted, so the other waits for it instead of repeating
+/// the work. A few MB for the session.
+static HEADERS: Mutex<Vec<(&'static str, Header)>> = Mutex::new(Vec::new());
+type Header = Arc<Vec<u8>>;
+
+/// The decrypted header of archive `name`, `None` when the game has no such archive.
+fn header(game_dir: &Path, name: &'static str, key: &str) -> io::Result<Option<Header>> {
+    let mut cache = HEADERS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, header)) = cache.iter().find(|(cached, _)| *cached == name) {
+        return Ok(Some(header.clone()));
+    }
+    let Ok(bhd) = std::fs::read(game_dir.join(format!("{name}.bhd"))) else {
+        return Ok(None);
+    };
+    let header = Arc::new(rsa_decrypt(&bhd, key)?);
+    cache.push((name, header.clone()));
+    Ok(Some(header))
+}
+
 /// Finds `path` by searching the game's archives in order. Each archive's header has
-/// to be decrypted to be searched, so stopping at the first hit saves seconds.
+/// to be decrypted (once, see [HEADERS]) to be searched, so stopping at the first hit saves seconds.
 pub fn open(game_dir: &Path, path: &str) -> io::Result<ArchiveFile> {
     let hash = path_hash(path);
     for (name, key) in ARCHIVES {
-        let Ok(bhd) = std::fs::read(game_dir.join(format!("{name}.bhd"))) else {
+        let Some(header) = header(game_dir, name, key)? else {
             continue;
         };
-        if let Some(entry) = find_in_bhd5(&rsa_decrypt(&bhd, key)?, hash)? {
+        if let Some(entry) = find_in_bhd5(&header, hash)? {
             let bdt = File::open(game_dir.join(format!("{name}.bdt")))?;
             return Ok(ArchiveFile { bdt, entry });
         }
