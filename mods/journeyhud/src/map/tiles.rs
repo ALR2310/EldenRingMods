@@ -13,6 +13,7 @@ use std::io;
 use std::path::Path;
 use std::sync::Mutex;
 use std::sync::mpsc::{Receiver, Sender, channel};
+use std::time::Instant;
 
 use shared::logger;
 
@@ -111,18 +112,32 @@ fn serve(
     requests: &Receiver<Request>,
     windows: &Sender<Window>,
 ) -> io::Result<()> {
+    // With `Logging.MapProbe`: where the time goes before the first window.
+    let started = Instant::now();
+    let probe = |what: &str| {
+        if crate::settings::map_probe() {
+            logger::log(&format!("Map: loader {what} after {} ms", started.elapsed().as_millis()));
+        }
+    };
     let oodle = Oodle::load(&game_dir.join("oo2core_6_win64.dll"))?;
+    probe("loaded Oodle");
     let masks =
         read_masks(&oodle.decompress_dcx(
             &archive::open(game_dir, "/menu/71_maptile.mtmskbnd.dcx")?.read_all()?,
         )?)?;
+    probe("read the masks");
     let tiles =
         index_tiles(read_binder(&archive::open(game_dir, "/menu/71_maptile.tpfbhd")?.read_all()?)?);
+    probe("read the tile index");
     let mut bdt = archive::open(game_dir, "/menu/71_maptile.tpfbdt")?;
     let mut decoded: HashMap<(MapId, [i32; 2], u32), Vec<u8>> = HashMap::new();
     let mut missing_logged = 0;
+    let mut first = true;
 
     while let Ok(mut request) = requests.recv() {
+        if first {
+            probe("got the first request");
+        }
         // Only the newest request matters once the player has moved on.
         while let Ok(newer) = requests.try_recv() {
             request = newer;
@@ -169,6 +184,10 @@ fn serve(
                         .copy_from_slice(&tile[row * TILE * 4..(row + 1) * TILE * 4]);
                 }
             }
+        }
+        if first {
+            probe("built the first window");
+            first = false;
         }
         if windows.send(Window { map, origin, rgba }).is_err() {
             return Ok(());

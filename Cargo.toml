@@ -34,6 +34,12 @@ print_stdout = "warn"
 [patch.crates-io]
 hudhook = { path = "vendor/hudhook" }
 
+[profile.dev.package.rsa]
+opt-level = 3
+
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
+
 [profile.release]
 lto = true
 codegen-units = 1
