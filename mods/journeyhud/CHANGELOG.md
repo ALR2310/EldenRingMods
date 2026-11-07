@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-08
+
 - Added an option that puts a boss's posture and effects under the game's boss health bar.
 - Added an option to move and resize the game's rune counter.
 - Fixed dragging the minimap and the target panel being limited to part of the screen.
