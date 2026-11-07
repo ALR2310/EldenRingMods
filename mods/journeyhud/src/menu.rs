@@ -33,6 +33,16 @@ static SHOW_NUMBERS: Setting = Setting {
     format: menu::format_bool,
     apply: Some(settings::set_show_numbers),
 };
+static BOSS_BAR: Setting = Setting {
+    key: "Target.BossBar",
+    format: menu::format_bool,
+    apply: Some(settings::set_boss_bar),
+};
+static RUNE_COUNTER: Setting = Setting {
+    key: "HUD.RuneCounter.Enabled",
+    format: menu::format_bool,
+    apply: Some(settings::set_rune_counter),
+};
 static EFFECTS_TARGET: Setting = Setting {
     key: "Target.Effects",
     format: menu::format_bool,
@@ -55,16 +65,19 @@ static BUILDUP: Setting = Setting {
 };
 static PLAYER_SCALE: NumberSetting =
     NumberSetting::new("Player.Scale", 0.5, 3.0, Some(settings::set_player_scale)).stepped(0.1);
+static RUNE_COUNTER_SCALE: NumberSetting =
+    NumberSetting::new("HUD.RuneCounter.Scale", 0.3, 1.5, Some(settings::set_rune_counter_scale))
+        .stepped(0.1);
 static WIDTH: NumberSetting =
     NumberSetting::whole("Target.Width", 100.0, 1600.0, Some(settings::set_width))
         .slider(100.0, 800.0, 10.0);
 static SCALE: NumberSetting =
     NumberSetting::new("Target.Scale", 0.5, 3.0, Some(settings::set_scale)).stepped(0.1);
 static OFFSET_X: NumberSetting =
-    NumberSetting::whole("Layout.OffsetX", -400.0, 400.0, Some(settings::set_offset_x))
+    NumberSetting::whole("Minimap.OffsetX", -400.0, 1700.0, Some(settings::set_offset_x))
         .slider(-300.0, 300.0, 5.0);
 static OFFSET_Y: NumberSetting =
-    NumberSetting::whole("Layout.OffsetY", 0.0, 400.0, Some(settings::set_offset_y))
+    NumberSetting::whole("Minimap.OffsetY", 0.0, 900.0, Some(settings::set_offset_y))
         .slider(0.0, 300.0, 5.0);
 
 static MINIMAP: Setting = Setting {
@@ -192,6 +205,9 @@ fn build(b: &mut MenuBuilder) -> Result<(), String> {
     b.toggle(target, &t("buildup.label"), &t("buildup.help"), &BUILDUP, || {
         config::get().target.buildup as u8
     })?;
+    b.toggle(target, &t("boss_bar.label"), &t("boss_bar.help"), &BOSS_BAR, || {
+        config::get().target.boss_bar as u8
+    })?;
     b.toggle(target, &t("effects.label"), &t("effects.help"), &EFFECTS_TARGET, || {
         config::get().target.effects as u8
     })?;
@@ -217,11 +233,21 @@ fn build(b: &mut MenuBuilder) -> Result<(), String> {
     })?;
     b.number(target, &t("scale.label"), &t("scale.help"), &SCALE, || config::get().target.scale)?;
     b.number(target, &t("offset_x.label"), &t("offset_x.help"), &OFFSET_X, || {
-        f64::from(config::get().layout.offset_x)
+        f64::from(config::get().minimap.offset_x)
     })?;
     b.number(target, &t("offset_y.label"), &t("offset_y.help"), &OFFSET_Y, || {
-        f64::from(config::get().layout.offset_y)
+        f64::from(config::get().minimap.offset_y)
     })?;
+    b.toggle(minimap, &t("rune_counter.label"), &t("rune_counter.help"), &RUNE_COUNTER, || {
+        config::get().hud.rune_counter.enabled as u8
+    })?;
+    b.number(
+        minimap,
+        &t("rune_counter_scale.label"),
+        &t("rune_counter_scale.help"),
+        &RUNE_COUNTER_SCALE,
+        || config::get().hud.rune_counter.scale,
+    )?;
     b.toggle(minimap, &t("minimap.label"), &t("minimap.help"), &MINIMAP, || {
         config::get().minimap.enabled as u8
     })?;
@@ -371,6 +397,8 @@ mod tests {
             &ENABLED,
             &SHOW_NUMBERS,
             &BUILDUP,
+            &BOSS_BAR,
+            &RUNE_COUNTER,
             &EFFECTS_TARGET,
             &EFFECTS_PLAYER,
             &MINIMAP,
@@ -392,6 +420,7 @@ mod tests {
             &WIDTH,
             &SCALE,
             &PLAYER_SCALE,
+            &RUNE_COUNTER_SCALE,
             &OFFSET_X,
             &OFFSET_Y,
             &MINIMAP_RANGE,

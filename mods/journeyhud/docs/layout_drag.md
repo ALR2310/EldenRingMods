@@ -13,12 +13,12 @@ it pinned to the window centre and reads relative mouse input for the camera?
 ## Layout before the drag mode
 
 - **One column, one anchor.** The minimap and the target bar share one column anchored at the top right of
-  the 16:9 frame (`Placement.area`): `Layout.OffsetX` (from the right edge; negative moves it outside, which
-  suits ultrawide) and `Layout.OffsetY` (from the top), in 1080p units times `res = area.h / 1080`. Minimap:
+  the 16:9 frame (`Placement.area`): `Minimap.OffsetX` (from the right edge; negative moves it outside, which
+  suits ultrawide) and `Minimap.OffsetY` (from the top), in 1080p units times `res = area.h / 1080`. Minimap:
   `radar/ui.rs` (`center = [area.x + area.w - offset_x * res - radius, area.y + offset_y * res + radius]`).
   Target bar: `ui.rs::draw_target`, just under the minimap at
   `y = top + offset_y * res + radar_ui::column_height(res)`.
-- **A way to change and save the offsets already existed**: the `Layout.OffsetX/OffsetY` sliders of the
+- **A way to change and save the offsets already existed**: the `Minimap.OffsetX/OffsetY` sliders of the
   ERNativeUI menu call `settings::set_offset_x/y` and `config::save`, which keeps every comment of the
   template. Dragging is another way to enter the same two numbers.
 
@@ -51,13 +51,13 @@ once drifted left).
 - While the mode is on `overlay::MENU_OPEN` is set so the game sees no mouse; a frame is drawn around the
   minimap and the target bar. Dragging changes the offsets at once (`settings::set_offset_*`) and
   `config::save` writes them when the button is released.
-- Position model: dragging the column adds the mouse delta (px) divided by `res` to `Layout.OffsetX/OffsetY`
+- Position model: dragging the column adds the mouse delta (px) divided by `res` to `Minimap.OffsetX/OffsetY`
   (the sign of X is reversed because it is measured from the right edge), clamped to the frame; a negative X
   reaches the side areas of an ultrawide screen. The target bar can also be dragged on its own through
-  `Layout.TargetOffsetX/TargetOffsetY` (default 0, added to its default place under the minimap) so old
+  `Target.OffsetX/OffsetY` (default 0, added to its default place under the minimap) so old
   configs do not change.
 - **The target bar slides up when the minimap is hidden** (in caves, in boss fights) only while both
-  `TargetOffsetX/Y` are 0; a bar that was dragged stays put, and in the drag mode it always sits where it
+  `Target.OffsetX/Y` are 0; a bar that was dragged stays put, and in the drag mode it always sits where it
   would with the minimap (`radar_ui::column_height(res, slides)`).
 
 ## Risks
@@ -70,3 +70,18 @@ once drifted left).
 2. The `DLUID::MouseDevice::Poll` pattern depends on the executable build; it is unique on 2.6.2 to 2.7.2
    (`scripts/ida/run.ps1 aob -Version all`).
 3. `LoadDelay` does not matter: the hooks are installed lazily at the key press.
+
+## Reset, reach and the rune counter
+
+- **Reset**: in the drag mode a right click on the minimap, the target bar or the rune counter sets its offsets back to the
+  config template's (`drag::reset`) and saves them at once. A part dragged back by hand is not affected.
+
+- The offsets used to be clamped to -400..400 (the top to 0..400), so the minimap could not be dragged from the right
+  side to the left. They now reach -400..1700 across and 0..900 down (the target bar's own offsets -1700..1700 and
+  -900..900), which covers the whole picture.
+- The rune counter (`HUD.RuneCounter.Enabled`) is a third part with its own offsets `HUD.RuneCounter.OffsetX/Y`, saved with
+  the others (`docs/rune_counter.md`).
+
+The `[Layout]` section is gone: the minimap's offsets are `Minimap.OffsetX/OffsetY`, the panel's `Target.OffsetX/OffsetY`
+(still added to the minimap's, so the panel follows the minimap until it is moved apart on purpose). Config format 2
+migrates a version 1 file (`config::v1_to_v2`).
