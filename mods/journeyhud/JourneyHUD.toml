@@ -1,6 +1,6 @@
 [General]
 # file format version, managed by the mod - don't change
-ConfigVersion = 2
+ConfigVersion = 3
 
 # Key that reloads this file in-game, no restart needed.
 # https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
@@ -35,7 +35,7 @@ BossBar = true          # Move the boss health bars down, with posture and effec
 [Player]
 # Your own status icons and buildup bars at the top-left.
 Scale = 0.7             # Size of the buildup gauge, 1 = the game's own (0.5 - 3.0).
-Effects = true          # Time left under each of the game's status icons.
+EffectTimer = true      # Time left under each of the game's status icons.
 Buildup = true          # Move your buildup gauge to the top-left, under the status icons.
 
 

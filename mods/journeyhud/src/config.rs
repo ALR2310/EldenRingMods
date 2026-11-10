@@ -16,7 +16,12 @@ pub const TEMPLATE: &str = include_str!("../JourneyHUD.toml");
 
 /// Format migration steps for `General.ConfigVersion`. Append only - a released step must
 /// never change.
-const STEPS: &[Step] = &[v1_to_v2];
+const STEPS: &[Step] = &[v1_to_v2, v2_to_v3];
+
+/// 2 -> 3: `Player.Effects` is `Player.EffectTimer`, apart from `Target.Effects`.
+fn v2_to_v3(doc: &mut DocumentMut, template: &DocumentMut) {
+    rename_key(doc, template, "Player.Effects", "Player.EffectTimer");
+}
 
 /// 1 -> 2: the `[Layout]` section went away; its offsets moved to the minimap and the target
 /// panel, and the rune counter has its own section.
@@ -76,7 +81,7 @@ pub struct Target {
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct Player {
-    pub effects: bool,
+    pub effect_timer: bool,
     pub buildup: bool,
     pub scale: f64,
 }
@@ -266,11 +271,32 @@ TargetOffsetY = -7
         let config = loaded.get();
         let text = std::fs::read_to_string(&path).unwrap();
         let _ = std::fs::remove_file(&path);
-        assert_eq!(report.migrated, Some((1, 2)));
+        assert_eq!(report.migrated, Some((1, 3)));
         assert!(report.unknown.is_empty(), "{:?}", report.unknown);
         assert_eq!((config.minimap.offset_x, config.minimap.offset_y), (300, 90));
         assert_eq!((config.target.offset_x, config.target.offset_y), (5, -7));
         assert!(!text.contains("[Layout]"), "{text}");
+    }
+
+    /// A version 2 file keeps the player's choice for the effect timer.
+    #[test]
+    fn version_2_player_effects_become_the_effect_timer() {
+        let old = "[General]
+ConfigVersion = 2
+
+[Player]
+Effects = false
+";
+        let path =
+            std::env::temp_dir().join(format!("journeyhud_migrate2_{}.toml", std::process::id()));
+        std::fs::write(&path, old).unwrap();
+        let (loaded, report) =
+            TomlConfig::<Config>::load_or_create(&path.to_string_lossy(), TEMPLATE, MIGRATION);
+        let config = loaded.get();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(report.migrated, Some((2, 3)));
+        assert!(report.unknown.is_empty(), "{:?}", report.unknown);
+        assert!(!config.player.effect_timer);
     }
 
     #[test]

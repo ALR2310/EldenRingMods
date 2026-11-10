@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Renamed the config key `Player.Effects` to `Player.EffectTimer`; existing configs are converted.
+
 ## [1.4.0] - 2026-11-08
 
 - Added an option that puts a boss's posture and effects under the game's boss health bar.
