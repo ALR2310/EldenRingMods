@@ -43,6 +43,8 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         // so give each one its own. To add a feature: new module with a
         // `run()`, one line here, one section in Toolbox.toml (and a widget in
         // `ui.rs` if it should appear in the GUI).
+        // First: the game builds its resolution list while the window opens.
+        std::thread::spawn(resize::resolution_list::run);
         std::thread::spawn(map_anywhere::run);
         std::thread::spawn(torrent_anywhere::run);
         std::thread::spawn(buildup::run);
