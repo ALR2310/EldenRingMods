@@ -26,6 +26,8 @@ calm state.
 
 ## Seamless Co-op: spirits lose the ghost colour
 
+What `ersc.dll` does with that function is in [seamless_ersc.md](seamless_ersc.md).
+
 - Ruled out (with a temporary probe): PhantomParam 200 and 201 are identical to offline; the spirit still
   has SpEffect 295000; the vfx module (`ChrIns.modules +0xB8`, field +0x44) still selects 200; the team
   (47 offline, 1 under Seamless) is not the cause.

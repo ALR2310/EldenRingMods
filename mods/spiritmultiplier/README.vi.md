@@ -48,4 +48,5 @@ Các bản trước dùng `SpiritMultiplier.ini`. Nếu chưa có `SpiritMultipl
 - [docs/buddy_hud.md](docs/buddy_hud.md): thêm thanh HP trên HUD.
 - [docs/warp_research.md](docs/warp_research.md): dịch chuyển spirit về chỗ người chơi.
 - [docs/seamless_conflict.md](docs/seamless_conflict.md): quy tắc patch khi dùng cùng Seamless Co-op.
+- [docs/seamless_ersc.md](docs/seamless_ersc.md): Seamless Co-op làm gì với màu ma của spirit.
 - [docs/open_issues.md](docs/open_issues.md): vấn đề còn mở với Reforged, Seamless, Convergence.
