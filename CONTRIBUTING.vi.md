@@ -77,6 +77,9 @@ mod: đường dẫn tương đối theo thư mục mod, cho phép `*`, thư m�
 giữ đường dẫn tương đối của nó. Mọi mod đều phải khai báo, ví dụ `files = ["<Mod>.toml", "THIRD-PARTY-NOTICES.txt"]`;
 `files = []` chỉ có DLL (mod tự tạo config ở lần chạy đầu).
 
+Mỗi mod có một task build trong `.vscode/tasks.json` (`Build <Mod>`, `<Mod>` là `[lib] name`) và
+nằm trong `dependsOn` của `Cargo: Build All`; thêm, đổi tên hoặc xoá task cùng lúc với mod.
+
 Script trong `scripts/` dùng PowerShell cho các bước build và đóng gói đơn giản. Dùng Python
 (3.10+, ưu tiên chỉ thư viện chuẩn) khi script cần logic thật, như đọc JSON hoặc gọi API.
 
@@ -154,6 +157,8 @@ cho dev, không cho người chơi; ngoại lệ là lời nhắn cố ý như
 - Chỉ nêu tên mod khác khi mod này cố ý hỗ trợ hoặc phát hiện nó (ví dụ Seamless Co-op); còn lại
   viết "a third-party mod".
 - README và CHANGELOG bằng tiếng Anh. Mỗi mod có thêm `README.vi.md` và giữ đồng bộ.
+- Mục Features trên `nexus_page.bbcode`: mỗi bullet một ý, một câu ngắn; không nhồi số liệu, mặc định
+  hay "(adjustable)" vào một dòng.
 - CHANGELOG theo [Keep a Changelog](https://keepachangelog.com): mỗi thay đổi một dòng ngắn,
   ví dụ `Added X option.` hoặc `Fixed crash when Y.` Chỉ ghi tính năng và bản sửa người dùng
   thấy được: không ghi thay đổi về log, debug, build hay phát triển. Phiên bản theo
