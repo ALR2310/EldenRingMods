@@ -48,4 +48,5 @@ settings of the ini file are carried over the first time the mod runs; the ini f
 - [docs/buddy_hud.md](docs/buddy_hud.md): more HP bars on the HUD.
 - [docs/warp_research.md](docs/warp_research.md): teleporting spirits back to the player.
 - [docs/seamless_conflict.md](docs/seamless_conflict.md): rules for patching next to Seamless Co-op.
+- [docs/seamless_ersc.md](docs/seamless_ersc.md): what Seamless Co-op does to the ghost colour of spirits.
 - [docs/open_issues.md](docs/open_issues.md): Reforged, Seamless and Convergence issues still open.
