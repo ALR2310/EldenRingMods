@@ -58,7 +58,9 @@ Resizable = true
 
 # Game area size (in pixels) to set the window to when the game starts.
 # 0 = keep the game's own size. Set only one to have the other follow the
-# aspect ratio below.
+# aspect ratio below. With both set, the size is also added to the game's
+# resolution list (restart needed), so the game renders at it; the list only
+# has 16:9 sizes, so this is how to get 21:9 or 32:9.
 Width = 0
 Height = 0
 
