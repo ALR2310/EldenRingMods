@@ -1,19 +1,16 @@
-//! TOML config for mods whose settings outgrow a flat ini (lists of rules,
-//! per-entry tables). A mod declares a serde struct `T` and an embedded
-//! template that holds every default; the file is read in two passes (errors
-//! with their line, then the user's values laid over the template), brought in
-//! line with the template at start-up via `toml_edit` (versioned migration
-//! steps, missing keys added, unknown keys kept as comments), and the parsed
-//! config is an `Arc<T>` snapshot: [`TomlConfig::get`] once per tick. Design,
-//! rules and history: `shared/docs/toml_config.md`.
+//! TOML config for a mod: a serde struct `T` plus an embedded template holding every default. The
+//! file is read in two passes (errors with their line, then the user's values over the template)
+//! and brought in line with the template at start-up. See `docs/toml_config.md`.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::sync::{Arc, RwLock};
 
-use crate::logger;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use toml_edit::{DocumentMut, Item, Table};
+
+use crate::logger;
 
 pub struct TomlConfig<T> {
     path: String,
@@ -21,16 +18,13 @@ pub struct TomlConfig<T> {
     current: RwLock<Arc<T>>,
 }
 
-/// One migration step: changes a file of the previous format version into
-/// the next (the template is there for its comments, see [rename_key]).
+/// One migration step: turns a file of the previous format version into the next.
 pub type Step = fn(&mut DocumentMut, &DocumentMut);
 
-/// How an existing file is brought in line with the template, see the
-/// module doc.
 #[derive(Clone, Copy)]
 pub struct Migration<'a> {
-    /// Dotted path of the format version (`"General.ConfigVersion"`). The
-    /// template must hold the current version there.
+    /// Dotted path of the format version, e.g. `"General.ConfigVersion"`; the template holds the
+    /// current one.
     pub version_key: &'a str,
     /// `steps[i]`: version `i + 1` -> `i + 2`. Append only.
     pub steps: &'a [Step],
@@ -38,18 +32,15 @@ pub struct Migration<'a> {
     pub keep: &'a [&'a str],
 }
 
-/// What [`TomlConfig::load_or_create`] did, for the mod to log once its
-/// logger is up (the logger's own on/off switch lives in this config).
+/// What [`TomlConfig::load_or_create`] did, for the mod to log once its logger is up.
 #[derive(Default, Debug)]
 pub struct LoadReport {
     /// The file didn't exist and the template was written.
     pub created: bool,
     /// `(from, to)` format versions, when migration steps ran.
     pub migrated: Option<(u32, u32)>,
-    /// The file is from a newer format version than this mod knows - it was
-    /// left untouched. `(file, current)`.
+    /// The file is from a newer format version and was left untouched: `(file, current)`.
     pub newer: Option<(u32, u32)>,
-    /// Keys added from the template to an existing file.
     pub added_keys: usize,
     /// Keys the template doesn't have, moved to the comment block at the end
     /// of the file (`"Speed.PlayerMovement = 1.2"`).
@@ -59,8 +50,7 @@ pub struct LoadReport {
 }
 
 impl LoadReport {
-    /// Logs what loading `file` did, one short line each; call it once the
-    /// logger is up. Nothing is logged for a file that loaded unchanged.
+    /// One short line per thing loading did; nothing for a file that loaded unchanged.
     pub fn log(&self, file: &str) {
         if self.created {
             logger::log(&format!("{file}: created"));
@@ -72,7 +62,9 @@ impl LoadReport {
             logger::log(&format!("{file}: migrated format v{from} -> v{to}"));
         }
         if let Some((found, supported)) = self.newer {
-            logger::warn(&format!("{file}: newer format v{found} (supported v{supported}), left as is"));
+            logger::warn(&format!(
+                "{file}: newer format v{found} (supported v{supported}), left as is"
+            ));
         }
         if !self.unknown.is_empty() {
             logger::warn(&format!(
@@ -89,7 +81,7 @@ impl LoadReport {
 
 impl<T> TomlConfig<T>
 where
-    T: DeserializeOwned + Send + Sync,
+    T: DeserializeOwned + Serialize + Send + Sync,
 {
     pub fn load_or_create(path: &str, template: &str, migration: Migration) -> (Self, LoadReport) {
         let mut report = LoadReport::default();
@@ -98,7 +90,7 @@ where
                 let sync = sync_with_template(&text, template, migration);
                 report.newer = sync.newer;
                 if let Some(new_text) = &sync.text
-                    && crate::config::write_atomic(path, new_text).is_ok()
+                    && write_atomic(path, new_text).is_ok()
                 {
                     report.migrated = sync.migrated;
                     report.added_keys = sync.added;
@@ -106,7 +98,7 @@ where
                 }
             }
             Err(_) => {
-                report.created = crate::config::write_atomic(path, template).is_ok();
+                report.created = write_atomic(path, template).is_ok();
             }
         }
 
@@ -127,15 +119,19 @@ where
         )
     }
 
-    /// The config in use - take it once per tick.
+    /// The parsed config; take it once per tick.
     pub fn get(&self) -> Arc<T> {
         self.current.read().unwrap().clone()
     }
 
-    /// Re-reads the file. On error the previous config stays in use.
+    /// Re-reads the file and logs every key whose value changed as
+    /// `Config: Section.Key: old -> new`. On error the previous config stays in use.
     pub fn reload(&self) -> Result<(), String> {
-        let config = read(&self.path, &self.template)?;
-        *self.current.write().unwrap() = Arc::new(config);
+        let config: Arc<T> = Arc::new(read(&self.path, &self.template)?);
+        let previous = std::mem::replace(&mut *self.current.write().unwrap(), config.clone());
+        for change in changed_keys(&*previous, &*config) {
+            logger::log(&format!("Config: {change}"));
+        }
         Ok(())
     }
 
@@ -143,20 +139,61 @@ where
         &self.path
     }
 
-    /// Writes `values` (`("Section.Key", "text")`) into the file, keeping its
-    /// comments and layout, then re-reads it - for a mod that saves what the
-    /// player changed in-game (the ini `config::set_values`). Each text becomes
-    /// a bool (`true`/`false`), an integer, a float or else a string. On error
-    /// the file is left as it was (a failed re-read keeps the last good config).
+    /// Writes `("Section.Key", "text")` pairs into the file, keeping its comments and layout, then
+    /// re-reads it. Each text becomes a bool, an integer, a float or a string. On error the file is
+    /// left as it was.
     pub fn save_values(&self, values: &[(&str, String)]) -> Result<(), String> {
         let text = fs::read_to_string(&self.path).map_err(|e| e.to_string())?;
         let mut doc: DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| e.to_string())?;
-        let template: DocumentMut = self.template.parse().map_err(|e: toml_edit::TomlError| e.to_string())?;
+        let template: DocumentMut =
+            self.template.parse().map_err(|e: toml_edit::TomlError| e.to_string())?;
         for (path, value) in values {
             set_value(&mut doc, &template, path, scalar(value));
         }
-        crate::config::write_atomic(&self.path, &doc.to_string()).map_err(|e| e.to_string())?;
+        write_atomic(&self.path, &doc.to_string()).map_err(|e| e.to_string())?;
         self.reload()
+    }
+}
+
+/// Writes through a temporary file and a rename, so a crash never leaves a half-written config.
+fn write_atomic(path: &str, contents: &str) -> std::io::Result<()> {
+    let temp = format!("{path}.tmp");
+    fs::write(&temp, contents)?;
+    fs::rename(&temp, path).inspect_err(|_| {
+        let _ = fs::remove_file(&temp);
+    })
+}
+
+/// `"Section.Key: old -> new"` for every value that differs between two configs. A config that
+/// cannot be turned into TOML has no changes to list.
+fn changed_keys<T: Serialize>(old: &T, new: &T) -> Vec<String> {
+    let (Ok(old), Ok(new)) = (toml::Table::try_from(old), toml::Table::try_from(new)) else {
+        return Vec::new();
+    };
+    let (mut old_values, mut new_values) = (BTreeMap::new(), BTreeMap::new());
+    flatten("", &old, &mut old_values);
+    flatten("", &new, &mut new_values);
+    let keys: BTreeSet<_> = old_values.keys().chain(new_values.keys()).collect();
+    keys.into_iter()
+        .filter(|key| old_values.get(*key) != new_values.get(*key))
+        .map(|key| {
+            let show = |values: &BTreeMap<String, toml::Value>| {
+                values.get(key).map_or_else(|| "(none)".to_string(), ToString::to_string)
+            };
+            format!("{key}: {} -> {}", show(&old_values), show(&new_values))
+        })
+        .collect()
+}
+
+fn flatten(prefix: &str, table: &toml::Table, out: &mut BTreeMap<String, toml::Value>) {
+    for (key, value) in table {
+        let path = if prefix.is_empty() { key.clone() } else { format!("{prefix}.{key}") };
+        match value {
+            toml::Value::Table(inner) => flatten(&path, inner, out),
+            other => {
+                out.insert(path, other.clone());
+            }
+        }
     }
 }
 
@@ -173,11 +210,10 @@ fn scalar(text: &str) -> toml_edit::Value {
     }
 }
 
-/// `#[serde(deserialize_with = "common::toml_config::key_name")]` for a
-/// hotkey field read by [`crate::input::parse_virtual_key`]: accepts a
-/// string (`"F5"`, `"0x74"`, `"116"`) or a bare number (`116`, the VK code
-/// in decimal) - an ini took both, TOML would reject the number as the
-/// wrong type.
+/// `#[serde(deserialize_with = "shared::toml_config::key_name")]` for a
+/// hotkey field read by [`crate::input::parse_virtual_key`]: accepts a string (`"F5"`,
+/// `"0x74"`, `"116"`) or a bare number (`116`, the VK code in decimal), which TOML would
+/// otherwise reject as the wrong type.
 pub fn key_name<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
     #[derive(serde::Deserialize)]
     #[serde(untagged)]
@@ -200,12 +236,12 @@ fn toml_error(e: impl std::fmt::Display) -> String {
     e.to_string().trim_end().to_string()
 }
 
-/// `text` read as a `T` the way a config file is: errors (unknown keys,
-/// wrong types, syntax) reported with their line from `text` alone, then
-/// the values taken with every key `text` lacks filled from `template`.
+/// `text` read as a `T`: errors with their line from `text` alone, then the values with every
+/// missing key filled from `template`.
 pub fn parse<T: DeserializeOwned>(text: &str, template: &str) -> Result<T, String> {
     toml::from_str::<T>(text).map_err(toml_error)?;
-    let mut merged: toml::Table = toml::from_str(template).map_err(|e| format!("template: {}", toml_error(e)))?;
+    let mut merged: toml::Table =
+        toml::from_str(template).map_err(|e| format!("template: {}", toml_error(e)))?;
     let user: toml::Table = toml::from_str(text).map_err(toml_error)?;
     lay_over(&mut merged, user);
     T::deserialize(toml::Value::Table(merged)).map_err(toml_error)
@@ -216,7 +252,9 @@ pub fn parse<T: DeserializeOwned>(text: &str, template: &str) -> Result<T, Strin
 fn lay_over(base: &mut toml::Table, user: toml::Table) {
     for (key, value) in user {
         match (base.get_mut(&key), value) {
-            (Some(toml::Value::Table(base_table)), toml::Value::Table(user_table)) => lay_over(base_table, user_table),
+            (Some(toml::Value::Table(base_table)), toml::Value::Table(user_table)) => {
+                lay_over(base_table, user_table)
+            }
             (_, value) => {
                 base.insert(key, value);
             }
@@ -224,16 +262,17 @@ fn lay_over(base: &mut toml::Table, user: toml::Table) {
     }
 }
 
-/// The template's values - the defaults. Panics if the template doesn't
-/// parse (a mod test parses it, so that's a build-time mistake).
+/// The template's values. Panics if the template doesn't parse (a mod test covers that).
 pub fn defaults<T: DeserializeOwned>(template: &str) -> T {
     toml::from_str(template).expect("the embedded template parses")
 }
 
-/// Dotted paths of every field `T` has but `template` doesn't set -
-/// which [parse] would leave at the derived zero value. Names in `keep`
-/// (lists like `[[Override]]`) are skipped. For a mod's unit test.
-pub fn template_missing_keys<T: DeserializeOwned + Serialize>(template: &str, keep: &[&str]) -> Vec<String> {
+/// Dotted paths of every field `T` has but `template` doesn't set, which [parse] would leave at
+/// zero. Names in `keep` are skipped. For a mod's unit test.
+pub fn template_missing_keys<T: DeserializeOwned + Serialize>(
+    template: &str,
+    keep: &[&str],
+) -> Vec<String> {
     let fields = toml::Table::try_from(defaults::<T>(template)).expect("config serializes");
     let present: toml::Table = toml::from_str(template).expect("the embedded template parses");
     let mut missing = Vec::new();
@@ -241,7 +280,13 @@ pub fn template_missing_keys<T: DeserializeOwned + Serialize>(template: &str, ke
     missing
 }
 
-fn missing_keys(fields: &toml::Table, present: &toml::Table, prefix: &str, keep: &[&str], out: &mut Vec<String>) {
+fn missing_keys(
+    fields: &toml::Table,
+    present: &toml::Table,
+    prefix: &str,
+    keep: &[&str],
+    out: &mut Vec<String>,
+) {
     for (key, value) in fields {
         if prefix.is_empty() && keep.contains(&key.as_str()) {
             continue;
@@ -249,7 +294,9 @@ fn missing_keys(fields: &toml::Table, present: &toml::Table, prefix: &str, keep:
         let path = if prefix.is_empty() { key.clone() } else { format!("{prefix}.{key}") };
         match (value, present.get(key)) {
             (_, None) => out.push(path),
-            (toml::Value::Table(f), Some(toml::Value::Table(p))) => missing_keys(f, p, &path, keep, out),
+            (toml::Value::Table(f), Some(toml::Value::Table(p))) => {
+                missing_keys(f, p, &path, keep, out)
+            }
             _ => {}
         }
     }
@@ -259,7 +306,6 @@ const UNKNOWN_HEADER: &str = "\n# ---- Keys this version doesn't use (renamed or
 
 #[derive(Default)]
 struct Synced {
-    /// The new file text, `None` if nothing changed.
     text: Option<String>,
     migrated: Option<(u32, u32)>,
     newer: Option<(u32, u32)>,
@@ -269,17 +315,15 @@ struct Synced {
 
 fn version_at(doc: &DocumentMut, path: &str) -> Option<u32> {
     let (parent, key) = split_path(path);
-    get_table(doc.as_table(), &parent)?
-        .get(key)?
-        .as_integer()
-        .and_then(|v| u32::try_from(v).ok())
+    get_table(doc.as_table(), &parent)?.get(key)?.as_integer().and_then(|v| u32::try_from(v).ok())
 }
 
-/// `user` brought in line with `template` (see the module doc). A `user`
-/// that isn't valid TOML is left as it is.
+/// `user` brought in line with `template`; text that isn't valid TOML is left as it is.
 fn sync_with_template(user: &str, template: &str, migration: Migration) -> Synced {
     let mut out = Synced::default();
-    let (Ok(mut doc), Ok(template)) = (user.parse::<DocumentMut>(), template.parse::<DocumentMut>()) else {
+    let (Ok(mut doc), Ok(template)) =
+        (user.parse::<DocumentMut>(), template.parse::<DocumentMut>())
+    else {
         return out;
     };
     let current = version_at(&template, migration.version_key).unwrap_or(1);
@@ -291,15 +335,19 @@ fn sync_with_template(user: &str, template: &str, migration: Migration) -> Synce
 
     let mut changed = false;
     if file_version < current {
-        for step in migration.steps.iter().skip(file_version as usize - 1).take((current - file_version) as usize) {
+        for step in migration
+            .steps
+            .iter()
+            .skip(file_version as usize - 1)
+            .take((current - file_version) as usize)
+        {
             step(&mut doc, &template);
         }
         out.migrated = Some((file_version, current));
         changed = true;
     }
-    // Write the version whenever the file lacks it or is behind - merge
-    // below would otherwise add the template's (current) value without the
-    // steps having run... which they now have.
+    // Stamp the current version when the file lacks it or is behind, before the merge below
+    // adds the template's value.
     if version_at(&doc, migration.version_key) != Some(current) {
         set_value(&mut doc, &template, migration.version_key, current as i64);
         changed = true;
@@ -326,10 +374,9 @@ fn sync_with_template(user: &str, template: &str, migration: Migration) -> Synce
     out
 }
 
-/// For migration steps: moves the value at `old` to `new` (dotted paths),
-/// creating `new`'s tables (with the template's comments) as needed, and
-/// keeping the template's comment above the key. Does nothing if `old`
-/// isn't a plain value or `new` is already set. Returns whether it moved.
+/// For migration steps: moves the value at `old` to `new` (dotted paths), keeping the template's
+/// comments. Does nothing if `old` isn't a plain value or `new` is already set; returns whether it
+/// moved.
 pub fn rename_key(doc: &mut DocumentMut, template: &DocumentMut, old: &str, new: &str) -> bool {
     let (old_parent, old_key) = split_path(old);
     let (new_parent, new_key) = split_path(new);
@@ -348,12 +395,6 @@ pub fn rename_key(doc: &mut DocumentMut, template: &DocumentMut, old: &str, new:
     true
 }
 
-/// For migration steps: the plain value at `path`, if any.
-pub fn get_value<'a>(doc: &'a DocumentMut, path: &str) -> Option<&'a toml_edit::Value> {
-    let (parent, key) = split_path(path);
-    get_table(doc.as_table(), &parent)?.get(key)?.as_value()
-}
-
 /// For migration steps: removes the value at `path`, returning it.
 pub fn remove_value(doc: &mut DocumentMut, path: &str) -> Option<toml_edit::Value> {
     let (parent, key) = split_path(path);
@@ -364,10 +405,13 @@ pub fn remove_value(doc: &mut DocumentMut, path: &str) -> Option<toml_edit::Valu
     table.remove(key)?.into_value().ok()
 }
 
-/// For migration steps: sets `path` to `v`, creating its tables (with the
-/// template's comments) as needed and keeping the template's comment above
-/// the key when the key is new.
-pub fn set_value(doc: &mut DocumentMut, template: &DocumentMut, path: &str, v: impl Into<toml_edit::Value>) {
+/// For migration steps: sets `path` to `v`, creating its tables with the template's comments.
+pub fn set_value(
+    doc: &mut DocumentMut,
+    template: &DocumentMut,
+    path: &str,
+    v: impl Into<toml_edit::Value>,
+) {
     let (parent, key) = split_path(path);
     let mut table = doc.as_table_mut();
     let mut template_table = Some(template.as_table());
@@ -402,6 +446,50 @@ pub fn set_value(doc: &mut DocumentMut, template: &DocumentMut, path: &str, v: i
         None => {
             table.insert(key, Item::Value(v));
         }
+    }
+}
+
+/// The settings of an old `.ini` file laid over `template`, as TOML text that keeps the template's
+/// comments. `path_of` maps an ini key to the `"Section.Key"` it became, `None` to skip it. A value
+/// is read as the kind the template holds there (bool, integer, float, string, or a comma-separated
+/// list of integers for an array); one that does not read as that kind keeps the template's value.
+pub fn import_ini(template: &str, ini: &str, path_of: impl Fn(&str) -> Option<String>) -> String {
+    let template: DocumentMut = template.parse().expect("the template is valid TOML");
+    let mut doc = template.clone();
+    for line in ini.lines() {
+        let Some((key, text)) = line.trim().split_once('=') else { continue };
+        let Some(path) = path_of(key.trim()) else { continue };
+        if let Some(value) = typed_like(&template, &path, text.trim()) {
+            set_value(&mut doc, &template, &path, value);
+        }
+    }
+    doc.to_string()
+}
+
+fn typed_like(template: &DocumentMut, path: &str, text: &str) -> Option<toml_edit::Value> {
+    use toml_edit::Value;
+    let (section, key) = path.split_once('.')?;
+    match template.get(section)?.get(key)?.as_value()? {
+        Value::Boolean(_) => text.parse::<bool>().ok().map(Value::from),
+        Value::Integer(_) => text.parse::<i64>().ok().map(Value::from),
+        Value::Float(_) => text.parse::<f64>().ok().map(Value::from),
+        Value::String(_) => Some(Value::from(text)),
+        Value::Array(_) => {
+            let ids: Option<Vec<i64>> = text.split(',').map(|id| id.trim().parse().ok()).collect();
+            ids.map(|ids| ids.into_iter().collect::<toml_edit::Array>().into())
+        }
+        _ => None,
+    }
+}
+
+/// For a mod that used to keep its settings in an `.ini`: when `path` does not exist yet and
+/// `ini_path` does, writes `import(ini text)` to `path`. The ini file is left alone.
+pub fn adopt_ini(path: &str, ini_path: &str, import: impl FnOnce(&str) -> String) {
+    if std::path::Path::new(path).exists() {
+        return;
+    }
+    if let Ok(ini) = fs::read_to_string(ini_path) {
+        let _ = write_atomic(path, &import(&ini));
     }
 }
 
@@ -453,7 +541,13 @@ fn count_values(item: &Item) -> usize {
 
 /// Removes every key of `user` that `template` doesn't have, adding a
 /// `path = value` line per removed value to `out`.
-fn take_unknown(user: &mut Table, template: &Table, prefix: &str, keep: &[&str], out: &mut Vec<String>) {
+fn take_unknown(
+    user: &mut Table,
+    template: &Table,
+    prefix: &str,
+    keep: &[&str],
+    out: &mut Vec<String>,
+) {
     let names: Vec<String> = user.iter().map(|(name, _)| name.to_string()).collect();
     for name in names {
         let path = if prefix.is_empty() { name.clone() } else { format!("{prefix}.{name}") };
@@ -502,9 +596,7 @@ fn describe(item: &Item, path: &str, out: &mut Vec<String>) {
 mod tests {
     use super::*;
 
-    /// Format version 3 of a made-up mod: v1 had `[Speed] PlayerRun`,
-    /// v2 renamed it to `[Player] Run`, v3 split `Player.Move` into
-    /// `Player.Walk` + `Player.Run`... see the steps below.
+    /// Format version 3 of a made-up mod; see the steps below.
     const TEMPLATE: &str = "\
 [General]
 ConfigVersion = 3   # managed by the mod
@@ -523,6 +615,28 @@ Run = 1.2
 LogFile = true
 ";
 
+    #[test]
+    fn an_ini_is_laid_over_the_template() {
+        let ini = "ReloadKey=F6
+All=2
+Walk=oops
+LogFile=false
+Other=1
+";
+        let text = import_ini(TEMPLATE, ini, |key| match key {
+            "ReloadKey" => Some("General.ReloadKey".to_string()),
+            "All" | "Walk" => Some(format!("Player.{key}")),
+            "LogFile" => Some("Logging.LogFile".to_string()),
+            _ => None,
+        });
+        let doc: toml::Value = toml::from_str(&text).unwrap();
+        assert_eq!(doc["General"]["ReloadKey"].as_str(), Some("F6"));
+        assert_eq!(doc["Player"]["All"].as_float(), Some(2.0));
+        assert_eq!(doc["Player"]["Walk"].as_float(), Some(1.2), "a bad value keeps the template's");
+        assert_eq!(doc["Logging"]["LogFile"].as_bool(), Some(false));
+        assert!(text.contains("# running"), "the template's comments are kept");
+    }
+
     /// 1 -> 2: `Speed.PlayerAll` / `Speed.PlayerMove` moved under `[Player]`.
     fn step_1_to_2(doc: &mut DocumentMut, template: &DocumentMut) {
         rename_key(doc, template, "Speed.PlayerAll", "Player.All");
@@ -540,11 +654,7 @@ LogFile = true
     const STEPS: &[Step] = &[step_1_to_2, step_2_to_3];
 
     fn migration() -> Migration<'static> {
-        Migration {
-            version_key: "General.ConfigVersion",
-            steps: STEPS,
-            keep: &["Override"],
-        }
+        Migration { version_key: "General.ConfigVersion", steps: STEPS, keep: &["Override"] }
     }
 
     fn sync(user: &str) -> Synced {
@@ -596,7 +706,8 @@ LogFile = true
 
     #[test]
     fn newer_file_is_not_touched() {
-        let user = TEMPLATE.replace("ConfigVersion = 3", "ConfigVersion = 4") + "\n[Future]\nX = 1\n";
+        let user =
+            TEMPLATE.replace("ConfigVersion = 3", "ConfigVersion = 4") + "\n[Future]\nX = 1\n";
         let s = sync(&user);
         assert_eq!(s.newer, Some((4, 3)));
         assert!(s.text.is_none());
@@ -641,7 +752,8 @@ LogFile = false
 
     #[test]
     fn unknown_keys_become_comments_at_the_end() {
-        let user = format!("{TEMPLATE}\n[Old]\nA = 1\nB = \"x\"\n").replace("Run = 1.2", "Run = 1.2\nTypo = 3");
+        let user = format!("{TEMPLATE}\n[Old]\nA = 1\nB = \"x\"\n")
+            .replace("Run = 1.2", "Run = 1.2\nTypo = 3");
         let s = sync(&user);
         assert_eq!(s.unknown, vec!["Player.Typo = 3", "Old.A = 1", "Old.B = \"x\""]);
         let text = s.text.unwrap();
@@ -685,9 +797,13 @@ Run = 1.2
 
     #[test]
     fn missing_keys_take_the_template_value() {
-        let cfg: Cfg = parse("[Player]
+        let cfg: Cfg = parse(
+            "[Player]
 Run = 3.0
-", CFG_TEMPLATE).unwrap();
+",
+            CFG_TEMPLATE,
+        )
+        .unwrap();
         assert_eq!(cfg.player.walk, 1.1);
         assert_eq!(cfg.player.run, 3.0);
         let cfg: Cfg = parse("", CFG_TEMPLATE).unwrap();
@@ -696,23 +812,37 @@ Run = 3.0
 
     #[test]
     fn errors_keep_the_users_line() {
-        let err = parse::<Cfg>("[Player]
+        let err = parse::<Cfg>(
+            "[Player]
 Run = 1.0
 Rn = 2.0
-", CFG_TEMPLATE).unwrap_err();
+",
+            CFG_TEMPLATE,
+        )
+        .unwrap_err();
         assert!(err.contains("Rn") && err.contains("line 3"), "{err}");
-        let err = parse::<Cfg>("[Player]
+        let err = parse::<Cfg>(
+            "[Player]
 Run = \"fast\"
-", CFG_TEMPLATE).unwrap_err();
+",
+            CFG_TEMPLATE,
+        )
+        .unwrap_err();
         assert!(err.contains("line 2"), "{err}");
     }
 
     #[test]
     fn template_missing_keys_finds_unset_fields() {
         assert!(template_missing_keys::<Cfg>(CFG_TEMPLATE, &[]).is_empty());
-        assert_eq!(template_missing_keys::<Cfg>("[Player]
+        assert_eq!(
+            template_missing_keys::<Cfg>(
+                "[Player]
 Walk = 1.1
-", &[]), vec!["Player.Run"]);
+",
+                &[]
+            ),
+            vec!["Player.Run"]
+        );
     }
 
     #[test]
@@ -722,8 +852,6 @@ Walk = 1.1
         set_value(&mut d, &template, "Player.Run", 2.0);
         assert!(d.to_string().contains("Run = 2.0 # mine"), "{}", d);
     }
-
-    // ---- save_values / scalar ----
 
     #[test]
     fn scalar_types_the_text() {
@@ -788,11 +916,16 @@ Boost = 2.0         # more speed
 
     /// A config over a fresh temp file holding `text`.
     fn save_config(name: &str, text: &str) -> (TomlConfig<SaveCfg>, String) {
-        let path = std::env::temp_dir().join(format!("toml_config_test_{}_{name}.toml", std::process::id()));
+        let path = std::env::temp_dir()
+            .join(format!("toml_config_test_{}_{name}.toml", std::process::id()));
         fs::write(&path, text).unwrap();
         let path = path.to_string_lossy().to_string();
         let current = parse::<SaveCfg>(text, SAVE_TEMPLATE).unwrap();
-        let config = TomlConfig { path: path.clone(), template: SAVE_TEMPLATE.to_string(), current: RwLock::new(Arc::new(current)) };
+        let config = TomlConfig {
+            path: path.clone(),
+            template: SAVE_TEMPLATE.to_string(),
+            current: RwLock::new(Arc::new(current)),
+        };
         (config, path)
     }
 
@@ -885,5 +1018,26 @@ Guard = true        # raising the guard
         let (config, path) = save_config("gone", USER_FILE);
         fs::remove_file(&path).unwrap();
         assert!(config.save_values(&[("Player.Run", "2.0".to_string())]).is_err());
+    }
+
+    #[test]
+    fn changed_keys_lists_only_what_differs() {
+        #[derive(Serialize)]
+        struct Group {
+            enabled: bool,
+            range: f64,
+        }
+        #[derive(Serialize)]
+        struct Settings {
+            items: Group,
+            key: String,
+        }
+        let old = Settings { items: Group { enabled: true, range: 2.0 }, key: "F5".into() };
+        let new = Settings { items: Group { enabled: false, range: 2.0 }, key: "F6".into() };
+        assert_eq!(
+            changed_keys(&old, &new),
+            vec!["items.enabled: true -> false", "key: \"F5\" -> \"F6\""]
+        );
+        assert!(changed_keys(&old, &old).is_empty());
     }
 }

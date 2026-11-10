@@ -1,36 +1,68 @@
-# Regen.PerTick: Trigger Idle (3) và Gesture (4)
+# Idle and gesture triggers
 
-**Status 2026-10-08: hoạt động, đã test trong game (Kolagon, Nexus). Mã: `src/trigger.rs` (`Triggers::update`, `confirm_pending`, `is_idle`, `is_gesture_active`; máy trạng thái thuần dùng đồng hồ truyền vào, có test cho từng kịch bản dưới đây) và `common::player::main_player_action_snapshot`.**
+Status: **Confirmed** in game. The state machine in `src/trigger.rs` has a test per scenario below.
+Conventions: [research notes](../../../docs/research/README.md).
 
-## Idle (`Trigger=3`)
+## Question
 
-Đọc thẳng `CSChrActionRequestModule`: không di chuyển (`movement_request_flags.raw_input`) và không giữ action nào (`r1/r2/l1/l2/sp_move/jump/use_item/action/guard/rideon/rideoff/ladderup/ladderdown`). Phải đứng yên liên tục `IDLE_GRACE_MS = 5000` (tính từ lần `busy` cuối, `IDLE_SINCE_MS`) mới tính idle. Không cần `AttackHook`.
+How can `[PerTick]` tell that the player is idle, or sitting through a gesture, when the game exposes
+neither?
 
-## Gesture (`Trigger=4`, key `Regen.PerTick.GestureId`)
+## Idle (`Trigger = 3`)
 
-Mặc định 10 gesture ngồi: `80,90,91,92,93,94,95,97,100,101`. `requested_gesture` đúng bằng **1 nửa** `GESTURE_ID` trong CE table của The Grand Archives (Dejection 160 → 80, Rest 184 → 92, Sitting Sideways 186 → 93); hệ số /2 chỉ suy ra từ log thật, không có tài liệu. Danh sách đọc từ ini nên người dùng tự thêm/bớt gesture. Tính năng ban đầu tên "Sitting", đổi thành "Gesture" 2026-09-17 vì "ngồi" chỉ là giá trị mặc định.
+`shared::player::main_player_action_snapshot` reads `CSChrActionRequestModule`: no movement input
+(`movement_request_flags.raw_input`) and no held action (`r1`, `r2`, `l1`, `l2`, `sp_move`, `jump`,
+`use_item`, `action`, `guard`, `rideon`, `rideoff`, `ladderup`, `ladderdown`). The player must stay still
+for 5 seconds from the last frame that was busy.
 
-`requested_gesture` chỉ đúng **1 frame** khi `new_action_presses.gesture()` bắn, nên phải chốt (latch) `Triggers::gesture_active`. Không có cách phân biệt "bắt đầu" với "huỷ" từ tín hiệu đó: nếu đang active thì lần bấm gesture kế (bất kể ID) là huỷ → đứng dậy xử lý ngay; huỷ chốt khi có input "busy" khác (di chuyển/tấn công/dùng đồ/đỡ/cưỡi ngựa).
+## Gesture (`Trigger = 4`, `GestureId`)
 
-## Cơ chế xác nhận (lần thử thứ 4, thành công)
+The default list holds ten sitting gestures. `requested_gesture` is **half** of the gesture id a public
+cheat table shows (Dejection 160 reads 80, Rest 184 reads 92, Sitting Sideways 186 reads 93); the factor
+comes from real logs only. The list is read from the config so a new gesture needs no new DLL. The
+feature was first called "Sitting" and renamed because sitting is only the default.
 
-Vấn đề: bấm gesture giữa lúc đang cast phép thì game chặn, nhưng `requested_gesture` vẫn được ghi → không được tính là ngồi (báo lỗi Kolagon 2026-09-13). Giải pháp: **xác nhận sau một khoảng trễ** bằng `CSChrTimeActModule::anim_queue[read_idx].anim_id` (TAE anim đang chạy). Không cần bảng map TAE↔gesture, chỉ cần "anim có đổi so với lúc bấm không".
+`requested_gesture` is valid for **one frame**, when `new_action_presses.gesture()` fires, so the result
+is latched. The signal does not tell starting from cancelling: while a gesture is active, the next
+gesture press, of any id, cancels it and stands up at once. Any other busy input (movement, attack, item,
+guard, mounting) cancels as well.
 
-- Bấm khớp danh sách → chỉ ghi `PENDING_GESTURE_SINCE_MS` + `PENDING_GESTURE_ANIM_ID` (anim lúc bấm).
-- Chốt `gesture_active = true` khi `anim_id` **khác lúc bấm VÀ khác 0 VÀ giữ ổn định liên tục `ANIM_STABLE_MS` (1000ms)**; hết `GESTURE_CONFIRM_TIMEOUT_MS` (6000ms) thì bỏ pending. Đủ cả 2 điều kiện đầu vì: chỉ "khác 0" sai khi anim cast chưa kịp đổi; chỉ "khác lúc bấm" sai khi anim cast tự kết thúc về 0 trong lúc chờ.
-- Bấm lặp lại khi còn pending bị **bỏ qua** (không đụng baseline/timer), để lần đầu chạy hết chu trình; nếu sau đó thành `true` thì lần bấm kế rơi vào nhánh "đang ngồi → huỷ". (Trước đó ghi đè baseline làm không bao giờ confirm, rồi confirm nhầm lúc đứng dậy.)
-- Timeout 3000 → 6000ms (2026-09-22): quay gấp ngay trước khi bấm làm anim xoay/dừng mất >3s để ổn định → xác nhận hết hạn, regen không hồi.
-- Test: 5/5 cast + bấm gesture bị chặn đúng, 2/2 ngồi thật, 2/2 đứng dậy ngay; nhiều lần bấm dồn dập đều đúng. Chi phí ≈ 0 khi không pending (1 biến atomic).
+### Confirmation (the fourth attempt)
 
-## Hướng đã thử và sai (đừng lặp lại)
+A gesture pressed in the middle of a cast is blocked by the game, but `requested_gesture` is still
+written, so it cannot count as sitting. Confirmation looks at the animation id of
+`CSChrTimeActModule.anim_queue` a while later. No table of animations per gesture is needed, only whether
+the animation changed since the press:
 
-- `queued_action_inputs.gesture()` (2.6.0): chỉ set cho action có trong `possible_action_inputs`, mà gesture wheel không đi qua đó → gần như không bao giờ bật, Sitting mất hẳn tác dụng (lỗi im lặng, không log).
-- `TaeCancelFlags::cancel_disable`: `false` ngay cả khi đang niệm phép.
-- `possible_action_inputs.gesture()`: `false` ngay cả khi ngồi thành công.
-- `possible_action_cancels` (OR toàn bitfield): tưởng đúng qua 11 lần test, hoá ra **dao động đều mỗi 3 giây** giữa 0 và `31073500911` khi đứng yên (artifact chu kỳ anim idle). **Điều kiện bắt buộc trước khi thử field mới:** có log nhiều phút không tương tác chứng minh field đứng yên khi không cast.
-- RE tĩnh (Ghidra, IDA 9.3): hàm `PlayGesture` `0x14078a9c0`, gate `GetManipulatorKind() == 1` (Pad) - không giải thích được bug (solo luôn là Pad kể cả khi cast).
-- Bản đầu confirm chỉ check "khác 0" bị sai dương; anim chuyển tiếp qua nhiều ID trung gian (đổi ~0.5-1s) nên cần ổn định liên tục chứ không đọc 1 lần.
+- A press in the list only records the time and the animation id at the press (the baseline).
+- The gesture is active once the animation id is non-zero, differs from the baseline and has held for
+  one second. Both conditions are needed: "not zero" alone fires while the cast animation has not changed
+  yet, and "differs from the press" alone fires when the cast ends by itself and falls back to zero.
+- A pending gesture that does not settle within 6 seconds is dropped (3 seconds was too short after a quick
+  turn before the press).
+- A repeated press while pending is **ignored**, without touching the baseline or the timer, so the first
+  press runs its course. Overwriting the baseline made the confirmation never happen and then fire while
+  standing up.
+
+Tested in game: 5 of 5 blocked presses during a cast were rejected, 2 of 2 real sits confirmed, 2 of 2
+stand-ups were immediate, and bursts of presses behaved. With nothing pending the cost is one atomic.
+
+## Rejected paths
+
+- `queued_action_inputs.gesture()`: only set for actions in `possible_action_inputs`, and the gesture
+  wheel does not go through it, so the feature silently stopped working.
+- `TaeCancelFlags::cancel_disable`: false even while casting.
+- `possible_action_inputs.gesture()`: false even when the sit succeeded.
+- `possible_action_cancels` (the OR of the whole bitfield): looked right over eleven tests but oscillates
+  every 3 seconds between 0 and `31073500911` while standing still (an artifact of the idle animation
+  cycle). Before trying another field, record several minutes without interaction and show that it is
+  stable when not casting.
+- Static analysis of `PlayGesture`: its gate (`GetManipulatorKind() == 1`, the pad) does not explain the
+  bug, since solo play is always the pad, even while casting.
+- Confirming on "not zero" only gave false positives; the animation passes through several transitional
+  ids that change every half to one second, so it must hold, not be read once.
 
 ## Log
 
-`Gesture: requested_gesture=<n> -> ...` mỗi lần bấm, `Regen.PerTick: trigger=<n> -> condition_met=<bool> (...)` chỉ ghi khi `(trigger, condition_met)` đổi (dedupe đã sửa 2026-09-17 vì `idle` nhảy khi đi rồi dừng cũng gây spam).
+`Gesture: <id> ...` for each press and its outcome. `Tick: trigger=<n> met=<bool> (...)` only when the
+pair changes, because idle flips every time the player walks and stops.

@@ -1,24 +1,27 @@
 #![allow(non_snake_case)] // crate name is "RiseArcher" to control the output DLL's filename
 
 mod bullet;
+mod config;
 mod menu;
 mod weapon;
 
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use eldenring::cs::{CSTaskGroupIndex, SoloParamRepository};
 use fromsoftware_shared::FromStatic;
 
-use common::{config, dll_dir, logger};
+use shared::{dll_dir, logger};
 
-// The default config, embedded verbatim: the single source of truth for keys
-// and defaults.
-const DEFAULT_INI: &str = include_str!("../RiseArcher.ini");
+/// Set by a reload or a menu save; the tick applies it once the player is in the world.
+static APPLY_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+pub fn request_apply() {
+    APPLY_REQUESTED.store(true, Ordering::Relaxed);
+}
 
 /// # Safety
-/// This is exposed this way so the library loader can call it. Do not call it
-/// yourself.
+/// Called by the loader only.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     const DLL_PROCESS_ATTACH: u32 = 1;
@@ -28,64 +31,73 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
 
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
-        let ini_path = format!("{dir}\\RiseArcher.ini");
-        let added_keys = config::load_or_create_default(&ini_path, DEFAULT_INI);
+        let name = shared::dll_stem(hmodule);
+        let path = format!("{dir}\\{name}.toml");
+        config::adopt_ini(&path, &format!("{dir}\\{name}.ini"));
+        let report = config::init(&path);
 
-        // `LogFile` gates the log file entirely, see common::logger.
-        logger::init(&dir, "RiseArcher.log");
+        logger::set_enabled(config::get().logging.log_file);
+        logger::init(&dir, &format!("{name}.log"));
         logger::install_panic_hook();
-        if added_keys > 0 {
-            logger::log(&format!("RiseArcher.ini: added {added_keys} key(s) from the template"));
-        }
 
-        // The menu registers right away (the host only accepts menu
-        // registrations at startup); its changes reach `run` through
-        // `RELOAD_GENERATION`, which `common::reload` bumps (it owns the reload key).
-        menu::start(hmodule, ini_path.clone());
-        std::thread::spawn(move || common::reload::run(ini_path));
+        // The menu host accepts registrations only in its first seconds.
+        menu::start(hmodule);
 
-        common::diag::log_environment_when_game_ready();
+        report.log(&format!("{name}.toml"));
+
+        std::thread::spawn(|| {
+            shared::reload::run(
+                || config::get().general.reload_key.clone(),
+                || config::get().general.reload_banner,
+                || {
+                    config::reload()?;
+                    logger::set_enabled(config::get().logging.log_file);
+                    menu::sync_from_config();
+                    request_apply();
+                    Ok(())
+                },
+            )
+        });
+
+        shared::diag::log_environment_when_game_ready();
         run();
     });
 
     true
 }
 
-/// Waits for the player to be in the world, applies every buff, then follows
-/// `RELOAD_GENERATION` for the rest of the DLL's life, reapplying from the
-/// cached original values. Regulation rows are loaded once at startup, so the
-/// buff itself needs no per-frame task; the one below only notices reloads.
+/// Waits for the player to be in the world, applies every buff, then applies again on every
+/// [request_apply] from the cached original values. The param rows are loaded once at start-up, so
+/// the buff needs no per-frame task; the one below only notices requests.
 fn run() {
-    let mut last_seen_generation = common::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
+    let repo = shared::player::wait_for_solo_param_repository();
 
-    let repo = common::player::wait_for_solo_param_repository();
-
-    let Some((weapon_changed, bullet_changed)) = apply_with_retry(repo, Duration::from_secs(30)) else {
+    let Some((weapon_changed, bullet_changed)) = apply_with_retry(repo, Duration::from_secs(30))
+    else {
         logger::error("Apply: kept panicking for 30s, disabled for this session");
         return;
     };
     logger::log(&format!("Applied: {weapon_changed} weapon, {bullet_changed} bullet row(s)"));
 
-    let cs_task = common::task::wait_for_cs_task();
-    let _handle = common::task::run_recurring_safe(
+    let cs_task = shared::task::wait_for_cs_task();
+    shared::task::run_recurring_safe(
         cs_task,
         "RiseArcher",
         CSTaskGroupIndex::FrameBegin,
         move |_data: &eldenring::fd4::FD4TaskData| {
-            let generation = common::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
-            if generation == last_seen_generation {
+            if !APPLY_REQUESTED.swap(false, Ordering::Relaxed) {
                 return;
             }
-            last_seen_generation = generation;
-            menu::sync_from_config();
-
+            // SAFETY: called from a game task; `instance_mut` returns `Err` while the singleton does not exist.
             let Ok(repo) = (unsafe { SoloParamRepository::instance_mut() }) else {
-                logger::warn("Reload: SoloParamRepository unavailable, skipped");
+                logger::warn("Apply: SoloParamRepository unavailable, change skipped");
                 return;
             };
             let weapon_changed = weapon::apply(repo);
             let bullet_changed = bullet::apply(repo);
-            logger::log(&format!("Reload: {weapon_changed} weapon, {bullet_changed} bullet row(s)"));
+            logger::log(&format!(
+                "Applied: {weapon_changed} weapon, {bullet_changed} bullet row(s) (changed)"
+            ));
         },
     );
 
@@ -94,13 +106,15 @@ fn run() {
     }
 }
 
-/// Runs both `apply`s, retrying for up to `timeout` if either panics: a param
-/// whose res cap hasn't finished loading panics instead of returning an
-/// `Err`. A panic happens before any row is mutated, so a retry is safe.
+/// Runs both `apply`s, retrying for up to `timeout` if either panics: a param whose res cap has not
+/// finished loading panics instead of returning an `Err`. A panic happens before any row is
+/// mutated, so a retry is safe.
 fn apply_with_retry(repo: &mut SoloParamRepository, timeout: Duration) -> Option<(usize, usize)> {
     let deadline = Instant::now() + timeout;
     loop {
-        let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (weapon::apply(repo), bullet::apply(repo))));
+        let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            (weapon::apply(repo), bullet::apply(repo))
+        }));
         match attempt {
             Ok(counts) => return Some(counts),
             Err(_) => logger::warn("Apply: panicked, retrying"),

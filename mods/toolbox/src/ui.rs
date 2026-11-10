@@ -1,4 +1,4 @@
-//! In-game Toolbox GUI (Dear ImGui over DX12 via `common::overlay`).
+//! In-game Toolbox GUI (Dear ImGui over DX12 via `shared::overlay`).
 //! Opened/closed with `MenuKey` (default `F8`). Lets you:
 //! - Click a button for any of the 7 status buildup bars (Poison, Scarlet Rot,
 //!   Bleed, Death Blight, Frostbite, Sleep, Madness) to trigger/add buildup
@@ -9,8 +9,8 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use common::logger;
-use common::overlay::{self, GOLD, GOLD_DIM, TEXT_MUTED, Ui, WindowConfig};
+use shared::logger;
+use shared::overlay::{self, GOLD, GOLD_DIM, TEXT_MUTED, Ui, WindowConfig};
 
 use crate::buildup::{self, BARS, GuiAction};
 use crate::config;

@@ -1,112 +1,109 @@
-# SoulsTeleport: lấy vị trí đồng đội qua Steam P2P (WHERE / HERE)
+# Getting a partner's position over Steam P2P (WHERE / HERE)
 
-**Status 2026-09-26: ĐANG PHÁT HÀNH (1.1.0), test trong game với Seamless Co-op
-(host và join, hai chiều).** Code: `src/net.rs`, `src/steam.rs`, `src/party.rs`. Phần dịch
-chuyển nằm ở `warp_mechanism.md`; vai trò và chặn invader ở `roles_and_invaders.md`.
+Status: **Confirmed** in game with Seamless Co-op (host and joiner, both ways). Conventions:
+[research notes](../../../docs/research/README.md). Code: `src/net.rs`, `src/steam.rs`, `src/party.rs`. The warp
+itself is in [warp_mechanism.md](warp_mechanism.md); roles and the invader block in
+[roles_and_invaders.md](roles_and_invaders.md).
 
-## Vì sao phải tự gửi vị trí qua mạng
+## Question
 
-Khảo sát Seamless Co-op (2026-09-24, hai instance trên một máy, tài khoản Steam thứ hai chạy
-trong Sandboxie):
+Why must the mod send positions over the network itself, and how does it do that safely?
 
-- Đồng đội **có** trong `WorldChrMan.player_chr_set` và Seamless báo cả hai là `chr_type Local`.
-- `PlayerIns.current_block_id` và `block_position` **chỉ được cập nhật cho chính mình**; của
-  đồng đội là `-1` / `0`.
-- Tọa độ Havok (`CSChrPhysicsModule.position`) của đồng đội **sống và chính xác khi ở gần**
-  (cách nhau ~0.9 m), nhưng khi người kia đi xa thì entry vẫn còn mà Havok về `(0, 0, 0)`:
-  máy kia không còn biết vị trí. `ChrIns.block_id` thì luôn là block cũ, không đáng tin.
+## Why the position has to be sent
 
-Kết luận: mod phải tự gửi vị trí. Mỗi instance đọc block và tọa độ của chính mình
-(`PlayerIns.current_block_id` / `block_position`, luôn đúng cho main player) rồi gửi đi. Công
-thức Havok chỉ còn là dự phòng khi ở gần.
+A survey of Seamless Co-op (two instances on one machine, the second Steam account in a sandbox):
 
-## Truyền thông (`src/steam.rs`)
+- A partner **is** in `WorldChrMan.player_chr_set` and Seamless reports both as `chr_type Local`.
+- `PlayerIns.current_block_id` and `block_position` are updated **only for oneself**; for a partner they are `-1`
+  and `0`.
+- The Havok position (`CSChrPhysicsModule.position`) of a partner is **live and exact when near** (about 0.9 m
+  apart), but when that player goes far the entry stays and Havok drops to `(0, 0, 0)`: the machine no longer
+  knows the position. `ChrIns.block_id` is always the old block, not reliable.
 
-Binding tối thiểu tới `ISteamNetworkingMessages`, lấy bằng `GetProcAddress` từ `steam_api64.dll`
-mà game đã nạp sẵn (flat C API, không cần Steamworks SDK hay crate). Chỉ đọc vài trường đầu của
-`SteamNetworkingMessage_t`, giải phóng qua export `SteamAPI_SteamNetworkingMessage_t_Release`,
-nên không phụ thuộc layout sâu hơn của struct. Kênh riêng `0x5354` ("ST"); SoulsChat dùng 42 nên
-không đụng nhau. Gửi **reliable** (mỗi lần teleport chỉ một `WHERE` và một `HERE`, rớt gói là phải
-chờ hết giờ). Danh sách người trong phiên lấy từ `CSSessionManager.players` (singleton tra theo
-tên, không khoá version; mỗi entry có `steam_id`, `steam_name`, `is_local_player`); xác nhận dùng
-được trong Seamless Co-op.
+So each instance reads the block and position of itself (`PlayerIns.current_block_id` / `block_position`, always
+right for the main player) and sends them. The Havok formula is only a fallback when near.
 
-## Từ broadcast sang hỏi khi cần
+## Transport (`src/steam.rs`)
 
-Bản thử đầu **broadcast** vị trí mỗi 500 ms cho mọi người (gói 66 byte, magic `STP1`): đơn giản
-và luôn có dữ liệu để khảo sát, nhưng chỉ là cách tạm. Test cho thấy vị trí nhận được chỉ cũ 0,0-0,4
-giây, warp qua loading thành công và phiên co-op giữ nguyên. Bản thật đổi sang **hỏi khi cần**
-vì: không phát vị trí liên tục khi chẳng ai teleport, vị trí luôn mới nhất, và không lộ vị trí
-cho mọi người cài mod. (`CSSessionManager` còn liệt kê cả người lạ do chưa đổi `cooppassword`
-của Seamless; bản broadcast đã gửi vị trí cho cả họ, dù gói bị bỏ qua vì họ không cài mod.)
+A minimal binding to `ISteamNetworkingMessages`, taken with `GetProcAddress` from `steam_api64.dll`, which the
+game has loaded (flat C API, no Steamworks SDK or crate). Only the first fields of `SteamNetworkingMessage_t` are
+read and the message is released through the export `SteamAPI_SteamNetworkingMessage_t_Release`, so no deeper
+struct layout is assumed. Its own channel `0x5354` ("ST"); a chat mod uses 42, so they do not clash. Messages are
+sent **reliably** (one `WHERE` and one `HERE` per teleport; a lost packet means waiting for the timeout). The
+player list comes from `CSSessionManager.players` (the singleton is found by name, no version lock; each entry
+has `steam_id`, `steam_name`, `is_local_player`); confirmed usable under Seamless Co-op.
 
-- **Bên hỏi:** gửi `WHERE` (16 byte: magic `STW1`, SteamID người hỏi, request id) tới đúng một
-  người, chờ tối đa **10 giây** (bản nháp đầu 2 giây: quá ngắn, vì đồng đội có thể đang loading
-  hoặc hồi sinh và chỉ trả lời khi vào lại world).
-- **Bên được hỏi:** trả `HERE` (70 byte: magic `STH1`, SteamID, request id, block, x/y/z/yaw
-  trong block, tên nhân vật). Nếu `WHERE` tới khi mình đang loading hay hồi sinh thì giữ lại và trả
-  ngay khi vào lại world (trong 10 giây); quá hạn thì bỏ và bên hỏi báo "did not respond". Một
-  người hỏi chỉ được giữ tối đa **một** `WHERE` hoãn (cái mới thay cái cũ).
-- `HERE` trễ hoặc của request cũ bị bỏ qua (so SteamID và request id).
-- `AcceptSessionWithUser` được gọi cho mọi người trong phiên mỗi 2 giây; nếu không, `WHERE` đầu
-  tiên từ một người mình chưa từng gửi gì sẽ bị Steam bỏ. Danh sách phiên chỉ được đọc khi cần.
+## From broadcast to asking on demand
 
-## Chỉ trả lời khi đã "ở trong world" thật sự
+The first version **broadcast** the position every 500 ms to everyone (a 66-byte packet, magic `STP1`): simple
+and always has data to study, but only a stopgap. The position received was only 0.0 to 0.4 s old, a warp across
+the loading screen worked and the co-op session stayed up. The real version **asks when needed**: no continuous
+broadcast when nobody teleports, the position is always the latest, and it is not shown to everyone who has the
+mod. (`CSSessionManager` also lists strangers when Seamless's `cooppassword` was not changed; the broadcast
+version sent the position to them too, although the packet was ignored as they lack the mod.)
 
-Lỗi đã gặp: warp tới người đang ở màn hình loading thì **người warp bị văng ra màn hình chính**
-(cả hai chiều). Nguyên nhân: lúc load, `WorldChrMan` vẫn có main player cũ nên máy được hỏi trả
-`HERE` ngay với vị trí ở map đang rời đi. Sửa: chỉ trả lời khi đã "ở trong world" liên tục từ
-2 giây trở lên (`SETTLE_TIME`), với "ở trong world" gồm ba điều kiện: có main player **và**
-`GameMan.warp_requested` bằng false **và** `CSSessionManager.protocol_state` không ở pha tải lại
-(`WaitInitData`, `WaitReloadWait`, `WaitReload`, `WaitReload2`, `WaitReentryToMap`). Chưa đủ điều
-kiện thì giữ yêu cầu lại như trên. Chưa xác minh Seamless có cập nhật `protocol_state` không; nếu
-không thì `warp_requested` cùng 2 giây vẫn là lớp chặn chính. Bên warp cũng không warp khi chính
-mình đang có move-map chờ.
+- **The asker** sends `WHERE` (16 bytes: magic `STW1`, the asker's SteamID, a request id) to exactly one player
+  and waits at most **10 seconds** (2 seconds was too short: the partner may be loading or respawning and
+  answers only when back in the world).
+- **The one asked** answers `HERE` (70 bytes: magic `STH1`, SteamID, request id, block, x/y/z/yaw in the block,
+  character name). If `WHERE` arrives while loading or respawning, it is held and answered as soon as the world
+  is back (within 10 seconds); past that it is dropped and the asker says "did not respond". One asker may have
+  at most **one** deferred `WHERE` (a new one replaces the old).
+- A late `HERE` or one of an old request is ignored (SteamID and request id compared).
+- `AcceptSessionWithUser` is called for everyone in the session every 2 seconds; without it the first `WHERE`
+  from someone never contacted before is dropped by Steam. The session list is read only when needed.
 
-## Nhớ vai trò đồng đội khi `PlayerIns` tạm biến mất
+## Answer only when really "in the world"
 
-Lần bấm đầu của người join tới host bị từ chối nhầm: host đang ở màn hình loading nên
-`player_chr_set` của host tạm thời không có `PlayerIns` của người join, vai trò thành `None`, và
-luật "chưa rõ vai trò thì không tin" loại ngay ở bước kiểm tra, **trước** bước "chưa ở trong world
-thì giữ lại trả lời sau" (nên yêu cầu bị bỏ thay vì hoãn). Lúc đầu đọc log tưởng do host ở xa; thật
-ra là do đang loading. Sửa (`party.rs`): `KNOWN_ROLES` nhớ `chr_type` cuối cùng thấy được của từng
-SteamID, cập nhật mỗi lần đọc danh sách phiên (ít nhất 2 giây một lần), và người không còn
-`PlayerIns` thì dùng vai trò đã nhớ; chỉ người **chưa từng thấy** mới bị coi là chưa rõ.
+A fault seen: warping to someone on a loading screen **threw the warper to the title screen** (both ways). Cause:
+while loading, `WorldChrMan` still has the old main player, so the machine asked answered `HERE` at once with the
+position of the map being left. Fix: answer only after being "in the world" continuously for 2 seconds
+(`SETTLE_TIME`), where "in the world" means a main player **and** `GameMan.warp_requested` false **and**
+`CSSessionManager.protocol_state` not in a reload phase (`WaitInitData`, `WaitReloadWait`, `WaitReload`,
+`WaitReload2`, `WaitReentryToMap`). Until then the request is held as above. **Not verified**: whether Seamless
+updates `protocol_state`; if not, `warp_requested` and the 2 seconds are still the main guard. The warper also
+does not warp while it has a move-map pending itself.
 
-## Bấm một phím, hai instance cùng dịch chuyển
+## Remembering a partner's role while `PlayerIns` is gone
 
-Lỗi đã gặp khi test hai instance trên một desktop: bấm `F10` ở một cửa sổ, **cả hai** bản game đều
-warp. Nhận định ban đầu (hàm của fromsoftware-rs chỉ nhận phím của cửa sổ chính process) là **sai**:
-`eldenring::util::input::is_key_pressed` dùng `GetKeyState`, mà mod gọi từ task `FrameBegin` của
-game, luồng đó không có hàng đợi input riêng nên thấy trạng thái phím chung của cả desktop. Sửa:
-dùng `common::input::is_key_pressed`, kiểm tra cửa sổ foreground thuộc chính process trước khi đọc
-phím (instance không được focus không đọc phím gì), và gọi được từ mọi luồng (`GetAsyncKeyState`).
+The joiner's first click on the host was wrongly refused: the host was on a loading screen, so the host's
+`player_chr_set` briefly lacked the joiner's `PlayerIns`, the role became `None`, and the rule "unknown role is
+not trusted" rejected it at the check made **before** "not yet in the world: hold and answer later" (so the
+request was dropped instead of deferred). The log first looked as if the host were far away; it was loading. Fix
+(`party.rs`): `KNOWN_ROLES` remembers the last `chr_type` seen for each SteamID, updated each time the session
+list is read (at least every 2 seconds), and a player without a `PlayerIns` uses the remembered role; only
+someone **never seen** counts as unknown.
 
-**Còn tồn đọng:** `common::reload` và `autoregen` vẫn gọi thẳng
-`eldenring::util::input::is_key_pressed`, nên `ReloadKey` của các mod đó vẫn có khả năng lọt
-sang instance khác trên cùng desktop. Chưa sửa.
+## One key press, two instances teleport
 
-## Chống giả gói tin (review 2026-09-25)
+Seen with two instances on one desktop: pressing the key in one window made **both** games warp. The first
+reading (a fromsoftware-rs function only takes keys of the process's main window) was **wrong**:
+`eldenring::util::input::is_key_pressed` uses `GetKeyState`, which the mod calls from the game's `FrameBegin`
+task; that thread has no input queue of its own, so it sees the shared key state of the whole desktop. Fix: use
+`shared::input::is_key_pressed` ([input](../../../shared/docs/input.md)), which checks that the foreground window
+belongs to this process before reading the key (an unfocused instance reads nothing) and can be called from any
+thread (`GetAsyncKeyState`).
 
-Trước đó người gửi chỉ lấy từ SteamID ghi trong nội dung gói và request id là 1, 2, 3...: một người
-trong phiên dùng mod bị sửa có thể gửi `HERE` giả đúng lúc mình đang chờ và ép warp tới block hoặc
-tọa độ rác (crash, rơi khỏi map, kẹt). Giờ:
+## Forged packets
 
-- `steam.rs` đọc thêm `m_identityPeer` của `SteamNetworkingMessage_t` (offset 16, sau `m_pData`,
-  `m_cbSize`, `m_conn`): người gửi do **Steam** xác thực. `net.rs` bỏ mọi gói có SteamID trong nội
-  dung khác người gửi thật (`sender_matches`).
-- Request id ngẫu nhiên (`RandomState` và thời gian, khác 0).
-- `HERE` có block `-1`, tọa độ NaN/vô cực hoặc lớn hơn 100 000 bị bỏ (`spot_is_sane`); vẫn chờ
-  tiếp, hết giờ thì báo như thường.
-- Đã test lại: `WHERE` với request id ngẫu nhiên, `HERE` sau 28 ms, warp thành công, cả hai log
-  không có dòng `Dropped a packet claiming to be from ...`, nên đọc `m_identityPeer` ở offset 16 là
-  đúng layout.
-- Test hai chiều lần 4: `WHERE` đến `HERE` sau **33 ms**.
+Earlier the sender came only from the SteamID inside the payload and request ids were 1, 2, 3...: a player in the
+session with a modified mod could send a fake `HERE` at the right moment and force a warp to a garbage block or
+position (crash, falling out of the map, stuck). Now:
 
-## Giới hạn
+- `steam.rs` also reads `m_identityPeer` of `SteamNetworkingMessage_t` (offset 16, after `m_pData`, `m_cbSize`
+  and `m_conn`): the sender is authenticated by **Steam**. `net.rs` drops every packet whose payload SteamID
+  differs from the real sender (`sender_matches`).
+- The request id is random (`RandomState` and the time, never 0).
+- A `HERE` with block `-1`, NaN or infinite coordinates, or above 100,000 is dropped (`spot_is_sane`); the asker
+  keeps waiting and reports as usual on timeout.
+- Retested: `WHERE` with a random id, `HERE` after 28 ms, a successful warp, no `Dropped a packet claiming to be
+  from ...` line in either log, so reading `m_identityPeer` at offset 16 is the right layout. A second test both
+  ways: `WHERE` to `HERE` in **33 ms**.
 
-- Ai trong phiên cài mod (và không thù địch) đều hỏi được vị trí của mình: nên đặt
-  `cooppassword` riêng cho Seamless.
-- Phụ thuộc layout bộ nhớ từng bản game cho danh sách phiên, vị trí và `protocol_state` (đọc qua
-  fromsoftware-rs).
-- Chưa test phiên từ 3 người trở lên.
+## Limits
+
+- Anyone in the session who has the mod (and is not hostile) can ask for the player's position: set a private
+  `cooppassword` in Seamless.
+- It depends on the memory layout per game build for the session list, the position and `protocol_state` (read
+  through fromsoftware-rs).
+- Sessions of three or more players were not tried.

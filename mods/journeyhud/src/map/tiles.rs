@@ -13,8 +13,9 @@ use std::io;
 use std::path::Path;
 use std::sync::Mutex;
 use std::sync::mpsc::{Receiver, Sender, channel};
+use std::time::Instant;
 
-use common::logger;
+use shared::logger;
 
 use super::archive;
 use super::formats::{BinderEntry, Oodle, first_tpf_texture, read_binder};
@@ -94,10 +95,7 @@ impl Loader {
                 logger::warn(&format!("Map: loader stopped ({e})"));
             }
         });
-        Self {
-            requests,
-            windows: Mutex::new(windows),
-        }
+        Self { requests, windows: Mutex::new(windows) }
     }
 
     pub fn request(&self, request: Request) {
@@ -114,19 +112,32 @@ fn serve(
     requests: &Receiver<Request>,
     windows: &Sender<Window>,
 ) -> io::Result<()> {
+    // With `Logging.MapProbe`: where the time goes before the first window.
+    let started = Instant::now();
+    let probe = |what: &str| {
+        if crate::settings::map_probe() {
+            logger::log(&format!("Map: loader {what} after {} ms", started.elapsed().as_millis()));
+        }
+    };
     let oodle = Oodle::load(&game_dir.join("oo2core_6_win64.dll"))?;
+    probe("loaded Oodle");
     let masks =
         read_masks(&oodle.decompress_dcx(
             &archive::open(game_dir, "/menu/71_maptile.mtmskbnd.dcx")?.read_all()?,
         )?)?;
-    let tiles = index_tiles(read_binder(
-        &archive::open(game_dir, "/menu/71_maptile.tpfbhd")?.read_all()?,
-    )?);
+    probe("read the masks");
+    let tiles =
+        index_tiles(read_binder(&archive::open(game_dir, "/menu/71_maptile.tpfbhd")?.read_all()?)?);
+    probe("read the tile index");
     let mut bdt = archive::open(game_dir, "/menu/71_maptile.tpfbdt")?;
     let mut decoded: HashMap<(MapId, [i32; 2], u32), Vec<u8>> = HashMap::new();
     let mut missing_logged = 0;
+    let mut first = true;
 
     while let Ok(mut request) = requests.recv() {
+        if first {
+            probe("got the first request");
+        }
         // Only the newest request matters once the player has moved on.
         while let Ok(newer) = requests.try_recv() {
             request = newer;
@@ -157,7 +168,9 @@ fn serve(
                             // Shown as unexplored; with `Logging.MapProbe` logged (a few times) to tell a missing tile from a window never asked for.
                             if missing_logged < 20 && crate::settings::map_probe() {
                                 missing_logged += 1;
-                                logger::log(&format!("Map: no tile for {map:?} cell {cell:?} variant {variant:#x}"));
+                                logger::log(&format!(
+                                    "Map: no tile for {map:?} cell {cell:?} variant {variant:#x}"
+                                ));
                             }
                             EMPTY.repeat(TILE * TILE)
                         }
@@ -172,6 +185,10 @@ fn serve(
                 }
             }
         }
+        if first {
+            probe("built the first window");
+            first = false;
+        }
         if windows.send(Window { map, origin, rgba }).is_err() {
             return Ok(());
         }
@@ -183,12 +200,8 @@ fn serve(
 fn read_masks(bnd: &[u8]) -> io::Result<HashMap<(MapId, [i32; 2]), u32>> {
     let mut masks = HashMap::new();
     for entry in read_binder(bnd)? {
-        let Some(map) = entry
-            .name
-            .rsplit('\\')
-            .next()
-            .and_then(|f| f.get(13..16))
-            .and_then(MapId::from_name)
+        let Some(map) =
+            entry.name.rsplit('\\').next().and_then(|f| f.get(13..16)).and_then(MapId::from_name)
         else {
             continue;
         };
@@ -216,11 +229,7 @@ fn index_tiles(entries: Vec<BinderEntry>) -> HashMap<(MapId, [i32; 2], u32), Bin
     let mut tiles = HashMap::new();
     for entry in entries {
         // e.g. 71_MapTile\MENU_MapTile_M00_L0_12_31_00000100.tpf.dcx
-        let Some(stem) = entry
-            .name
-            .rsplit('\\')
-            .next()
-            .and_then(|f| f.strip_suffix(".tpf.dcx"))
+        let Some(stem) = entry.name.rsplit('\\').next().and_then(|f| f.strip_suffix(".tpf.dcx"))
         else {
             continue;
         };
@@ -228,12 +237,9 @@ fn index_tiles(entries: Vec<BinderEntry>) -> HashMap<(MapId, [i32; 2], u32), Bin
         let [_, _, map, "L0", x, y, flags] = parts[..] else {
             continue;
         };
-        let (Some(map), Ok(x), Ok(y), Ok(flags)) = (
-            MapId::from_name(map),
-            x.parse(),
-            y.parse(),
-            u32::from_str_radix(flags, 16),
-        ) else {
+        let (Some(map), Ok(x), Ok(y), Ok(flags)) =
+            (MapId::from_name(map), x.parse(), y.parse(), u32::from_str_radix(flags, 16))
+        else {
             continue;
         };
         tiles.insert((map, [x, y], flags), entry);

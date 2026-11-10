@@ -15,7 +15,7 @@ mod winput;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use common::logger;
+use shared::logger;
 
 /// One line every 5 s, only when a counter moved: which DirectInput paths the
 /// game really uses, and what they return while the window is not focused.

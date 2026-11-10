@@ -1,18 +1,19 @@
-//! Multiplies how many crafting / upgrade materials an item lot hands out
-//! (`lot_item_num0N`), in `ItemLotParam_map` (gathering spots) and
-//! `ItemLotParam_enemy` (drops): the `[Materials]` section, independent of
-//! the drop chance. Each slot is grouped as Crafting, Upgrade or Unique (a
-//! pickup flag means obtainable once) from the live `EquipParamGoods`. The
-//! classification rules and the data behind them: `docs/materials.md`.
+//! Multiplies how many crafting and upgrade materials an item lot hands out (`lot_item_num0N`), in
+//! `ItemLotParam_map` (gathering spots) and `ItemLotParam_enemy` (drops): `[Materials]`,
+//! independent of the drop chance. Each slot is grouped as Crafting, Upgrade or Unique (a pickup
+//! flag means obtainable once) from the live `EquipParamGoods`. Rules and data: `docs/materials.md`.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use eldenring::cs::{EquipParamGoods, ItemLotParam_enemy, ItemLotParam_map, SoloParam, SoloParamRepository};
+use eldenring::cs::{
+    EquipParamGoods, ItemLotParam_enemy, ItemLotParam_map, SoloParam, SoloParamRepository,
+};
 use eldenring::param::ITEMLOT_PARAM_ST;
 
-use common::{config, logger};
+use shared::logger;
 
+use crate::config;
 use crate::lot;
 
 const CATEGORY_GOODS: i32 = 1;
@@ -47,10 +48,11 @@ struct Factors {
 
 impl Factors {
     fn from_config() -> Self {
+        let materials = &config::get().materials;
         Self {
-            crafting: config::get_double("Crafting", 1.0).max(0.0),
-            upgrade: config::get_double("Upgrade", 1.0).max(0.0),
-            unique: config::get_double("Unique", 1.0).max(0.0),
+            crafting: materials.crafting.max(0.0),
+            upgrade: materials.upgrade.max(0.0),
+            unique: materials.unique.max(0.0),
         }
     }
 
@@ -64,10 +66,10 @@ impl Factors {
     }
 }
 
-/// `EquipParamGoods` row ID -> `goodsType`, walked by index through
-/// [`common::params::row_ids`] rather than `repo.get()` (see that module).
+/// `EquipParamGoods` row ID to `goodsType`, walked by index through [`shared::params::row_ids`]
+/// rather than `repo.get()`, which panics on some regulations.
 fn goods_types(repo: &SoloParamRepository) -> Option<HashMap<u32, u8>> {
-    let ids = common::params::row_ids::<EquipParamGoods>(repo)?;
+    let ids = shared::params::row_ids::<EquipParamGoods>(repo)?;
     let mut types = HashMap::with_capacity(ids.len());
     for (index, id) in ids.into_iter().enumerate() {
         types.insert(id, repo.get_row_by_index::<EquipParamGoods>(index)?.goods_type());
@@ -90,7 +92,8 @@ fn classify(row: &ITEMLOT_PARAM_ST, goods_types: &HashMap<u32, u8>) -> RowSnapsh
             Some(&GOODS_TYPE_UPGRADE) => Group::Upgrade,
             _ => continue,
         };
-        groups[i] = if row_flag != 0 || slot_flags[i] != 0 { Group::Unique } else { farmable_group };
+        groups[i] =
+            if row_flag != 0 || slot_flags[i] != 0 { Group::Unique } else { farmable_group };
     }
     RowSnapshot { nums: lot::nums(row), groups }
 }
@@ -100,29 +103,31 @@ fn snapshot_table<P: SoloParam<StructType = ITEMLOT_PARAM_ST>>(
     goods_types: &HashMap<u32, u8>,
 ) -> Vec<RowSnapshot> {
     let mut rows = Vec::new();
-    common::params::for_each_row_mut::<P>(repo, |_, row| rows.push(classify(row, goods_types)));
+    shared::params::for_each_row_mut::<P>(repo, |_, row| rows.push(classify(row, goods_types)));
     rows
 }
 
-/// `count` scaled by `factor`: at least 1 (a factor below 1 must not turn a
-/// pickup into nothing), at most 255 (`lot_item_num` is a u8).
+/// `count` scaled by `factor`: at least 1, so a factor below 1 never turns a pickup into nothing,
+/// and at most 255 (`lot_item_num` is a u8).
 fn scale_count(count: u8, factor: f64) -> u8 {
     (count as f64 * factor).round().clamp(1.0, u8::MAX as f64) as u8
 }
 
-/// Rescales one table from its snapshot. Returns how many slots it touched.
+/// Rescales one table from its snapshot; returns the slots touched.
 fn apply_table<P: SoloParam<StructType = ITEMLOT_PARAM_ST>>(
     repo: &mut SoloParamRepository,
     snapshot: &[RowSnapshot],
     factors: &Factors,
 ) -> usize {
     let mut changed = 0;
-    common::params::for_each_row_mut::<P>(repo, |index, row| {
+    shared::params::for_each_row_mut::<P>(repo, |index, row| {
         let Some(original) = snapshot.get(index) else {
             return;
         };
         let mut nums = original.nums;
-        for ((&count, &group), out) in original.nums.iter().zip(&original.groups).zip(nums.iter_mut()) {
+        for ((&count, &group), out) in
+            original.nums.iter().zip(&original.groups).zip(nums.iter_mut())
+        {
             let Some(factor) = factors.get(group) else {
                 continue;
             };
@@ -137,17 +142,16 @@ fn apply_table<P: SoloParam<StructType = ITEMLOT_PARAM_ST>>(
     changed
 }
 
-/// Applies `[Materials]` to both item lot tables. Logs its own result; does
-/// nothing (logged as an error) if a param slot isn't what we expect or
-/// `EquipParamGoods`' IDs can't be read.
+/// Applies `[Materials]` to both item lot tables and logs the result. Does nothing, with an error
+/// logged, if a param slot is not what we expect or the `EquipParamGoods` ids cannot be read.
 pub fn apply(repo: &mut SoloParamRepository, suffix: &str) {
     for check in [
-        common::params::check::<ItemLotParam_enemy>(repo),
-        common::params::check::<ItemLotParam_map>(repo),
-        common::params::check::<EquipParamGoods>(repo),
+        shared::params::check::<ItemLotParam_enemy>(repo),
+        shared::params::check::<ItemLotParam_map>(repo),
+        shared::params::check::<EquipParamGoods>(repo),
     ] {
         if let Err(reason) = check {
-            logger::error(&format!("{reason} - material amounts left unchanged"));
+            logger::error(&format!("Materials: {reason}, amounts left unchanged"));
             return;
         }
     }
@@ -156,8 +160,8 @@ pub fn apply(repo: &mut SoloParamRepository, suffix: &str) {
     if snapshot_guard.is_none() {
         let Some(goods_types) = goods_types(repo) else {
             logger::error(&format!(
-                "could not read item IDs of {} - material amounts left unchanged",
-                common::params::describe::<EquipParamGoods>(repo)
+                "Materials: cannot read item ids of {}, amounts left unchanged",
+                shared::params::describe::<EquipParamGoods>(repo)
             ));
             return;
         };
@@ -166,7 +170,13 @@ pub fn apply(repo: &mut SoloParamRepository, suffix: &str) {
             map: snapshot_table::<ItemLotParam_map>(repo, &goods_types),
         };
         let count = |group: Group| {
-            snapshot.enemy.iter().chain(&snapshot.map).flat_map(|r| r.groups).filter(|&g| g == group).count()
+            snapshot
+                .enemy
+                .iter()
+                .chain(&snapshot.map)
+                .flat_map(|r| r.groups)
+                .filter(|&g| g == group)
+                .count()
         };
         logger::log(&format!(
             "Materials: {} goods, {} crafting, {} upgrade, {} unique slot(s)",

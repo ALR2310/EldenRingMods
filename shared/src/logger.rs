@@ -1,53 +1,31 @@
-//! Per-mod log file, written only while `LogFile` is on: off means no file is
-//! created or written at all, on creates it (truncating the previous run's
-//! log) at the first line. Checked on every write, so flipping the key and
-//! reloading takes effect at once. Details and history: `shared/docs/logger.md`.
+//! Per-mod log file, off by default ([set_enabled]). While off no file is created; the first line
+//! after switching on truncates the previous run's log.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, Mutex, MutexGuard, Once};
 
-use crate::config;
-
 struct LogState {
-    /// Set by [init]; `None` means `init` hasn't run yet.
     path: Option<String>,
-    /// Opened lazily by the first write with `LogFile` on.
     file: Option<File>,
 }
 
-static LOG: LazyLock<Mutex<LogState>> = LazyLock::new(|| Mutex::new(LogState { path: None, file: None }));
+static LOG: LazyLock<Mutex<LogState>> =
+    LazyLock::new(|| Mutex::new(LogState { path: None, file: None }));
 static PANIC_HOOK_INSTALLED: Once = Once::new();
+static ENABLED: AtomicBool = AtomicBool::new(false);
 
-/// What [ENABLED] holds: read the ini's `LogFile`, or forced off / on by [set_enabled].
-const FROM_INI: u8 = 0;
-const FORCED_OFF: u8 = 1;
-const FORCED_ON: u8 = 2;
-static ENABLED: AtomicU8 = AtomicU8::new(FROM_INI);
-
-/// Turns the log file on/off directly, for mods whose `LogFile` isn't in the
-/// ini map (TOML config). Call it after loading and after every reload.
+/// Call it after loading the config and after every reload.
 pub fn set_enabled(enabled: bool) {
-    ENABLED.store(if enabled { FORCED_ON } else { FORCED_OFF }, Ordering::Relaxed);
+    ENABLED.store(enabled, Ordering::Relaxed);
 }
 
-fn enabled() -> bool {
-    match ENABLED.load(Ordering::Relaxed) {
-        FROM_INI => config::get_bool("LogFile", false),
-        state => state == FORCED_ON,
-    }
-}
-
-/// Locks the log state. A poisoned lock is still usable: logging must never
-/// panic, least of all from the panic hook.
+/// A poisoned lock is still usable: logging must never panic, least of all from the panic hook.
 fn state() -> MutexGuard<'static, LogState> {
     LOG.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Records where the log goes (`file_name`, e.g. "AutoRegen.log", in
-/// `log_dir`) without touching the disk. Call after the ini is loaded. No-op
-/// if already initialized.
 pub fn init(log_dir: &str, file_name: &str) {
     let mut guard = state();
     if guard.path.is_none() {
@@ -55,21 +33,17 @@ pub fn init(log_dir: &str, file_name: &str) {
     }
 }
 
-/// Truncates and opens the log file at `path`.
 fn open(path: &str) -> Option<File> {
     if let Some(dir) = std::path::Path::new(path).parent() {
         let _ = fs::create_dir_all(dir);
     }
-    let _ = File::create(path); // truncate
-    // Append mode, so a line lands at the real end of the file even if
-    // something else (the user clearing it in an editor) resized it meanwhile.
+    let _ = File::create(path);
+    // Append mode, in case something else (the user clearing it in an editor) resized the file.
     OpenOptions::new().create(true).append(true).open(path).ok()
 }
 
-/// Writes one line as `[timestamp] [LEVEL] message`.
 fn write_line(level: &str, message: &str) {
-    // Read before taking the log lock: never hold both at once.
-    if !enabled() {
+    if !ENABLED.load(Ordering::Relaxed) {
         return;
     }
     let mut guard = state();
@@ -85,34 +59,22 @@ fn write_line(level: &str, message: &str) {
     }
 }
 
-/// Plain informational line (INFO). Named `log` rather than `info` so the
-/// call sites across all mods keep working.
 pub fn log(message: &str) {
     write_line("INFO", message);
 }
 
-/// Something unexpected that the mod recovered from or is still retrying
-/// past: the feature is not (yet) lost.
+/// Something unexpected that the mod recovered from or keeps retrying.
 pub fn warn(message: &str) {
     write_line("WARN", message);
 }
 
-/// A feature failed and stays disabled for the rest of the session. Don't
-/// repeat the word "ERROR" in `message`; the level already says it.
+/// A feature failed and stays disabled. The level already says "error".
 pub fn error(message: &str) {
     write_line("ERROR", message);
 }
 
-/// Verbose detail only useful when diagnosing one feature (byte dumps,
-/// per-tick values); call sites should sit behind their own ini flag.
-pub fn debug(message: &str) {
-    write_line("DEBUG", message);
-}
-
-/// Installs a process-wide panic hook that logs an ERROR line (thread,
-/// location, message) before running the previous hook. Without it a panic on
-/// a background thread kills that thread silently and the log just stops. Call
-/// once, early in `DllMain`, after `init`; later calls do nothing.
+/// Logs thread, location and message of any panic before running the previous hook; without it a
+/// panic on a background thread ends the thread and the log just stops. Call once, after [init].
 pub fn install_panic_hook() {
     PANIC_HOOK_INSTALLED.call_once(|| {
         let default_hook = std::panic::take_hook();
@@ -151,7 +113,7 @@ mod tests {
 
         set_enabled(false);
         log("never written");
-        assert!(!path.exists(), "no file while LogFile is off");
+        assert!(!path.exists(), "no file while logging is off");
 
         fs::create_dir_all(&dir).unwrap();
         fs::write(&path, "previous run\n").unwrap();

@@ -2,73 +2,40 @@
 
 # RuneMultiplier
 
-**Nhân hệ số lên số rune nhận được từ mọi nguồn.**
+**Multiply the runes you gain from every source.**
 
-![Rust](https://img.shields.io/badge/Rust-cdylib-orange?logo=rust)
-![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)
+[Tiếng Việt](README.vi.md)
+
 ![Game](https://img.shields.io/badge/game-Elden_Ring-8a6d3b)
+![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)
+[![Nexus Mods](https://img.shields.io/badge/Nexus_Mods-10630-orange)](https://www.nexusmods.com/eldenring/mods/10630)
 
 </div>
 
 ---
 
-## Giới thiệu
+## About
 
-RuneMultiplier nhân số rune bạn **nhận được** lên một hệ số tuỳ chọn: giết quái, nhặt hoặc
-dùng vật phẩm, bán đồ đều tính. Rune **chi tiêu** (lên cấp, mua đồ) không bị ảnh hưởng. Chỉ có
-một thiết lập chính, nên cài vào là dùng được ngay.
+RuneMultiplier multiplies the runes you receive by a factor you choose: killing enemies, using or
+selling items, and more. A factor above 1 gives more runes, below 1 fewer, and a negative one takes
+runes away. Runes you spend, on level-ups and purchases, are not affected.
 
-## Tính năng
+## Installation
 
-| Hệ số | Hiệu ứng |
-|---|---|
-| lớn hơn 1 | nhận nhiều rune hơn (mặc định x2) |
-| nhỏ hơn 1 | nhận ít rune hơn |
-| số âm | rune nhận được bị **trừ** thay vì cộng |
+1. Download the mod from its [Nexus page](https://www.nexusmods.com/eldenring/mods/10630).
+2. Install a mod loader that can load DLLs (see the [repository README](../../README.md)).
+3. Put `RuneMultiplier.dll` in the loader's mod folder and register it.
+4. Start the game. `RuneMultiplier.toml` is created next to the DLL on first run. Every key is explained by the comments in [RuneMultiplier.toml](RuneMultiplier.toml); edit it and press `F5` (the default) to apply a change without restarting the game.
 
-Sai số tối đa ±1 rune mỗi lần nhận. Đổi hệ số xong bấm phím reload là áp dụng ngay, không cần
-khởi động lại game.
+If [ERNativeUI](https://github.com/Flammrock/ERNativeUI) is loaded before the mod, the **Rune
+Multiplier** entry also appears under System > Game Options. It is optional.
 
-## Cấu hình
+Releases before this one used `RuneMultiplier.ini`. If there is no `RuneMultiplier.toml` yet, the
+settings of the ini file are carried over the first time the mod runs; the ini file itself is left
+alone.
 
-Cấu hình nằm trong `RuneMultiplier.ini` cạnh DLL, tự tạo ở lần chạy đầu. Tên key, giá trị mặc
-định và ý nghĩa nằm ở chú thích trong [RuneMultiplier.ini](RuneMultiplier.ini), file mẫu nhúng
-sẵn trong DLL. Phím reload cũng đổi được và có hiệu lực ngay.
+## Documentation
 
-### Menu trong game (tùy chọn)
-
-Nếu [ERNativeUI](https://github.com/Flammrock/ERNativeUI) được nạp trước mod, mục **Rune
-Multiplier** xuất hiện trong System > Game Options, gồm ô nhập hệ số (gõ được số lẻ, 0 và số âm,
-trong khoảng -1000 đến 1000) và công tắc ghi log. Đổi trong menu áp ngay và được ghi vào file.
-Không có ERNativeUI thì mod chạy bằng file như bình thường.
-
-## Cách hoạt động
-
-Mod chỉ có **một hook**, vào hàm cộng rune thấp nhất của game (`AddSoul_Call`, dùng chung cho
-mọi nguồn):
-
-1. Tìm hàm bằng một mẫu AOB neo (duy nhất trên 2.6.2.0, 2.7.0.0 và 2.7.1.0).
-2. Thay 12 byte đầu của hàm bằng một lệnh nhảy tới một đoạn mã tự sinh.
-3. Đoạn mã nhân số rune cộng thêm bằng số học cố định Q20, chạy lại đúng 3 lệnh gốc rồi nhảy
-   về hàm.
-
-Đoạn mã chỉ nhân khi số cộng thêm **dương**, nên các khoản trừ (lên cấp, mua đồ) không bị nhân.
-Hệ số được đọc qua con trỏ lúc chạy, nên reload chỉ cập nhật một biến mà không patch lại. Chi
-tiết, các hướng đã bỏ và cách kiểm tra tương thích: [docs/addsoul_hook.md](docs/addsoul_hook.md).
-
-## Giới hạn
-
-- Phụ thuộc mẫu AOB neo: nếu game vá làm đổi bố cục thì hook không cài được, log ghi lỗi và mod
-  tắt cho phiên đó (không patch gì).
-- Mọi nguồn rune nhận được đều bị nhân, không tách riêng được từng nguồn.
-- Menu trong game chỉ nhập hệ số trong khoảng -1000 đến 1000; ngoài khoảng đó thì sửa file.
-
-## Tài liệu
-
-| Tài liệu | Nội dung |
-|---|---|
-| [docs/addsoul_hook.md](docs/addsoul_hook.md) | Hook `AddSoul_Call`, các hướng đã bỏ, tương thích |
-| [HISTORY.md](HISTORY.md) | Dòng thời gian thay đổi |
-| [CHANGELOG.md](CHANGELOG.md) | Ghi chú phát hành cho người dùng |
-
-Mã nguồn: [src/hook.rs](src/hook.rs) (hook), [src/menu.rs](src/menu.rs) (menu).
+- [CHANGELOG.md](CHANGELOG.md): release notes.
+- [Nexus page](https://www.nexusmods.com/eldenring/mods/10630): downloads and comments.
+- [docs/addsoul_hook.md](docs/addsoul_hook.md): the hook, why spends are not scaled, compatibility checks.

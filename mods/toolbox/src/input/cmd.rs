@@ -16,7 +16,7 @@ use std::fs;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use common::logger;
+use shared::logger;
 
 use super::dinput::{
     KEYS, MOUSE_BUTTONS, MOUSE_DX_ONCE, MOUSE_DX_RATE, MOUSE_DY_ONCE, MOUSE_DY_RATE, MOUSE_DZ_ONCE,
@@ -41,7 +41,8 @@ fn set(code: usize, down: bool, hold_ms: u64) {
 }
 
 fn set_button(index: usize, down: bool, hold_ms: u64) {
-    BUTTON_EXPIRY[index].store(if down && hold_ms > 0 { now_ms() + hold_ms } else { 0 }, Ordering::Relaxed);
+    BUTTON_EXPIRY[index]
+        .store(if down && hold_ms > 0 { now_ms() + hold_ms } else { 0 }, Ordering::Relaxed);
     MOUSE_BUTTONS[index].store(if down { 0x80 } else { 0 }, Ordering::Relaxed);
 }
 

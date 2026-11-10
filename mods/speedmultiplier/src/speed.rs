@@ -1,25 +1,21 @@
-//! Per-action speed multipliers: every frame, writes the animation speed of
-//! the player (by the group of the animation playing), Torrent, the victims
-//! of a critical hit, enemies and spirits (`CSChrBehaviorModule.animation_speed`).
-//! `PlayerAll` is the master key: any value other than 1 applies to every
-//! player action and overrides the per-group keys. Groups and ranges:
-//! `docs/action_groups.md` and `common::anim`.
+//! Every frame, writes `CSChrBehaviorModule.animation_speed` of the player (by the group of the
+//! animation playing), Torrent, the victims of a critical hit, enemies and spirits. `All` is the
+//! master key: any value other than 1 overrides the keys of its group. Groups and ranges:
+//! `docs/action_groups.md`.
 
 use std::time::Duration;
 
 use eldenring::cs::{CSTaskGroupIndex, CSThrowNode, ChrIns, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
-use common::anim::{current_anim_id, group_of, Group};
-use common::logger;
+use shared::anim::{Group, current_anim_id, group_of};
+use shared::logger;
 
 use crate::config::{self, Player, Torrent};
 
-/// Torrent's NpcParam ids: 80020000 is the base one, the Spectral Steed
-/// Attire skins follow it in steps of 10000 (80030000 seen, the rest assumed).
+/// Torrent's NpcParam ids: the base one and the skins after it, in steps of 10000.
 const TORRENT_NPC_PARAM_IDS: std::ops::Range<i32> = 80_020_000..80_060_000;
 
-/// A group's multiplier in `[Player]`.
 fn group_speed(group: Group, player: &Player) -> f32 {
     match group {
         Group::Walk => player.walk,
@@ -37,9 +33,8 @@ fn group_speed(group: Group, player: &Player) -> f32 {
     }
 }
 
-/// Torrent's own animations, by id: walk `0021xx`, run `0022xx` (the dash key
-/// included), jump take-off `0061xx` and landing `0074xx`. Standing and
-/// turning are `Other`.
+/// Torrent's own animations, by id: walk `0021xx`, run `0022xx` (dash included), jump take-off
+/// `0061xx` and landing `0074xx`. Standing and turning are `Other`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TorrentGroup {
     Walk,
@@ -49,7 +44,6 @@ pub enum TorrentGroup {
 }
 
 impl TorrentGroup {
-    /// This group's multiplier in `[Torrent]`.
     fn speed(self, torrent: &Torrent) -> f32 {
         match self {
             TorrentGroup::Walk => torrent.walk,
@@ -69,11 +63,10 @@ pub fn torrent_group_of(anim_id: i32) -> TorrentGroup {
     }
 }
 
-/// Torrent's `ChrIns`: the active `summon_buddy_chr_set` entry whose NpcParam
-/// id is one of [TORRENT_NPC_PARAM_IDS].
+/// Torrent's `ChrIns`: the active `summon_buddy_chr_set` entry with one of [TORRENT_NPC_PARAM_IDS].
 pub fn torrent(world_chr_man: &mut WorldChrMan) -> Option<&mut ChrIns> {
     let mut found: Option<*mut ChrIns> = None;
-    common::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| {
+    shared::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| {
         if found.is_none() && TORRENT_NPC_PARAM_IDS.contains(&chr.npc_param_id) {
             found = Some(chr as *mut ChrIns);
         }
@@ -82,22 +75,23 @@ pub fn torrent(world_chr_man: &mut WorldChrMan) -> Option<&mut ChrIns> {
     found.map(|chr| unsafe { &mut *chr })
 }
 
-/// The raw `throw_state` of a character, or None when it has no throw node.
-/// Read as a `u32` so a value outside the known enum isn't undefined behavior.
+/// The raw `throw_state` of a character, `None` without a throw node. Read as a `u32` so a value
+/// outside the known enum is not undefined behavior.
 pub fn throw_state(chr: &ChrIns) -> Option<u32> {
     let module = &*chr.modules.throw;
     // `throw_node` is the third pointer-sized field (vftable, owner, node).
+    // SAFETY: the module is a live `CSChrThrowModule`, whose third field is read as a pointer.
     let node = unsafe { *(module as *const _ as *const usize).add(2) };
     if node == 0 {
         return None;
     }
     let node = node as *const CSThrowNode;
+    // SAFETY: a non-null `throw_node` points at a live node.
     Some(unsafe { std::ptr::addr_of!((*node).throw_state).cast::<u32>().read_volatile() })
 }
 
-/// `throw_state` values (backstab and riposte alike): the attacker goes 1, 3
-/// (`InThrowAttacker`), 5 (`DeathAttacker`); the victim 2, 4 (`InThrowTarget`),
-/// 6 (`DeathTarget`), back to 0 a second or two after the attacker.
+/// `throw_state` of a backstab or riposte: the attacker goes 1, 3, 5 (the last one when the victim
+/// dies), the victim 2, 4, 6, and back to 0 a second or two after the attacker.
 fn is_throw_attacker(state: u32) -> bool {
     matches!(state, 1 | 3 | 5)
 }
@@ -106,15 +100,13 @@ fn is_throw_victim(state: u32) -> bool {
     matches!(state, 2 | 4 | 6)
 }
 
-/// Whether `chr` is in a throw as the victim right now.
 pub fn is_throw_victim_now(chr: &ChrIns) -> bool {
     throw_state(chr).is_some_and(is_throw_victim)
 }
 
-/// The victim of a critical hit is paired with the player's animation, so it
-/// runs at the player's speed (`docs/critical_victim.md`), only while the
-/// player is still in the throw. `sped` holds the victims written to, to put
-/// them back to 1.
+/// The victim of a critical hit is paired with the player's animation, so it runs at the player's
+/// speed while the player is in the throw (`docs/critical_victim.md`). `sped` holds the victims
+/// written to, to put them back to 1.
 fn sync_victims(world_chr_man: &WorldChrMan, sped: &mut Vec<usize>) {
     let speed = world_chr_man.main_player.as_ref().and_then(|player| {
         throw_state(&player.chr_ins)
@@ -137,24 +129,18 @@ fn sync_victims(world_chr_man: &WorldChrMan, sped: &mut Vec<usize>) {
     *sped = seen;
 }
 
-/// Runs `f` on every live spirit: every `summon_buddy_chr_set` entry that
-/// isn't Torrent.
+/// Every live spirit: the `summon_buddy_chr_set` entries that are not Torrent.
 fn for_each_spirit(world_chr_man: &WorldChrMan, mut f: impl FnMut(&mut ChrIns)) {
-    common::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| {
+    shared::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| {
         if !TORRENT_NPC_PARAM_IDS.contains(&chr.npc_param_id) {
             f(chr);
         }
     });
 }
 
-/// A multiplier clamped to a sane range (0 or negative would freeze or
-/// reverse the animation).
+/// 0 or less would freeze or reverse the animation.
 fn clamped(value: f32) -> f32 {
-    if value.is_finite() {
-        value.clamp(0.1, 10.0)
-    } else {
-        1.0
-    }
+    if value.is_finite() { value.clamp(0.1, 10.0) } else { 1.0 }
 }
 
 pub fn set_animation_speed(chr: &mut ChrIns, value: f32) {
@@ -164,70 +150,62 @@ pub fn set_animation_speed(chr: &mut ChrIns, value: f32) {
     }
 }
 
-/// The speed to write: the master `all` key when it isn't 1, else the
-/// group's own. Always within the sane range.
+/// The master `all` key when it is not 1, else the group's own.
 fn pick_speed(all: f32, group: f32) -> f32 {
     let master = clamped(all);
-    if (master - 1.0).abs() > 0.0001 {
-        master
-    } else {
-        clamped(group)
-    }
+    if (master - 1.0).abs() > 0.0001 { master } else { clamped(group) }
 }
 
-/// What the tick remembers between frames.
 struct State {
     /// The active `[[Override]]`s of the last frame, so a change is logged once.
     last_active: Vec<usize>,
-    seamless_fix: crate::seamless::GetterFix,
+    getter_fix: crate::seamless::GetterFix,
     /// Characters written to, to put them back to 1 when they stop counting.
     sped_victims: Vec<usize>,
     sped_enemies: Vec<usize>,
 }
 
-/// One frame.
 fn apply(state: &mut State) {
-    if common::player::main_player_chr_ins_ptr().is_none() {
+    if shared::player::main_player_chr_ins_ptr().is_none() {
         return;
     }
+    // SAFETY: called from a game task; `instance_mut` returns `Err` while the singleton does not exist.
     let Ok(world_chr_man) = (unsafe { WorldChrMan::instance_mut() }) else {
         return;
     };
     let config = config::get();
 
-    // The player's SpEffects decide which `[[Override]]`s are on, for
-    // Torrent's speed too (a buff on the rider).
+    // The player's SpEffects decide which `[[Override]]`s are on, Torrent's too (a buff on the rider).
     let sp_effects: Vec<i32> = match world_chr_man.main_player.as_ref() {
         Some(player) if !config.overrides.is_empty() => {
             player.chr_ins.special_effect.entries().map(|entry| entry.param_id).collect()
         }
         _ => Vec::new(),
     };
-    let load = world_chr_man
-        .main_player
-        .as_ref()
-        .and_then(|player| config::LoadClass::from_weight_type(player.chr_ins.chr_ctrl.weight_type));
+    let load = world_chr_man.main_player.as_ref().and_then(|player| {
+        config::LoadClass::from_weight_type(player.chr_ins.chr_ctrl.weight_type)
+    });
     let (speeds, active) = config.effective_speed(|id| sp_effects.contains(&id), load);
     if active != state.last_active {
         let list = active.iter().map(|i| format!("#{}", i + 1)).collect::<Vec<_>>().join(", ");
-        logger::log(&format!("Speed: active overrides: {}", if list.is_empty() { "none" } else { &list }));
+        logger::log(&format!("Speed: overrides {}", if list.is_empty() { "none" } else { &list }));
         state.last_active = active;
     }
 
-    // Seamless Co-op hooks the game's read of the speed (`seamless.rs`): tell
-    // its stub which characters are ours, then check it.
-    let player_ptr = world_chr_man.main_player.as_ref().map_or(0, |p| &p.chr_ins as *const ChrIns as usize);
+    // Seamless Co-op hooks the game's read of the speed (`seamless.rs`): tell the stub which
+    // characters are ours, then check the hook.
+    let player_ptr =
+        world_chr_man.main_player.as_ref().map_or(0, |p| &p.chr_ins as *const ChrIns as usize);
     let torrent_ptr = torrent(world_chr_man).map_or(0, |t| t as *const ChrIns as usize);
     crate::seamless::set_own(player_ptr, torrent_ptr);
-    state.seamless_fix.check();
+    state.getter_fix.check();
 
     if let Some(player) = world_chr_man.main_player.as_mut() {
         let chr = &mut player.chr_ins;
         let group = group_of(current_anim_id(chr));
         set_animation_speed(chr, pick_speed(speeds.player.all, group_speed(group, &speeds.player)));
     }
-    // Not under Seamless: its getter stub only passes the player's and
-    // Torrent's speed through, so everyone else reads 1.
+    // With a hooked getter everyone else reads 1: the stub passes only the player's and Torrent's speed.
     sync_victims(world_chr_man, &mut state.sped_victims);
     crate::enemy::apply(world_chr_man, clamped(config.enemy.all), &mut state.sped_enemies);
     let spirit_speed = clamped(config.spirit.all);
@@ -239,16 +217,19 @@ fn apply(state: &mut State) {
 }
 
 pub fn run() {
-    let cs_task = common::task::wait_for_cs_task();
+    let cs_task = shared::task::wait_for_cs_task();
     let mut state = State {
         last_active: Vec::new(),
-        seamless_fix: crate::seamless::GetterFix::new(),
+        getter_fix: crate::seamless::GetterFix::new(),
         sped_victims: Vec::new(),
         sped_enemies: Vec::new(),
     };
-    common::task::run_recurring_safe(cs_task, "Speed", CSTaskGroupIndex::ChrIns_PreBehavior, move |_data: &eldenring::fd4::FD4TaskData| {
-        apply(&mut state)
-    });
+    shared::task::run_recurring_safe(
+        cs_task,
+        "Speed",
+        CSTaskGroupIndex::ChrIns_PreBehavior,
+        move |_data: &eldenring::fd4::FD4TaskData| apply(&mut state),
+    );
     loop {
         std::thread::sleep(Duration::from_secs(60));
     }
@@ -302,7 +283,10 @@ mod tests {
 
     #[test]
     fn ladder_anims_are_their_own_group() {
-        for tail in [28_999, 28_100, 28_030, 28_011, 28_012, 28_013, 28_020, 28_023, 28_000, 28_002, 28_036, 28_040, 28_045] {
+        for tail in [
+            28_999, 28_100, 28_030, 28_011, 28_012, 28_013, 28_020, 28_023, 28_000, 28_002, 28_036,
+            28_040, 28_045,
+        ] {
             assert_eq!(group_of(tail), Group::Ladder, "{tail}");
         }
         assert_eq!(group_of(27_999), Group::Roll);

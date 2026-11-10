@@ -1,126 +1,106 @@
-# RuneMultiplier: hook vào `AddSoul_Call`
+# The `AddSoul_Call` hook
 
-**Status 2026-10-07: ĐANG PHÁT HÀNH (1.0.0 đến 1.0.4), hướng thiết kế đã chốt.**
-Test trong game từ bản C++ (2026-08-14) và bản Rust được phát hành, cập nhật
-cho ER 1.17 và 1.17.1. Mẫu neo AOB đã được kiểm tra lại bằng IDA ngày
-2026-10-07: duy nhất trên cả 2.6.2.0, 2.7.0.0 và 2.7.1.0. Code:
-`mods/runemultiplier/src/hook.rs`.
+Status: **Confirmed** in game since the C++ version and in the released Rust versions (1.0.0 to 1.0.4),
+including 1.17 and 1.17.1. The anchor pattern was checked in IDA and is unique on 2.6.2.0, 2.7.0.0 and
+2.7.1.0. Conventions: [research notes](../../../docs/research/README.md). Code: `src/hook.rs`.
 
-## Vì sao hook ở `AddSoul_Call`
+## Question
 
-`AddSoul_Call` là hàm cấp thấp nhất cộng rune của game, dùng chung cho **mọi
-nguồn** (giết quái, nhặt/dùng item, bán đồ...). Disassemble `eldenring.exe`
-thật (Ghidra headless, không full-analysis vì file 87 MB quá chậm):
+Where can every rune gain, whatever its source, be scaled in one place, without also scaling what the
+player spends?
+
+## Why `AddSoul_Call`
+
+It is the game's lowest-level function that adds runes, shared by **every source** (kills, picking up or
+using items, selling). Disassembled from the real executable (headless Ghidra without full analysis, since
+the 87 MB file is too slow):
 
 ```
-MOV R9D,[RCX+0x6C]        ; R9D = rune hiện tại
+MOV R9D,[RCX+0x6C]        ; R9D = current runes
 LEA R8D,[R9+RDX*1]        ; sum = current + amount (RDX = amount)
-CMP R8D,0x3B9AC9FF        ; kẹp về cap 999,999,999
+CMP R8D,0x3B9AC9FF        ; clamp to the cap of 999,999,999
 ...
-MOV [RCX+0x6C],EAX        ; ghi rune mới
+MOV [RCX+0x6C],EAX        ; write the new runes
 RET
 ```
 
-Offset `[RCX+0x6C]` khớp chính xác với `OFFSET_2 = 0x6C` mà PassiveRunes (bản C++)
-tìm ra hoàn toàn độc lập qua pointer-chain từ `GameDataMan` (và khớp field
-`GameDataMan::main_player_game_data.rune_count` trong fromsoftware-rs): hai
-nỗ lực RE khác nhau cho ra cùng một field.
+`[RCX+0x6C]` is the same offset (`0x6C`) that the C++ version of PassiveRunes found independently through
+a pointer chain from `GameDataMan`, and it matches `GameDataMan::main_player_game_data.rune_count` in
+fromsoftware-rs: two separate reverse-engineering efforts reached the same field.
 
-## Cách tìm `AddSoul_Call` (không cần AOB riêng)
+## Finding `AddSoul_Call` without a pattern of its own
 
-Hàm không có byte pattern riêng đủ đặc trưng, nên mod dùng một mẫu neo
-(`ANCHOR_PATTERN` = `F3 0F 59 C1 F3 0F 2C F8 48 8B 8B`) là bước nhân phần thưởng
-giết quái của game (`mulss xmm0,xmm1; cvttss2si edi,xmm0; ...`), rồi đọc lệnh
-`call` (`E8 rel32`) tại `anchor + 0x11` (4 + 4 + 7 + 2 = 17 byte) và giải rel32
-ra địa chỉ tuyệt đối. Nếu byte tại đó không phải `0xE8`, mod coi bố cục khác
-dự kiến và không patch.
+The function has no byte pattern distinctive enough, so the mod uses an anchor (`ANCHOR_PATTERN` =
+`F3 0F 59 C1 F3 0F 2C F8 48 8B 8B`): the game's reward scaling step for enemy kills (`mulss xmm0,xmm1;
+cvttss2si edi,xmm0; ...`). The `call` (`E8 rel32`) at `anchor + 0x11` (4 + 4 + 7 + 2 = 17 bytes) is
+resolved to an absolute address. If the byte there is not `0xE8` the layout is not what was expected and
+nothing is patched.
 
-Kiểm tra bằng IDA (2026-10-07):
+Checked in IDA:
 
-| Bản exe | Neo (RVA) | `call` tại `anchor+0x11` | `AddSoul_Call` |
+| Build | Anchor (RVA) | `call` at `anchor + 0x11` | `AddSoul_Call` |
 |---|---|---|---|
 | 2.6.2.0 | `0x651883` | `0x651894` | `0x25E100` |
 | 2.7.0.0 | `0x6526D3` | `0x6526E4` | `0x25E0E0` |
 | 2.7.1.0 | `0x6526D3` | `0x6526E4` | `0x25E0E0` |
 
-Mẫu duy nhất ở cả ba. 12 byte đầu của `AddSoul_Call` giống hệt ở cả ba bản
-(`44 8B 49 6C` / `45 33 DB` / `44 89 5C 24 10`), đúng với thiết kế bên
-dưới. RVA lệch giữa các bản nên mod chỉ dùng AOB, không hard-code RVA.
+The pattern is unique on all three. The first 12 bytes of `AddSoul_Call` are identical on all three
+(`44 8B 49 6C`, `45 33 DB`, `44 89 5C 24 10`). The RVAs differ between builds, so only the AOB is used.
 
-## Cách patch
+## The patch
 
-Ghi đè **12 byte đầu** của `AddSoul_Call` (3 lệnh `mov r9d,[rcx+0x6c]` +
-`xor r11d,r11d` + `mov [rsp+0x10],r11d`, không lệnh nào đọc `RDX/EDX`) bằng
-`mov rax,<stub>; jmp rax` (10 + 2 = 12 byte, vừa khít, không cần NOP đệm).
-Stub (sinh lúc chạy bằng `VirtualAlloc`) nhân `EDX` (amount), chạy lại đúng 3
-lệnh gốc (copy trực tiếp từ bộ nhớ game lúc cài hook, không hard-code tay),
-rồi `mov r11,<return>; jmp r11` về ngay sau 12 byte đó.
+The **first 12 bytes** of `AddSoul_Call` (`mov r9d,[rcx+0x6c]`, `xor r11d,r11d`, `mov [rsp+0x10],r11d`,
+none of which reads `RDX`) are overwritten with `mov rax,<stub>; jmp rax` (10 + 2 = 12 bytes, an exact
+fit, no NOP padding). The stub, in `alloc_executable` memory, scales `EDX` (the amount), replays the 3
+original instructions (copied from the game's memory when the hook is installed, never typed by hand) and
+returns with `mov r11,<return>; jmp r11` to just after those 12 bytes.
 
-- **Nhân bằng số nguyên fixed-point Q20**, không dùng XMM: `AddSoul_Call` bị
-  gọi từ rất nhiều nơi nên không được giả định thanh ghi XMM nào "chết" ở mọi
-  nơi gọi. Hệ số lưu trong `FIXED_Q20 = round(Multiplier * 2^20)`, stub đọc nó
-  qua con trỏ lúc chạy, nên hot reload chỉ cần cập nhật biến này, không patch
-  lại. Sai số tối đa **±1 rune** (do `SAR` làm tròn xuống), kiểm tra trên ~100
-  tổ hợp amount (0 đến 999,999,999) × multiplier (0 đến 100).
-- **Chỉ nhân khi `amount > 0`**: stub có `test eax,eax; jle skip`. Xem mục
-  "Hướng đã bỏ" bên dưới.
-- **Jump tuyệt đối thay `E9 rel32`**: bản C++ (`CodePatch.cpp`) phải quét các
-  trang gần target để tìm vùng `VirtualAlloc` được trong tầm 32-bit. Jump tuyệt
-  đối cả hai chiều (cùng kỹ thuật `attack_hook.rs` của autoregen) bỏ hẳn ràng
-  buộc khoảng cách, nên stub nằm ở đâu cũng được.
-- Đã kiểm tra encoding ở mức byte: dump byte của code nhân, nạp vào Ghidra như
-  x86-64 và disassemble ngược, khớp 100% ý định.
+- **Fixed-point Q20 integer math, no XMM.** `AddSoul_Call` has many callers, so no XMM register can be
+  assumed dead at all of them. The factor is `FIXED_Q20 = round(Multiplier * 2^20)`, read by the stub
+  through a pointer, so a reload only updates that variable. The error is at most **1 rune** (`SAR` rounds
+  down), checked on about 100 combinations of amount (0 to 999,999,999) and multiplier (0 to 100).
+- **Only when `amount > 0`:** the stub has `test eax,eax; jle skip`. See the rejected paths.
+- **Absolute jumps in both directions** remove the distance limit of `E9 rel32`, so the stub can be
+  anywhere. The C++ version had to scan the pages near the target for an allocation within 32-bit reach.
+- The encoding was checked byte by byte: the bytes of the multiply code were loaded into Ghidra as x86-64
+  and disassembled back, matching the intent.
 
-### Vì sao không cần try/catch quanh code assembly
+### Why there is no try/catch around the assembly
 
-Không bọc được theo nghĩa thông thường: `try/catch`, SEH hay `catch_unwind`
-dựa vào unwind qua call frame có handler table, mà đoạn asm ghép thẳng giữa
-một hàm bằng `jmp` thì không có scaffolding đó. Hook này an toàn không nhờ
-try/catch mà vì **không dereference con trỏ game nào**: chỉ đụng thanh ghi CPU
-(`rax`, `rdx`, `r8`, `r10`, `r11`) và đọc một biến global tĩnh luôn hợp lệ suốt
-đời DLL. Khác `AttackHook` của autoregen, hook đó phải đọc `WorldChrMan` / con
-trỏ player (có thể null lúc loading), nên mới cần bảo vệ ở đó và dùng
-`catch_unwind` quanh **hàm Rust** nó gọi ra, không quanh asm.
+It cannot be wrapped: `try/catch`, SEH and `catch_unwind` depend on unwinding through call frames that
+have a handler table, and code glued into the middle of a function with a `jmp` has none of that. The
+hook is safe because it **dereferences no game pointer**: it touches only CPU registers (`rax`, `rdx`,
+`r8`, `r10`, `r11`) and reads one static variable that is valid for the life of the DLL. A hook that must
+read `WorldChrMan` or the player pointer (null while loading), like the hit hook of `mods/autoregen`, needs
+protection, and gets it with `catch_unwind` around the **Rust function** it calls, not around the assembly.
 
-## Hướng đã thử và bỏ
+## Rejected paths
 
-1. **Hook thứ hai ở bước nhân thưởng giết quái** (chính điểm neo ở trên):
-   nhân đúng enemy-kill nhưng **không phủ rune từ item** (Golden Rune...). Thêm
-   hook `AddSoul_Call` để phủ item thì giết quái bị **nhân hai lần** (64 rune
-   ra 256 thay vì 128), vì enemy-kill cũng đi qua `AddSoul_Call`. Bỏ hẳn hook
-   thứ nhất (2026-08-14); điểm đó chỉ còn dùng làm neo định vị.
-2. **Nhân mọi `amount` không điều kiện** (1.0.0): `AddSoul_Call` là hàm
-   "current += amount" tổng quát, nên cả khoản **trừ** (lên cấp, mua đồ,
-   `amount` âm) cũng bị nhân: giá đồ tăng và rune còn dư về 0 sau khi lên cấp
-   (hai người dùng Nexus báo). Script CE "Rune Multiplier" gốc chỉ nhân đúng
-   phép tính phần thưởng giết quái, chưa từng hook `AddSoul_Call` trực tiếp.
-   Sửa ở 1.0.1: stub bỏ qua khối nhân khi `amount <= 0`.
+1. **A second hook at the enemy-kill reward step** (the anchor above). It scaled enemy kills but **not the
+   runes from items** (Golden Rune and the like). Adding a hook on `AddSoul_Call` to cover items made
+   kills count **twice** (64 runes became 256 instead of 128), because enemy kills go through
+   `AddSoul_Call` as well. The first hook was dropped; that point is now only the anchor.
+2. **Scaling every `amount`** (1.0.0): `AddSoul_Call` is a general "current += amount", so **spends**
+   (level-ups, purchases, a negative `amount`) were scaled too: prices went up and the leftover runes
+   dropped to 0 after a level-up (reported by two players). Fixed in 1.0.1: the stub skips the multiply
+   when `amount <= 0`. A public cheat table entry that served as the starting point only scaled the
+   enemy-kill reward and never hooked `AddSoul_Call` directly.
 
-Hệ quả của `amount > 0`: `Multiplier` vẫn có thể nhỏ hơn 1 hoặc là số âm (rune
-nhận được bị giảm hay bị trừ), vì chỉ khoản **nhận** mới bị nhân.
+A consequence of `amount > 0`: `Multiplier` can still be below 1 or negative (runes received are
+reduced or subtracted), since only a **gain** is multiplied.
 
-## Nguồn tham khảo ban đầu (cho hook thứ nhất, đã bỏ patch nhưng còn dùng làm neo)
+## Where the first idea came from
 
-1. CT table cộng đồng `eldenring_all-in-one_Hexinton-v6.1_ce7.5.ct`, entry
-   "Rune Multiplier " (không mã hoá, khác phần lớn entry khác trong table đó là
-   tính năng trả phí bị `decodeFunction` che):
-   ```
-   aobscanmodule(rune_multiplier,eldenring.exe,f3 0f 59 c1 f3 0f 2c f8 48 8b 8b)
-   ...
-   mulss xmm0,xmm1 / cvttss2si edi,xmm0
-   // injection point: eldenring.exe+630CB3 (bản game lúc đó)
-   ```
-2. Một mod DLL cộng đồng build sẵn (tên gốc `法环多倍卢恩.dll`): hàm `Load` AOB-scan
-   đúng cùng pattern, patch 8 byte gốc thành `jmp` tới stub tự viết.
+A public cheat table has a "Rune Multiplier" entry (not encrypted, unlike most entries of that table, which
+are paid features hidden behind a decode function) that scans for the same pattern, and a third-party DLL
+does the same, patching the original 8 bytes into a jump to its own stub. Both **replace `xmm0`** with a
+constant before multiplying by `xmm1`. This mod's first patch (since dropped) kept the game's own
+`mulss xmm0,xmm1` and multiplied the result again, an improvement that stacked wrongly with the
+`AddSoul_Call` hook.
 
-Cả hai **thay hẳn `xmm0`** bằng hằng số multiplier trước khi nhân với `xmm1`.
-Cách patch cũ của mod này (đã bỏ) từng cải tiến hơn: giữ `mulss xmm0,xmm1` gốc
-rồi nhân thêm hệ số lên kết quả; nhưng chồng với hook `AddSoul_Call` thì cộng
-dồn sai nên bỏ.
+## Open risks
 
-## Giới hạn
-
-- Mẫu neo và cấu trúc `call` tại `anchor+0x11` suy ra từ các bản exe hiện có;
-  game vá làm đổi bố cục thì mod ghi `Anchor pattern not found` / `Couldn't
-  resolve AddSoul_Call` và **tự tắt cho phiên đó** (không patch gì).
-- Chưa kiểm chứng các bản exe ngoài 2.6.2.0, 2.7.0.0, 2.7.1.0.
+- The anchor and the `call` at `anchor + 0x11` are derived from the executables listed above. A patch that
+  changes the layout makes the mod log `anchor not found` or `AddSoul_Call not resolved` and stay off for
+  that session, patching nothing.
+- Builds other than 2.6.2.0, 2.7.0.0 and 2.7.1.0 have not been checked.

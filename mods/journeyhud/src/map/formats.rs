@@ -68,10 +68,7 @@ impl Oodle {
             let decompress = *library
                 .get::<OodleDecompress>(b"OodleLZ_Decompress\0")
                 .map_err(io::Error::other)?;
-            Ok(Self {
-                _library: library,
-                decompress,
-            })
+            Ok(Self { _library: library, decompress })
         }
     }
 

@@ -1,31 +1,52 @@
-# Kim người chơi dễ nhìn hơn / tương thích Blue Markers
+# A clearer player arrow, and compatibility with Blue Markers
 
-**Status 2026-11-02: đã xác nhận trong game với ModEngine 2 và me3 rằng JourneyHUD nhận asset ghi đè; UXM chưa thử.**
+Status: **Confirmed** in game with ModEngine 2 and me3 that JourneyHUD picks up an overriding asset. UXM was
+not tried. Conventions: [research notes](../../../docs/research/README.md). Code:
+`src/map/sprites.rs::read_menu_file`.
 
-Yêu cầu: WalrusLife (Nexus, 2026-11-02): dùng cùng mod Blue Markers (Nexus 11179) để nhìn hướng nhân vật; kim mặc định hoà vào icon grace và nền bản đồ.
+## Question
 
-## Blue Markers là gì (xem `Downloads\Blue Markers 11179`)
+A user asked for the player arrow to be easier to see and wanted to use the Blue Markers mod (Nexus 11179).
+The default arrow blends into the grace icons and the map. How can JourneyHUD show the replaced arrow?
 
-Một file duy nhất: `menu/hi/01_common.tpf.dcx` (~67 MB nén), file thay thế cho sprite sheet menu chung của game (cùng file JourneyHUD đọc sprite, xem `map.md`). Đã giải nén và so từng sprite: chỉ sheet `SB_MapCursor` đổi, 63 sprite khác (kim `MENU_MAP_Player_01/02`, kẻ địch, bạn, host, memo, marker...), `SB_MapCursor_02` và `_03_dlc` giống hệt. Kim `Player_01` cùng khung và kích thước, chỉ đổi màu vàng sang xanh lơ. Không có `01_common.sblytbnd.dcx` đi kèm nên toạ độ sprite giữ nguyên.
+## What Blue Markers is
 
-## Vì sao JourneyHUD không thấy bản xanh
+One file: `menu/hi/01_common.tpf.dcx` (about 67 MB compressed), a replacement for the game's common menu
+sprite sheet (the same file JourneyHUD reads its sprites from, see [map.md](map.md)). Unpacked and compared
+sprite by sprite: only the `SB_MapCursor` sheet changes, 63 sprites (the arrows `MENU_MAP_Player_01/02`,
+enemies, friends, host, memo, markers...); `SB_MapCursor_02` and `_03_dlc` are identical. The `Player_01`
+arrow has the same frame and size and only changes from yellow to cyan. No `01_common.sblytbnd.dcx` ships
+with it, so the sprite coordinates stay.
 
-`src/map/sprites.rs` đọc `/menu/hi/01_common.tpf.dcx` qua `archive::open(game_dir, ...)`, tức chỉ trong archive gốc `Data0..3` / `DLC` của game. File rời mà ModEngine nạp từ thư mục mod không được xét, nên kim vẫn là kim vàng gốc. (Nếu người dùng đang chạy mod soarqin thì mod đó chắc đọc qua đường khác; chưa kiểm.)
+## Why JourneyHUD did not show the blue arrow
 
-## Cách ModEngine trả file ghi đè
+`sprites.rs` read `/menu/hi/01_common.tpf.dcx` through `archive::open(game_dir, ...)`, that is only from the
+game's own `Data0..3` and `DLC` archives. A loose file that a mod loader serves from the mod folder was not
+considered, so the arrow stayed yellow.
 
-Cả hai loader đều làm việc ở lúc chương trình mở file, nên DLL không cần tự tìm profile hay đoán thư mục mod:
+## How the loaders serve an override
 
-- **ModEngine 2:** hook `CreateFileW`. Khi đường dẫn nằm dưới thư mục game, nó tìm lần lượt các `mods` trong `config_eldenring.toml` rồi mở file cùng đường dẫn trong thư mục mod ([mã nguồn](https://github.com/soulsmods/ModEngine2/blob/main/src/modengine/ext/mod_loader/archive_file_overrides.cpp#L53-L64), [hook](https://github.com/soulsmods/ModEngine2/blob/main/src/modengine/ext/mod_loader/archive_file_overrides.cpp#L136-L185)).
-- **me3:** profile tách `[[packages]]` (asset) với `[[natives]]` (DLL) ([tài liệu](https://github.com/garyttierney/me3/blob/main/docs/configuration-reference.md#dissecting-the-example-configuration)). Bản 0.8.1 cài hook `CreateFileW` trước khi nạp native để file được tìm bên trong thư mục game có thể lấy từ package ([changelog](https://github.com/garyttierney/me3/blob/main/CHANGELOG.md#me3---v081---2025-09-15)).
+Both work when the program opens a file, so the DLL needs no profile or mod folder lookup:
 
-Vì vậy không có API VFS công khai nào JourneyHUD cần gọi. Không nên tự parse `config_eldenring.toml` hay `.me3`: ME2 dùng biến môi trường `MODENGINE_CONFIG`, còn me3 truyền danh sách package đã biên dịch cho mod host và có thể dùng profile ở bất cứ đâu. Cả hai cách sẽ sai thứ tự ưu tiên hoặc bỏ sót cấu hình launcher.
+- **ModEngine 2** hooks `CreateFileW`; for a path under the game folder it tries each `mods` entry of
+  `config_eldenring.toml` and opens the file with the same path there.
+- **me3** separates `[[packages]]` (assets) from `[[natives]]` (DLLs); since 0.8.1 it installs the
+  `CreateFileW` hook before loading natives so a file looked up inside the game folder can come from a package.
 
-## Khả thi
+So there is no public VFS API to call, and parsing `config_eldenring.toml` or a `.me3` file is wrong: ME2 uses
+the `MODENGINE_CONFIG` environment variable and me3 hands a compiled package list to its host and may use a
+profile anywhere.
 
-- **Nhận file ghi đè:** `sprites.rs::read_menu_file` thử `std::fs::read(<game_dir>/menu/hi/01_common.tpf.dcx)` trước, cho cả texture lẫn layout. Với UXM, đây là file thật; với ME2/me3, hook `CreateFileW` sẽ tự trả file đang thắng theo thứ tự package. Nếu file không có, hàm fallback sang `archive::open` như trước. Như vậy JourneyHUD dùng đúng asset mà game đang dùng, không phụ thuộc loader nào hay tên/thư mục mod.
-- **Việc rẻ hơn, không phụ thuộc mod ngoài:** thêm tuỳ chọn cho kim người chơi (phóng to, tô màu hoặc viền sáng), vẽ tại `radar_ui.rs` (`Icon::Player`, vẽ ở dòng ~598-607). Đáp ứng đúng lời xin "làm marker dễ thấy hơn" và nên làm trước.
+## Fix
 
-## Chưa kiểm
+`read_menu_file` first tries `std::fs::read(<game_dir>/menu/hi/01_common.tpf.dcx)`, for the texture and for
+the layout. With UXM that is the real file; with ME2 or me3 the `CreateFileW` hook returns the winning file in
+package order. If the file is not there it falls back to `archive::open` as before. JourneyHUD therefore uses
+the asset the game uses, whatever the loader or the mod folder name.
 
-Người dùng đã thử Blue Player Map Marker trong game với ModEngine 2 và me3: kim ghi đè hiện đúng. UXM và trường hợp không có override chưa thử lại.
+A cheaper option that does not depend on another mod is an option for the player arrow itself (larger,
+tinted or outlined), drawn in `radar/ui.rs` (`Icon::Player`).
+
+## Open risks
+
+UXM and the case without an override were not tried again after the change.

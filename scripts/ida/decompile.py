@@ -1,13 +1,14 @@
-"""Decompile 1 hay nhiều hàm theo RVA/VA/tên, ghi ra decompile.txt.
+"""Decompile one or more functions by RVA/VA/name and write decompile.txt.
 
-Dùng:
+Usage:
     run.ps1 decompile <ea>... [--callees] [--strings] [--max-lines=N]
 
-    --callees     decompile thêm các hàm được gọi trực tiếp (chỉ hàm ngắn,
-                  dưới --max-lines dòng, mặc định 80)
-    --strings     liệt kê string literal mà hàm tham chiếu
-    --max-lines=N cắt pseudocode dài hơn N dòng (mặc định: không cắt)
-Mỗi <ea> có thể là địa chỉ bất kỳ trong hàm, ví dụ nơi crash từ crash dump.
+    --callees     also decompile directly called functions (short ones only: fewer than
+                  --max-lines lines, default 80)
+    --strings     list the string literals the function references
+    --max-lines=N truncate pseudocode longer than N lines (default: no truncation)
+Each <ea> can be any address inside the function, for example the faulting address of a
+crash dump.
 """
 import os
 import sys
@@ -37,7 +38,7 @@ def strings_in(func_ea):
 def main():
     pos, flags = common.parse_args()
     if not pos:
-        common.die("thiếu địa chỉ; xem docstring")
+        common.die("missing address; see the docstring")
     limit = int(flags["max-lines"]) if "max-lines" in flags else None
     callee_limit = int(flags["max-lines"]) if "max-lines" in flags else 80
     done = set()
@@ -46,7 +47,7 @@ def main():
     def dump(ea, title):
         fs = common.func_start(ea)
         if fs is None:
-            out.write("// ===== %s %X: không nằm trong hàm nào =====\n\n" % (title, ea))
+            out.write("// ===== %s %X: not inside any function =====\n\n" % (title, ea))
             return None
         if fs in done:
             return fs

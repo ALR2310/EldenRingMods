@@ -6,7 +6,7 @@
 
 use std::sync::LazyLock;
 
-use common::{logger, memscan};
+use shared::{logger, memscan};
 
 const APPLY_SPEFFECT_PATTERN: &str = "48 8B C4 48 89 58 08 48 89 70 10 57 48 81 EC C0 00 00 00 0F 28 05 ?? ?? ?? ?? 48 8B F1 \
      0F 28 0D ?? ?? ?? ?? 48 8D 48 88 0F 29 40 A8 41 0F B6 D8";
@@ -19,6 +19,7 @@ static APPLY: LazyLock<Option<ApplySpEffect>> = LazyLock::new(|| {
     match addr {
         Some(p) => {
             logger::log(&format!("ApplySpEffect found at {p:p}."));
+            // SAFETY: the address was found by its pattern and is a function of this signature.
             Some(unsafe { std::mem::transmute::<*mut u8, ApplySpEffect>(p) })
         }
         None => {
@@ -37,6 +38,7 @@ static APPLY: LazyLock<Option<ApplySpEffect>> = LazyLock::new(|| {
 pub unsafe fn apply(chr_ins: *mut u8, speffect_id: i32, dont_sync: bool) -> bool {
     match *APPLY {
         Some(f) => {
+            // SAFETY: `player` is the live main player's ChrIns and the function was found by its pattern.
             unsafe { f(chr_ins, speffect_id, dont_sync) };
             true
         }

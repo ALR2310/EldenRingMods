@@ -13,8 +13,8 @@ use fromsoftware_shared::FromStatic;
 use crate::party::{self, Member};
 use crate::steam::{Received, SteamMessages};
 use crate::warp::Spot;
-use crate::wire::{Here, Packet, Where, NAME_UNITS, spot_is_sane};
-use common::logger;
+use crate::wire::{Here, NAME_UNITS, Packet, Where, spot_is_sane};
+use shared::logger;
 
 /// Our own P2P channel - SoulsChat uses 42; nothing else on the same Steam
 /// session sees these messages, and we never see theirs.
@@ -30,7 +30,7 @@ pub const REPLY_TIMEOUT: Duration = Duration::from_secs(10);
 const ACCEPT_EVERY: Duration = Duration::from_secs(2);
 
 /// How long we must have been continuously in the world before answering a
-/// `WHERE`. Co-op test 5 (2026-09-25): warping to a player who is still on a
+/// `WHERE`. Warping to a player who is still on a
 /// loading screen (fast travel to a grace) kicked the warping player back to
 /// the title screen, both ways round - while loading, `WorldChrMan` can
 /// still hold the old main player, so the old code answered with a position
@@ -74,7 +74,11 @@ pub struct Net {
 fn random_request_id() -> u32 {
     use std::hash::{BuildHasher, Hasher};
     let mut h = std::collections::hash_map::RandomState::new().build_hasher();
-    h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos()));
+    h.write_u128(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos()),
+    );
     (h.finish() as u32).max(1)
 }
 
@@ -87,9 +91,10 @@ fn sender_matches(packet: &Received, claimed: u64) -> bool {
 /// pending (`GameMan.warp_requested`), and the session isn't in one of its
 /// (re)load phases. Any one alone isn't enough - see [SETTLE_TIME].
 fn in_world_now() -> bool {
-    if common::player::main_player_chr_ins_ptr().is_none() || crate::warp::warp_pending() {
+    if shared::player::main_player_chr_ins_ptr().is_none() || crate::warp::warp_pending() {
         return false;
     }
+    // SAFETY: the accessor returns `Err` while the singleton does not exist.
     match unsafe { CSSessionManager::instance() } {
         Ok(session) => !matches!(
             session.protocol_state,
@@ -106,10 +111,13 @@ fn in_world_now() -> bool {
 /// Our main player's position + character name as a `HERE`, `None` while
 /// loading / in the menus. Only called once [Net::settled].
 fn own_here(own_steam_id: u64, request_id: u32) -> Option<Vec<u8>> {
+    // SAFETY: the accessor returns `Err` while the singleton does not exist.
     let world_chr_man = unsafe { WorldChrMan::instance() }.ok()?;
     let player = world_chr_man.main_player.as_ref()?;
     let pos = &player.block_position;
-    let spot = Spot { block_id: player.current_block_id.0, x: pos.x, y: pos.y, z: pos.z, yaw: pos.yaw };
+    let spot =
+        Spot { block_id: player.current_block_id.0, x: pos.x, y: pos.y, z: pos.z, yaw: pos.yaw };
+    // SAFETY: the player's game data pointer is valid while the player is in the character set.
     let name: [u16; NAME_UNITS] = unsafe { player.player_game_data.as_ref() }.character_name;
     Some(Here { sender: own_steam_id, request_id, spot, name }.encode())
 }
@@ -122,7 +130,11 @@ impl Net {
     /// Asks `target` for its position. Replaces any request still waiting.
     pub fn request(&mut self, own_steam_id: u64, target: &Member) {
         let request_id = random_request_id();
-        let result = self.steam.send_to(target.steam_id, &Where { sender: own_steam_id, request_id }.encode(), CHANNEL);
+        let result = self.steam.send_to(
+            target.steam_id,
+            &Where { sender: own_steam_id, request_id }.encode(),
+            CHANNEL,
+        );
         logger::log(&format!(
             "WHERE -> '{}' ({}) id={request_id} send={result}",
             target.display_name(),
@@ -189,7 +201,10 @@ impl Net {
         if event.is_none()
             && let Some(p) = self.pending.as_ref().filter(|p| p.sent.elapsed() >= REPLY_TIMEOUT)
         {
-            logger::log(&format!("WHERE: no HERE from '{}' within {:?}", p.target_name, REPLY_TIMEOUT));
+            logger::log(&format!(
+                "WHERE: no HERE from '{}' within {:?}",
+                p.target_name, REPLY_TIMEOUT
+            ));
             event = Some(Event::TimedOut { target_name: p.target_name.clone() });
             self.pending = None;
         }
@@ -202,10 +217,7 @@ impl Net {
             return;
         };
         if asker.is_hostile() || party::own_is_hostile() {
-            logger::log(&format!(
-                "WHERE <- '{}': ignored (hostile)",
-                asker.display_name()
-            ));
+            logger::log(&format!("WHERE <- '{}': ignored (hostile)", asker.display_name()));
             return;
         }
         let Some(own) = party::own_steam_id(members) else {
@@ -213,10 +225,7 @@ impl Net {
         };
         let reply = if self.settled() { own_here(own, request_id) } else { None };
         let Some(reply) = reply else {
-            logger::log(&format!(
-                "WHERE <- '{}': deferred (not in world)",
-                asker.display_name()
-            ));
+            logger::log(&format!("WHERE <- '{}': deferred (not in world)", asker.display_name()));
             // One deferred request per asker: a newer WHERE replaces theirs.
             self.deferred.retain(|d| d.asker != from);
             self.deferred.push(Deferred {
@@ -228,10 +237,7 @@ impl Net {
             return;
         };
         let result = self.steam.send_to(from, &reply, CHANNEL);
-        logger::log(&format!(
-            "HERE -> '{}' id={request_id} send={result}",
-            asker.display_name()
-        ));
+        logger::log(&format!("HERE -> '{}' id={request_id} send={result}", asker.display_name()));
     }
 
     /// Answers every deferred `WHERE` once we're back in the world.
@@ -245,7 +251,8 @@ impl Net {
         // Re-checked: a deferred asker (or we) may have turned hostile since.
         let own_hostile = party::own_is_hostile();
         self.deferred.retain(|d| {
-            let allowed = !own_hostile && members.iter().any(|m| m.steam_id == d.asker && !m.is_hostile());
+            let allowed =
+                !own_hostile && members.iter().any(|m| m.steam_id == d.asker && !m.is_hostile());
             if !allowed {
                 logger::log(&format!("WHERE <- '{}': deferred dropped (hostile)", d.asker_name));
             }

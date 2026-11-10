@@ -1,15 +1,9 @@
-//! Debug-only probes, all off by default and read every frame, so a reload
-//! turns them on or off. They only write to the log, to find which animation
-//! ids belong to which group (`docs/action_groups.md`) and how to tell enemies
-//! apart:
-//! - `SpeedProbe`: the player's and Torrent's animation id, group and the
-//!   speed set (on change); `weight_type` and `max_equip_load` (the equip-load
-//!   class for a `Load` condition in `[[Override]]`); every character's
-//!   `throw_state` change; the live spirits.
-//! - `EffectProbe`: the player's SpEffect ids as they are added and removed
-//!   (for testing `[[Override]]`).
-//! - `EnemyProbe`: the character nearest the player's lock-on target, as
-//!   ground truth for enemies vs bosses vs NPCs.
+//! Debug probes, off by default and read every frame, so a reload switches them. They only write to
+//! the log:
+//! - `SpeedProbe`: animation id, group and speed of the player and Torrent, the equip-load class,
+//!   every `throw_state` change and the live spirits.
+//! - `EffectProbe`: the player's SpEffect ids as they come and go, for writing `[[Override]]`.
+//! - `EnemyProbe`: the character nearest the lock-on target, to tell enemies, bosses and NPCs apart.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -17,8 +11,8 @@ use std::time::Duration;
 use eldenring::cs::{CSTaskGroupIndex, ChrIns, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
-use common::anim::{current_anim_id, format_anim_id, group_of};
-use common::logger;
+use shared::anim::{current_anim_id, format_anim_id, group_of};
+use shared::logger;
 
 use crate::config;
 use crate::speed::{throw_state, torrent, torrent_group_of};
@@ -49,7 +43,7 @@ impl Probes {
         now.dedup();
         if now != self.sp_effects {
             let (added, removed) = diff_sorted(&self.sp_effects, &now);
-            logger::log(&format!("P SpEffect +{added:?} -{removed:?} now {now:?}"));
+            logger::log(&format!("Probe: effects +{added:?} -{removed:?} now {now:?}"));
             self.sp_effects = now;
         }
     }
@@ -58,7 +52,7 @@ impl Probes {
         let now = (chr.chr_ctrl.weight_type, max_equip_load);
         if self.weight != Some(now) {
             self.weight = Some(now);
-            logger::log(&format!("P weight_type={} max_equip_load={:.1}", now.0, now.1));
+            logger::log(&format!("Probe: weight_type={} max_equip_load={:.1}", now.0, now.1));
         }
     }
 
@@ -67,7 +61,7 @@ impl Probes {
         if self.player_anim != Some(anim) {
             self.player_anim = Some(anim);
             logger::log(&format!(
-                "P {} ({anim}) {:?} speed={:.2} fp={}/{}",
+                "Probe: player {} ({anim}) {:?} speed={:.2} fp={}/{}",
                 format_anim_id(anim),
                 group_of(anim),
                 chr.modules.behavior.animation_speed,
@@ -88,7 +82,7 @@ impl Probes {
             return;
         }
         logger::log(&format!(
-            "THROW {who} {key:#x} npc={} state {before}->{state} flags={:#x} {} speed={:.2}",
+            "Probe: throw {who} {key:#x} npc={} state {before}->{state} flags={:#x} {} speed={:.2}",
             chr.npc_param_id,
             chr.modules.throw.flags.0,
             format_anim_id(current_anim_id(chr)),
@@ -98,9 +92,11 @@ impl Probes {
 
     fn buddies(&mut self, world_chr_man: &WorldChrMan) {
         let mut now = Vec::new();
-        common::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| now.push(chr.npc_param_id));
+        shared::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| {
+            now.push(chr.npc_param_id)
+        });
         if now != self.buddies {
-            logger::log(&format!("BUDDY npc {now:?}"));
+            logger::log(&format!("Probe: spirits {now:?}"));
             self.buddies = now;
         }
     }
@@ -110,7 +106,7 @@ impl Probes {
         if self.torrent_anim != Some(anim) {
             self.torrent_anim = Some(anim);
             logger::log(&format!(
-                "T {} ({anim}) {:?} speed={:.2}",
+                "Probe: torrent {} ({anim}) {:?} speed={:.2}",
                 format_anim_id(anim),
                 torrent_group_of(anim),
                 chr.modules.behavior.animation_speed,
@@ -118,9 +114,8 @@ impl Probes {
         }
     }
 
-    /// The target of a lock-on isn't flagged itself (only the player has
-    /// `is_locked_on`), so it is the character whose position is nearest the
-    /// player's `lock_on_target_position`.
+    /// Only the player has `is_locked_on`, so the target is the character nearest the player's
+    /// `lock_on_target_position`.
     fn lock_on(&mut self, world_chr_man: &WorldChrMan) {
         let target = world_chr_man.main_player.as_ref().and_then(|player| {
             let chr = &player.chr_ins;
@@ -146,9 +141,10 @@ impl Probes {
         match (best, target) {
             (Some((d, key, index)), Some((_, tp))) if self.lock != key => {
                 self.lock = key;
+                // SAFETY: `key` is a character of the sets walked just above, alive this frame.
                 let chr = unsafe { &*(key as *const ChrIns) };
                 logger::log(&format!(
-                    "LOCKON set={index} dist={:.2} npc_param={} npc_id={} chr_type={:?} team={} hp={}/{} anim={} chr_pos=({:.1},{:.1},{:.1}) target_pos=({:.1},{:.1},{:.1})",
+                    "Probe: lock-on set={index} dist={:.2} npc_param={} npc_id={} chr_type={:?} team={} hp={}/{} anim={} chr_pos=({:.1},{:.1},{:.1}) target_pos=({:.1},{:.1},{:.1})",
                     d.sqrt(),
                     chr.npc_param_id,
                     chr.npc_id,
@@ -157,8 +153,12 @@ impl Probes {
                     chr.modules.data.hp,
                     chr.modules.data.max_hp,
                     format_anim_id(current_anim_id(chr)),
-                    chr.chunk_position.0, chr.chunk_position.1, chr.chunk_position.2,
-                    tp.0, tp.1, tp.2,
+                    chr.chunk_position.0,
+                    chr.chunk_position.1,
+                    chr.chunk_position.2,
+                    tp.0,
+                    tp.1,
+                    tp.2,
                 ));
             }
             (None, _) => self.lock = 0,
@@ -168,10 +168,10 @@ impl Probes {
 }
 
 pub fn run() {
-    let cs_task = common::task::wait_for_cs_task();
+    let cs_task = shared::task::wait_for_cs_task();
     let mut probes = Probes::default();
-    // PostPhysics: after `speed.rs` (PreBehavior) has set this frame's value.
-    common::task::run_recurring_safe(
+    // PostPhysics: after `speed.rs` (PreBehavior) set this frame's value.
+    shared::task::run_recurring_safe(
         cs_task,
         "Probe",
         CSTaskGroupIndex::ChrIns_PostPhysics,
@@ -180,9 +180,12 @@ pub fn run() {
                 let logging = &config::get().logging;
                 (logging.speed_probe, logging.effect_probe, logging.enemy_probe)
             };
-            if !(speed_probe || effect_probe || enemy_probe) || common::player::main_player_chr_ins_ptr().is_none() {
+            if !(speed_probe || effect_probe || enemy_probe)
+                || shared::player::main_player_chr_ins_ptr().is_none()
+            {
                 return;
             }
+            // SAFETY: called from a game task; `instance_mut` returns `Err` while the singleton does not exist.
             let Ok(world_chr_man) = (unsafe { WorldChrMan::instance_mut() }) else {
                 return;
             };
@@ -192,7 +195,9 @@ pub fn run() {
                     probes.effects(&player.chr_ins);
                 }
                 if speed_probe {
-                    probes.weight(&player.chr_ins, unsafe { player.player_game_data.as_ref() }.max_equip_load);
+                    // SAFETY: the game data of the live main player.
+                    let max_equip_load = unsafe { player.player_game_data.as_ref() }.max_equip_load;
+                    probes.weight(&player.chr_ins, max_equip_load);
                     probes.player_anim(&player.chr_ins);
                     probes.throw("player", &player.chr_ins);
                 }

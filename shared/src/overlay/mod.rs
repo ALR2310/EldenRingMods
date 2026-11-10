@@ -1,12 +1,11 @@
-//! Shared Dear ImGui DX12 overlay host (via `hudhook`), extracted from
-//! `soulsteleport`: font loading (embedded Noto Sans + system CJK fallback),
+//! Shared Dear ImGui DX12 overlay host (via `hudhook`), font loading (embedded Noto Sans + system CJK fallback),
 //! warm-dark gold theme, automatic resolution scaling + `MenuScale`, cursor
 //! unpin (`SetCursorPos` / `ClipCursor` hooks), direct Win32 mouse polling
 //! into ImGui, DirectInput mouse blocking (`input_block`), window layout
 //! persistence (`MenuX`, `MenuY`, `MenuWidth`, `MenuHeight` in 1080p units),
 //! and standard header chrome (Reset button, centered title, `X` close button).
 //!
-//! Enabled via the `overlay` Cargo feature on `common`. Details:
+//! Enabled via the `overlay` Cargo feature on `shared`. Details:
 //! `shared/docs/overlay.md`.
 
 mod input_block;
@@ -17,7 +16,9 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use hudhook::hooks::dx12::ImguiDx12Hooks;
-use hudhook::imgui::{self, Condition, Context, FontConfig, FontGlyphRanges, FontSource, Io, MouseButton};
+use hudhook::imgui::{
+    self, Condition, Context, FontConfig, FontGlyphRanges, FontSource, Io, MouseButton,
+};
 use hudhook::mh::{MH_ApplyQueued, MhHook};
 use hudhook::windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use hudhook::{BeforeWndProc, Hudhook, ImguiRenderLoop, MessageFilter, RenderContext};
@@ -26,7 +27,7 @@ pub use hudhook::imgui::Ui;
 /// MinHook (`MhHook`...), for a mod that hooks more than the overlay does.
 pub use hudhook::mh;
 
-use crate::{config, logger};
+use crate::logger;
 
 /// Whether the overlay window is currently open.
 pub static MENU_OPEN: AtomicBool = AtomicBool::new(false);
@@ -65,7 +66,8 @@ static EMBEDDED_FONT: &[u8] = include_bytes!("../../assets/NotoSans-Subset.ttf")
 
 /// Optional CJK coverage for character names, merged in from the first one of
 /// these found in the real Windows fonts folder (`GetWindowsDirectoryW`).
-const CJK_FONT_FILES: [&str; 5] = ["msyh.ttc", "msjh.ttc", "meiryo.ttc", "msgothic.ttc", "simsun.ttc"];
+const CJK_FONT_FILES: [&str; 5] =
+    ["msyh.ttc", "msjh.ttc", "meiryo.ttc", "msgothic.ttc", "simsun.ttc"];
 const FONT_RASTER_BASE: f32 = 40.0;
 const FONT_RASTER_MAX: f32 = 64.0;
 
@@ -92,12 +94,9 @@ const KEY_Y: &str = "MenuY";
 const KEY_W: &str = "MenuWidth";
 const KEY_H: &str = "MenuHeight";
 
-static INI_PATH: OnceLock<String> = OnceLock::new();
-
 /// Where the overlay reads and writes its settings (`MenuScale`, `MenuX`, `MenuY`, `MenuWidth`,
-/// `MenuHeight`, plus whatever the mod passes to [save_ini_values]) when the mod's config is not
-/// an ini: a TOML mod maps these key names to its own entries. Without one the ini of
-/// [set_ini_path] is used.
+/// `MenuHeight`, plus whatever the mod passes to [save_values]): a mod maps these key names to its
+/// own config entries.
 pub struct Store {
     /// Current value of a key, `None` if the config has none.
     pub get: fn(&str) -> Option<f64>,
@@ -107,46 +106,21 @@ pub struct Store {
 
 static STORE: OnceLock<Store> = OnceLock::new();
 
-/// Redirects the overlay's settings to a non-ini config, see [Store]. Call before [install].
+/// Connects the overlay to the mod's config, see [Store]. Call before [install].
 pub fn set_store(store: Store) {
     let _ = STORE.set(store);
 }
 
 fn read_f64(key: &str, default: f64) -> f64 {
-    match STORE.get() {
-        Some(store) => (store.get)(key).unwrap_or(default),
-        None => config::get_double(key, default),
-    }
+    STORE.get().and_then(|store| (store.get)(key)).unwrap_or(default)
 }
 
-/// Saves into the [Store] or, without one, the ini; `None` when neither is set up.
 fn write_values(values: &[(&str, String)]) -> Option<bool> {
-    if let Some(store) = STORE.get() {
-        return Some((store.save)(values));
-    }
-    let path = INI_PATH.get()?;
-    let ok = config::set_values(path, values);
-    if ok {
-        config::load(path);
-    }
-    Some(ok)
+    Some((STORE.get()?.save)(values))
 }
 
-/// Tells the overlay which ini file to persist its layout (`MenuX`/`MenuY`/
-/// `MenuWidth`/`MenuHeight`) and any [set_ini_values] calls into. Call before
-/// [install].
-pub fn set_ini_path(path: String) {
-    let _ = INI_PATH.set(path);
-}
-
-/// Path passed to [set_ini_path], if any.
-pub fn ini_path() -> Option<&'static str> {
-    INI_PATH.get().map(String::as_str)
-}
-
-/// Updates `values` in the config file (the ini of [set_ini_path], or the [Store]) AND reloads
-/// it so the change takes effect immediately.
-pub fn save_ini_values(values: &[(&str, String)]) -> bool {
+/// Saves `(key, text)` pairs into the mod's config through the [Store].
+pub fn save_values(values: &[(&str, String)]) -> bool {
     let ok = write_values(values).unwrap_or(false);
     if !ok {
         logger::error("Menu: saving values to the config failed");
@@ -167,7 +141,8 @@ fn saved_layout(cfg: &WindowConfig) -> ([f32; 2], [f32; 2]) {
 
 fn save_layout(pos: [f32; 2], size: [f32; 2]) {
     let fmt = |v: f32| format!("{:.0}", v.max(0.0));
-    let values = [(KEY_X, fmt(pos[0])), (KEY_Y, fmt(pos[1])), (KEY_W, fmt(size[0])), (KEY_H, fmt(size[1]))];
+    let values =
+        [(KEY_X, fmt(pos[0])), (KEY_Y, fmt(pos[1])), (KEY_W, fmt(size[0])), (KEY_H, fmt(size[1]))];
     if write_values(&values) == Some(false) {
         logger::error("Menu: position save to the config failed");
     }
@@ -223,12 +198,15 @@ const VK_LBUTTON: i32 = 0x01;
 const VK_RBUTTON: i32 = 0x02;
 
 fn game_window() -> Option<*mut std::ffi::c_void> {
+    // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
     let hwnd = unsafe { GetForegroundWindow() };
     if hwnd.is_null() {
         return None;
     }
     let mut pid = 0u32;
+    // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
     unsafe { GetWindowThreadProcessId(hwnd, &mut pid) };
+    // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
     (pid == unsafe { GetCurrentProcessId() }).then_some(hwnd)
 }
 
@@ -251,11 +229,17 @@ pub fn feed_mouse(ctx: &mut Context, buttons_down: &mut [bool; 2]) {
     let Some(hwnd) = game_window() else {
         return;
     };
+    // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
     unsafe { ClipCursor(std::ptr::null()) };
 
     let mut pt = Point::default();
     let mut rect = Rect::default();
-    let ok = unsafe { GetCursorPos(&mut pt) != 0 && ScreenToClient(hwnd, &mut pt) != 0 && GetClientRect(hwnd, &mut rect) != 0 };
+    // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
+    let ok = unsafe {
+        GetCursorPos(&mut pt) != 0
+            && ScreenToClient(hwnd, &mut pt) != 0
+            && GetClientRect(hwnd, &mut rect) != 0
+    };
     let client_w = (rect.right - rect.left) as f32;
     let client_h = (rect.bottom - rect.top) as f32;
     let io = ctx.io_mut();
@@ -263,7 +247,10 @@ pub fn feed_mouse(ctx: &mut Context, buttons_down: &mut [bool; 2]) {
         let [dw, dh] = io.display_size;
         io.add_mouse_pos_event([pt.x as f32 * dw / client_w, pt.y as f32 * dh / client_h]);
     }
-    for (i, (vk, button)) in [(VK_LBUTTON, MouseButton::Left), (VK_RBUTTON, MouseButton::Right)].into_iter().enumerate() {
+    for (i, (vk, button)) in
+        [(VK_LBUTTON, MouseButton::Left), (VK_RBUTTON, MouseButton::Right)].into_iter().enumerate()
+    {
+        // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
         let down = unsafe { GetAsyncKeyState(vk) } < 0;
         if down != buttons_down[i] {
             buttons_down[i] = down;
@@ -274,6 +261,7 @@ pub fn feed_mouse(ctx: &mut Context, buttons_down: &mut [bool; 2]) {
 
 fn windows_fonts_dir() -> Option<std::path::PathBuf> {
     let mut buf = [0u16; 260];
+    // SAFETY: the buffer is valid for the length passed.
     let len = unsafe { GetWindowsDirectoryW(buf.as_mut_ptr(), buf.len() as u32) } as usize;
     if len == 0 || len >= buf.len() {
         return None;
@@ -335,7 +323,11 @@ impl<F: FnMut(&Ui) + Send + Sync + 'static> ImguiRenderLoop for MenuRenderLoop<F
         logger::log("Menu: ImGui initialized");
     }
 
-    fn before_render<'a>(&'a mut self, ctx: &mut Context, _render_context: &'a mut dyn RenderContext) {
+    fn before_render<'a>(
+        &'a mut self,
+        ctx: &mut Context,
+        _render_context: &'a mut dyn RenderContext,
+    ) {
         let open = MENU_OPEN.load(Ordering::Relaxed);
         ctx.io_mut().mouse_draw_cursor = open;
         if open {
@@ -372,7 +364,11 @@ impl<F: FnMut(&Ui) + Send + Sync + 'static> ImguiRenderLoop for MenuRenderLoop<F
 
         let scale = if self.scale > 0.0 { self.scale } else { 1.0 };
         let pos_scale = if self.pos_scale > 0.0 { self.pos_scale } else { 1.0 };
-        let cond = if std::mem::take(&mut self.relayout) { Condition::Always } else { Condition::FirstUseEver };
+        let cond = if std::mem::take(&mut self.relayout) {
+            Condition::Always
+        } else {
+            Condition::FirstUseEver
+        };
         let (pos, size) = saved_layout(&self.cfg);
         let mut keep_open = true;
         let mut reset_layout = false;
@@ -385,7 +381,10 @@ impl<F: FnMut(&Ui) + Send + Sync + 'static> ImguiRenderLoop for MenuRenderLoop<F
             .position(pos.map(|v| v * pos_scale), cond)
             .collapsible(false)
             .build(|| {
-                layout = Some((ui.window_pos().map(|v| v / pos_scale), ui.window_size().map(|v| v / scale)));
+                layout = Some((
+                    ui.window_pos().map(|v| v / pos_scale),
+                    ui.window_size().map(|v| v / scale),
+                ));
                 draw_header(ui, title, &mut keep_open, &mut reset_layout);
                 draw_body(ui);
             });
@@ -424,12 +423,22 @@ impl<F: FnMut(&Ui) + Send + Sync + 'static> ImguiRenderLoop for MenuRenderLoop<F
         }
     }
 
-    fn before_wnd_proc(&self, _hwnd: HWND, umsg: u32, _wparam: WPARAM, _lparam: LPARAM) -> BeforeWndProc {
+    fn before_wnd_proc(
+        &self,
+        _hwnd: HWND,
+        umsg: u32,
+        _wparam: WPARAM,
+        _lparam: LPARAM,
+    ) -> BeforeWndProc {
         if blocks_window_message(umsg) { BeforeWndProc::Break } else { BeforeWndProc::Continue }
     }
 
     fn message_filter(&self, _io: &Io) -> MessageFilter {
-        if MENU_OPEN.load(Ordering::Relaxed) { MessageFilter::InputAll } else { MessageFilter::empty() }
+        if MENU_OPEN.load(Ordering::Relaxed) {
+            MessageFilter::InputAll
+        } else {
+            MessageFilter::empty()
+        }
     }
 }
 
@@ -550,6 +559,7 @@ unsafe extern "system" fn set_cursor_pos_hook(x: i32, y: i32) -> i32 {
         return 1;
     }
     let orig = SET_CURSOR_POS_ORIG.load(Ordering::Relaxed);
+    // SAFETY: the original function, called with the arguments the game passed.
     unsafe { std::mem::transmute::<usize, SetCursorPosFn>(orig)(x, y) }
 }
 
@@ -557,6 +567,7 @@ unsafe extern "system" fn clip_cursor_hook(rect: *const Rect) -> i32 {
     let unpin = MENU_OPEN.load(Ordering::Relaxed) || input_block::extension_unpins_cursor();
     let rect = if unpin { std::ptr::null() } else { rect };
     let orig = CLIP_CURSOR_ORIG.load(Ordering::Relaxed);
+    // SAFETY: the original function, called with the arguments the game passed.
     unsafe { std::mem::transmute::<usize, ClipCursorFn>(orig)(rect) }
 }
 
@@ -564,7 +575,11 @@ unsafe extern "system" fn clip_cursor_hook(rect: *const Rect) -> i32 {
 unsafe extern "system" {
     fn GetModuleHandleA(name: *const u8) -> *mut std::ffi::c_void;
     fn GetProcAddress(module: *mut std::ffi::c_void, name: *const u8) -> *mut std::ffi::c_void;
-    fn CreateMutexA(attrs: *const std::ffi::c_void, initial_owner: i32, name: *const u8) -> *mut std::ffi::c_void;
+    fn CreateMutexA(
+        attrs: *const std::ffi::c_void,
+        initial_owner: i32,
+        name: *const u8,
+    ) -> *mut std::ffi::c_void;
     fn WaitForSingleObject(handle: *mut std::ffi::c_void, milliseconds: u32) -> u32;
     fn ReleaseMutex(handle: *mut std::ffi::c_void) -> i32;
 }
@@ -577,10 +592,13 @@ struct ProcessHookLock(*mut std::ffi::c_void);
 
 impl ProcessHookLock {
     fn acquire() -> Self {
+        // SAFETY: Win32 calls with a NUL-terminated name and the handle this struct owns.
         let pid = unsafe { GetCurrentProcessId() };
         let name = format!("Local\\EldenRingMod_OverlayInit_{pid}\0");
+        // SAFETY: Win32 calls with a NUL-terminated name and the handle this struct owns.
         let handle = unsafe { CreateMutexA(std::ptr::null(), 0, name.as_ptr()) };
         if !handle.is_null() {
+            // SAFETY: Win32 calls with a NUL-terminated name and the handle this struct owns.
             unsafe { WaitForSingleObject(handle, 10_000) };
         }
         Self(handle)
@@ -590,21 +608,26 @@ impl ProcessHookLock {
 impl Drop for ProcessHookLock {
     fn drop(&mut self) {
         if !self.0.is_null() {
+            // SAFETY: Win32 calls with a NUL-terminated name and the handle this struct owns.
             unsafe { ReleaseMutex(self.0) };
         }
     }
 }
 
 fn hook_user32(name: &str, detour: *mut std::ffi::c_void, orig_slot: &AtomicUsize) -> bool {
+    // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
     let user32 = unsafe { GetModuleHandleA(c"user32.dll".as_ptr() as *const u8) };
     let c_name = format!("{name}\0");
+    // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
     let target = unsafe { GetProcAddress(user32, c_name.as_ptr()) };
     if user32.is_null() || target.is_null() {
         return false;
     }
+    // SAFETY: `target` is a function of the game or a system DLL and `detour` has its signature.
     match unsafe { MhHook::new(target, detour) } {
         Ok(hook) => {
             orig_slot.store(hook.trampoline() as usize, Ordering::Relaxed);
+            // SAFETY: the hook was just created and is applied by `MH_ApplyQueued`.
             unsafe { hook.queue_enable() }.is_ok()
         }
         Err(_) => false,
@@ -618,6 +641,7 @@ pub fn install_input_hooks() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
         // Already initialized (by `Hudhook::builder`, or by an earlier call) is fine.
+        // SAFETY: MinHook initialization has no preconditions.
         let _ = unsafe { hudhook::mh::MH_Initialize() };
         install_cursor_hooks();
         input_block::install();
@@ -625,8 +649,14 @@ pub fn install_input_hooks() {
 }
 
 fn install_cursor_hooks() {
-    let set_pos = hook_user32("SetCursorPos", set_cursor_pos_hook as *mut std::ffi::c_void, &SET_CURSOR_POS_ORIG);
-    let clip = hook_user32("ClipCursor", clip_cursor_hook as *mut std::ffi::c_void, &CLIP_CURSOR_ORIG);
+    let set_pos = hook_user32(
+        "SetCursorPos",
+        set_cursor_pos_hook as *mut std::ffi::c_void,
+        &SET_CURSOR_POS_ORIG,
+    );
+    let clip =
+        hook_user32("ClipCursor", clip_cursor_hook as *mut std::ffi::c_void, &CLIP_CURSOR_ORIG);
+    // SAFETY: applies the hooks queued above.
     let applied = unsafe { MH_ApplyQueued() }.ok().is_ok();
     if set_pos && clip && applied {
         logger::log("Menu: cursor hooks applied");

@@ -7,7 +7,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
-use common::{codepatch, logger, memscan};
+use shared::{codepatch, logger, memscan};
 
 /// The call of the update in the HUD's update function, found by the code around it (unique on
 /// 2.6.2.0 to 2.7.2.0): `mov r8,[rsi+60h]; add r8,<model>; lea rcx,[rsi+<view>]; movaps xmm1,xmm6; call`.
@@ -31,6 +31,7 @@ static MODEL: AtomicUsize = AtomicUsize::new(0);
 unsafe extern "system" fn update(view: *mut u8, dt: f32, model: *const u8) {
     // SAFETY: `ORIGINAL` is the call's destination, stored before the redirect.
     let original: UpdateFn = unsafe { std::mem::transmute(ORIGINAL.load(Ordering::Acquire)) };
+    // SAFETY: the original function of the game, called with the arguments the game passed.
     unsafe { original(view, dt, model) };
     MODEL.store(model as usize, Ordering::Release);
 }
@@ -38,10 +39,15 @@ unsafe extern "system" fn update(view: *mut u8, dt: f32, model: *const u8) {
 /// Redirects the call, on a thread of its own (the scan waits for the game's code to be there).
 pub fn install() {
     std::thread::spawn(|| {
-        let Some(anchor) = memscan::wait_for_pattern_in_module(CALL_AOB, Duration::from_millis(500), Duration::from_secs(60)) else {
+        let Some(anchor) = memscan::wait_for_pattern_in_module(
+            CALL_AOB,
+            Duration::from_millis(500),
+            Duration::from_secs(60),
+        ) else {
             logger::error("Icons: pattern not found");
             return;
         };
+        // SAFETY: the offset stays inside the matched game code.
         let site = unsafe { anchor.add(CALL_AT) };
         // SAFETY: reads the 5 bytes of a call found in the game image.
         let Some(original) = (unsafe { codepatch::rel32_target(site) }) else {
@@ -50,7 +56,13 @@ pub fn install() {
         };
         ORIGINAL.store(original as usize, Ordering::Release);
         // SAFETY: `site` is the scanned call; the stub jumps to a function with the callee's signature.
-        let ok = unsafe { codepatch::redirect_rel32(site, &codepatch::absolute_jmp(update as UpdateFn as usize as u64)) }.is_some();
+        let ok = unsafe {
+            codepatch::redirect_rel32(
+                site,
+                &codepatch::absolute_jmp(update as UpdateFn as usize as u64),
+            )
+        }
+        .is_some();
         logger::log(if ok { "Icons: hooked" } else { "Icons: redirect failed" });
     });
 }
@@ -167,9 +179,11 @@ pub fn place_gauges(right: f32, top: f32, scale: f32) {
 unsafe extern "system" fn gauge_update(view: *mut u8, index: i64, model: *const u8) {
     // SAFETY: `GAUGE_ORIGINAL` is the call's destination, stored before the redirect.
     let original: GaugeFn = unsafe { std::mem::transmute(GAUGE_ORIGINAL.load(Ordering::Acquire)) };
+    // SAFETY: the original function of the game, called with the arguments the game passed.
     unsafe { original(view, index, model) };
     if (0..GAUGES as i64).contains(&index) && ANCHORED.load(Ordering::Acquire) {
         // A panic must not unwind into the game.
+        // SAFETY: the pointers are the HUD objects the game passed to this call, read at offsets that are fixed on every build the patterns match.
         let _ = std::panic::catch_unwind(|| unsafe { place_gauge(view, index as usize) });
     }
 }
@@ -178,7 +192,7 @@ unsafe extern "system" fn gauge_update(view: *mut u8, index: i64, model: *const 
 ///
 /// # Safety
 /// `value` must be a live clip value of the game.
-unsafe fn display_of(value: *mut u8) -> Option<[f64; 5]> {
+pub unsafe fn display_of(value: *mut u8) -> Option<[f64; 5]> {
     // SAFETY: the value holds its object interface at 24 and the data at 40, as `sub_140D872C0` reads.
     unsafe {
         let interface = *(value.add(24) as *const *mut u8);
@@ -224,18 +238,60 @@ unsafe fn set_rotation(value: *mut u8, degrees: f64) {
 /// # Safety
 /// `view` must be the game's gauge view.
 unsafe fn clip_of(view: *mut u8) -> *mut u8 {
-    // SAFETY: the component sits at a fixed offset of the view; its vtable's second entry returns the clip's value.
+    // SAFETY: the same, with the gauge's component.
+    unsafe { clip_at(view, GAUGE_ROOT) }
+}
+
+/// The root clip's value of the component at `view + offset`.
+///
+/// # Safety
+/// `view + offset` must be a component of the game's that holds a clip (bound with `sub_14076B7C0`).
+pub unsafe fn clip_at(view: *mut u8, offset: usize) -> *mut u8 {
+    // SAFETY: the component's vtable's second entry returns the clip's value.
     unsafe {
-        let component = view.add(GAUGE_ROOT);
-        let value_of: ValueOfFn = std::mem::transmute(*(*(component as *const *const usize)).add(1));
+        let component = view.add(offset);
+        let value_of: ValueOfFn =
+            std::mem::transmute(*(*(component as *const *const usize)).add(1));
         value_of(component)
     }
 }
 
+/// Sets `_x` and `_y` of a clip; `false` while the game's function is not found yet.
+///
+/// # Safety
+/// `value` must be a live clip value of the game.
+pub unsafe fn set_clip_position(value: *mut u8, x: f32, y: f32) -> bool {
+    let set_pos = SET_POS.load(Ordering::Acquire);
+    if set_pos == 0 {
+        return false;
+    }
+    // SAFETY: `set_pos` is the game's function; the caller gives a live clip.
+    unsafe { std::mem::transmute::<usize, SetPosFn>(set_pos)(value, x, y) };
+    true
+}
+
+/// Sets `_xscale` and `_yscale` of a clip to `scale` times 100 percent; `false` while the game's function is not found yet.
+///
+/// # Safety
+/// `value` must be a live clip value of the game.
+pub unsafe fn set_clip_scale(value: *mut u8, scale: f32) -> bool {
+    let set_scale = SET_SCALE.load(Ordering::Acquire);
+    if set_scale == 0 {
+        return false;
+    }
+    let factors = [scale, scale];
+    // SAFETY: `set_scale` is the game's function; the caller gives a live clip.
+    unsafe { std::mem::transmute::<usize, SetScaleFn>(set_scale)(value, factors.as_ptr()) };
+    true
+}
+
 /// The place of gauge `index` in its list, from the root the layout has.
 fn target(index: usize, scale: f32) -> (f32, f32) {
-    let x = f32::from_bits(ANCHOR_X.load(Ordering::Relaxed)) - f32::from_bits(ROOT_X.load(Ordering::Relaxed));
-    let y = f32::from_bits(ANCHOR_Y.load(Ordering::Relaxed)) - f32::from_bits(ROOT_Y.load(Ordering::Relaxed)) + STEP * scale * index as f32;
+    let x = f32::from_bits(ANCHOR_X.load(Ordering::Relaxed))
+        - f32::from_bits(ROOT_X.load(Ordering::Relaxed));
+    let y = f32::from_bits(ANCHOR_Y.load(Ordering::Relaxed))
+        - f32::from_bits(ROOT_Y.load(Ordering::Relaxed))
+        + STEP * scale * index as f32;
     (x, y)
 }
 
@@ -257,7 +313,7 @@ unsafe fn place_gauge(view: *mut u8, index: usize) {
         return;
     }
     let scale = f32::from_bits(ANCHOR_SCALE.load(Ordering::Relaxed));
-    let refresh = CALLS[index].fetch_add(1, Ordering::Relaxed) % REFRESH_EVERY == 0;
+    let refresh = CALLS[index].fetch_add(1, Ordering::Relaxed).is_multiple_of(REFRESH_EVERY);
     if !fresh && !refresh && ROOT_KNOWN.load(Ordering::Acquire) {
         let (x, y) = target(index, scale);
         if APPLIED_SCALE[index].load(Ordering::Relaxed) == scale.to_bits()
@@ -281,9 +337,14 @@ unsafe fn place_gauge(view: *mut u8, index: usize) {
                 slot.store(v.to_bits(), Ordering::Relaxed);
             }
             if !ROOT_KNOWN.load(Ordering::Relaxed) {
-                let Some((_, root)) = LAYOUTS.iter().find(|(x, _)| (shown[0] as f32 - x).abs() < 1.0) else {
+                let Some((_, root)) =
+                    LAYOUTS.iter().find(|(x, _)| (shown[0] as f32 - x).abs() < 1.0)
+                else {
                     if !ROOT_UNKNOWN_LOGGED.swap(true, Ordering::Relaxed) {
-                        logger::warn(&format!("Gauge: unknown layout (clip at {:.2}, {:.2}), left to the game", shown[0], shown[1]));
+                        logger::warn(&format!(
+                            "Gauge: unknown layout (clip at {:.2}, {:.2}), left to the game",
+                            shown[0], shown[1]
+                        ));
                     }
                     return;
                 };
@@ -325,7 +386,8 @@ unsafe fn restore_gauge(view: *mut u8, index: usize, set_pos: usize) {
     unsafe {
         let value = clip_of(view);
         if !value.is_null() {
-            let [x, y, rot, sx, sy] = CLIP_BEFORE[index].each_ref().map(|v| f64::from_bits(v.load(Ordering::Relaxed)));
+            let [x, y, rot, sx, sy] =
+                CLIP_BEFORE[index].each_ref().map(|v| f64::from_bits(v.load(Ordering::Relaxed)));
             std::mem::transmute::<usize, SetPosFn>(set_pos)(value, x as f32, y as f32);
             if rot.abs() > 0.01 {
                 set_rotation(value, rot);
@@ -343,19 +405,32 @@ unsafe fn restore_gauge(view: *mut u8, index: usize, set_pos: usize) {
 /// Redirects the gauge update call, on a thread of its own.
 pub fn install_gauge() {
     std::thread::spawn(|| {
-        let Some(set_pos) = memscan::wait_for_pattern_in_module(SET_POS_AOB, Duration::from_millis(500), Duration::from_secs(60)) else {
+        let Some(set_pos) = memscan::wait_for_pattern_in_module(
+            SET_POS_AOB,
+            Duration::from_millis(500),
+            Duration::from_secs(60),
+        ) else {
             logger::error("Gauge: position function not found");
             return;
         };
         SET_POS.store(set_pos as usize, Ordering::Release);
-        match memscan::wait_for_pattern_in_module(SET_SCALE_AOB, Duration::from_millis(500), Duration::from_secs(60)) {
+        match memscan::wait_for_pattern_in_module(
+            SET_SCALE_AOB,
+            Duration::from_millis(500),
+            Duration::from_secs(60),
+        ) {
             Some(set_scale) => SET_SCALE.store(set_scale as usize, Ordering::Release),
             None => logger::warn("Gauge: scale function not found, the gauges keep their size"),
         }
-        let Some(anchor) = memscan::wait_for_pattern_in_module(GAUGE_AOB, Duration::from_millis(500), Duration::from_secs(60)) else {
+        let Some(anchor) = memscan::wait_for_pattern_in_module(
+            GAUGE_AOB,
+            Duration::from_millis(500),
+            Duration::from_secs(60),
+        ) else {
             logger::error("Gauge: pattern not found");
             return;
         };
+        // SAFETY: the offset stays inside the matched game code.
         let site = unsafe { anchor.add(GAUGE_CALL_AT) };
         // SAFETY: reads the 5 bytes of a call found in the game image.
         let Some(original) = (unsafe { codepatch::rel32_target(site) }) else {
@@ -364,7 +439,13 @@ pub fn install_gauge() {
         };
         GAUGE_ORIGINAL.store(original as usize, Ordering::Release);
         // SAFETY: `site` is the scanned call; the stub jumps to a function with the callee's signature.
-        let ok = unsafe { codepatch::redirect_rel32(site, &codepatch::absolute_jmp(gauge_update as GaugeFn as usize as u64)) }.is_some();
+        let ok = unsafe {
+            codepatch::redirect_rel32(
+                site,
+                &codepatch::absolute_jmp(gauge_update as GaugeFn as usize as u64),
+            )
+        }
+        .is_some();
         logger::log(if ok { "Gauge: hooked" } else { "Gauge: redirect failed" });
     });
 }

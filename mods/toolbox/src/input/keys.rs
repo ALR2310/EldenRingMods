@@ -42,7 +42,8 @@ mod tests {
 
     #[test]
     fn every_line_parses_and_names_are_unique() {
-        let lines: Vec<&str> = TABLE.lines().filter(|l| !l.is_empty() && !l.starts_with('#')).collect();
+        let lines: Vec<&str> =
+            TABLE.lines().filter(|l| !l.is_empty() && !l.starts_with('#')).collect();
         assert_eq!(lines.len(), table().len(), "a line did not parse or a name is repeated");
         assert!(table().values().all(|&code| (1..=0xFF).contains(&code)));
     }

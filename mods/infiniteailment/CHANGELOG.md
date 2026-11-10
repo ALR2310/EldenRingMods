@@ -2,7 +2,11 @@
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-05
+
 - Fixed the reload key working outside the game window.
+- Config file is now TOML; settings from the old INI file are kept.
+- Clean code, hoping to fix false positives.
 
 ## [1.1.0] - 2026-10-17
 

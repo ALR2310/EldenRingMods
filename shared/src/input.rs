@@ -1,7 +1,7 @@
-//! Hotkey helpers shared by every mod: parsing a key name from an ini
-//! (`ReloadKey`, `MenuKey`...) into a virtual-key code, and a raw-Win32
-//! key-press poll that only fires while this process owns the foreground
-//! window. Why not `eldenring::util::input::is_key_pressed`: `shared/docs/input.md`.
+//! Hotkeys: parsing a key name from the config into a virtual-key code, and a key-press poll that
+//! only fires while this process owns the foreground window. `GetAsyncKeyState`'s "pressed since
+//! the last call" bit is one flag for the whole system, so with two game instances the other
+//! window lost its presses; the state is therefore kept per key.
 
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -18,34 +18,32 @@ unsafe extern "system" {
     fn GetCurrentProcessId() -> u32;
 }
 
-// Per-VK state kept between polls (one DLL = one copy, like every static in
-// this crate).
+// Per-VK state kept between polls.
 const KEY_RESYNC: u8 = 0; // unknown: (re)gained focus, the next poll only records
 const KEY_UP: u8 = 1;
 const KEY_DOWN: u8 = 2;
 static KEY_STATE: [AtomicU8; 256] = [const { AtomicU8::new(KEY_RESYNC) }; 256];
 
 fn game_window_has_focus() -> bool {
+    // SAFETY: no preconditions.
     let hwnd = unsafe { GetForegroundWindow() };
     if hwnd.is_null() {
         return false;
     }
     let mut pid = 0u32;
+    // SAFETY: `hwnd` was just returned by the OS and `pid` is a valid out-pointer.
     unsafe { GetWindowThreadProcessId(hwnd, &mut pid) };
+    // SAFETY: no preconditions.
     pid == unsafe { GetCurrentProcessId() }
 }
 
-/// Whether `vk` was pressed since the last call for the same key, while this
-/// process's own window had focus. Poll it periodically (a frame task, or a
-/// thread loop every ~100ms). Only one caller should poll a given key: the
-/// state is per key, not per caller.
+/// Whether `vk` was pressed since the last call, while this process's window has focus. Poll it
+/// periodically; only one caller should poll a given key, because the state is per key.
 ///
-/// - Never polls while another process's window is focused, so it can't
-///   consume a press meant for that window (or fire while typing elsewhere).
-/// - On (re)gaining focus the first poll only records the key's state, so a
-///   press made in another app before alt-tabbing back doesn't fire.
-/// - Fires on the "pressed since last call" bit (catches a tap shorter than
-///   the poll interval) or on an up -> down transition.
+/// - Never polls while another window is focused, so it can't consume that window's press.
+/// - On regaining focus the first poll only records the key state, so a press made elsewhere
+///   doesn't fire.
+/// - Fires on the "pressed since last call" bit (catches short taps) or an up -> down transition.
 pub fn is_key_pressed(vk: i32) -> bool {
     let Some(state) = usize::try_from(vk).ok().and_then(|i| KEY_STATE.get(i)) else {
         return false;
@@ -54,6 +52,7 @@ pub fn is_key_pressed(vk: i32) -> bool {
         state.store(KEY_RESYNC, Ordering::Relaxed);
         return false;
     }
+    // SAFETY: no preconditions.
     let raw = unsafe { GetAsyncKeyState(vk) };
     let down = raw < 0; // high bit: held right now
     let tapped = raw & 1 != 0;
@@ -65,10 +64,8 @@ pub fn is_key_pressed(vk: i32) -> bool {
     }
 }
 
-/// Parses, in order of precedence: a raw virtual-key code in hex ("0x2D") or
-/// decimal ("112"), "F1".."F24", or a single letter/digit. Returns `fallback`
-/// for anything else (empty, typo, out of range).
-/// https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
+/// A raw virtual-key code in hex ("0x2D") or decimal ("112"), "F1".."F24", or a single letter or
+/// digit; `fallback` for anything else.
 pub fn parse_virtual_key(name: &str, fallback: i32) -> i32 {
     let upper = name.trim().to_ascii_uppercase();
 
@@ -82,7 +79,9 @@ pub fn parse_virtual_key(name: &str, fallback: i32) -> i32 {
     if let Some(vk) = numeric.filter(|vk| (1..=0xFF).contains(vk)) {
         return vk;
     }
-    if let Some(n) = upper.strip_prefix('F').and_then(|n| n.parse::<i32>().ok()).filter(|n| (1..=24).contains(n)) {
+    if let Some(n) =
+        upper.strip_prefix('F').and_then(|n| n.parse::<i32>().ok()).filter(|n| (1..=24).contains(n))
+    {
         return 0x70 + (n - 1); // VK_F1 = 0x70, VK_F2 = 0x71, ...
     }
     // VK codes for '0'-'9' and 'A'-'Z' match their ASCII value.

@@ -1,17 +1,19 @@
 //! `MultiSpirit` (hot reload): summon a DIFFERENT Spirit Ash while spirits are
 //! already out and the old ones stay; re-using an Ash that is out sends back only
-//! that Ash's spirits. Re-implemented from Solid Uncapper's "Multi Spirit
+//! that Ash's spirits. Re-implemented from a third-party mod's "Multi Spirit
 //! Coexist". Every patch only redirects an existing `call` / `jmp`
 //! ([codepatch::redirect_rel32]), so Seamless Co-op's byte signatures still
 //! match; the stubs read one byte ([ENABLED]) the tick keeps in sync with the
-//! ini. The eight patches and what each fixes: `docs/multi_spirit.md`.
+//! config. The eight patches and what each fixes: `docs/multi_spirit.md`.
 
-use std::sync::atomic::{AtomicI32, AtomicU32, AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicU8, AtomicU32, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use eldenring::cs::{CSTaskGroupIndex, SummonBuddyManager};
 
-use common::{codepatch, config, logger, memscan};
+use shared::{codepatch, logger, memscan};
+
+use crate::config;
 
 /// `call GetBuddyState; cmp eax,1; jbe ..; cmp eax,2; jnz ..; mov byte
 /// [rbx+0x28],1` in `DoSummon` (0x1404B85C9 in 2.7.1.0, unique; `edi` =
@@ -25,7 +27,7 @@ const RECALL_CALL_OFFSET: usize = 5;
 
 /// The 3 UI callers of `GetBuddyState`: (pattern, offset of the 5-byte
 /// `call` within it). Each unique in 2.7.1.0 (0x1407C3C9E, 0x140847A1B,
-/// 0x140847CDF - the same patterns Solid Uncapper uses).
+/// 0x140847CDF - the same patterns that mod uses).
 const UI_CALL_SITES: [(&str, usize); 3] = [
     ("48 8B C8 83 CA FF E8 ?? ?? ?? ?? 85 C0 74 ?? 83 E8 01", 6),
     ("48 8B C8 8B D3 E8 ?? ?? ?? ?? 83 F8 02 75", 5),
@@ -59,7 +61,8 @@ const CANUSE_COST_SITES: [(&str, usize); 2] = [
 /// dword [r15+0x20],0; mov byte [r15+0x28],0` in `sub_1404B92B0`
 /// (0x1404B957D in 2.7.1.0): the dismiss-request branch. The `call` is at
 /// +10.
-const DISAPPEAR_CALL_AOB: &str = "41 80 7F 28 00 74 08 49 8B CF E8 ?? ?? ?? ?? 41 83 7F 20 00 41 C6 47 28 00";
+const DISAPPEAR_CALL_AOB: &str =
+    "41 80 7F 28 00 74 08 49 8B CF E8 ?? ?? ?? ?? 41 83 7F 20 00 41 C6 47 28 00";
 const DISAPPEAR_CALL_OFFSET: usize = 10;
 
 /// Trigger SpEffect of the Ash whose re-use [decide_state] just turned
@@ -120,7 +123,7 @@ fn push_enabled_check(c: &mut Vec<u8>, enabled: u64) -> usize {
 /// `DoSummon` (`sub_1404B85B0`) rounds it down itself: `100 * (id / 100)`
 /// (vanilla: 924 Ash goods -> 86 keys, no two Ashes share one). Same here -
 /// without it, re-using a +1..+10 Ash summoned more instead of sending it
-/// back, and its send-back was charged FP (Nexus bug report, 2026-10-01).
+/// back, and its send-back was charged FP (a bug report).
 fn buddy_ids(manager: &SummonBuddyManager, speffect: i32) -> Vec<i32> {
     let key = if speffect >= 0 { 100 * (speffect / 100) } else { speffect };
     manager
@@ -134,7 +137,7 @@ fn buddy_ids(manager: &SummonBuddyManager, speffect: i32) -> Vec<i32> {
 /// Not-an-Ash note (kept from the old `ash_alive`): `None` below means the
 /// SpEffect summons nothing - not a Spirit Ash at all, e.g. ELDEN RING
 /// Reforged's Spirit-Severing Blade, which sends spirits back through the same
-/// path. Callers keep vanilla behavior for those (until 2026-10-01 they were
+/// path. Callers keep vanilla behavior for those (they used to be
 /// treated as "a different Ash, summon it", so the Blade summoned nothing and
 /// sent nothing back). Live = `groups` entries not already leaving, not dead,
 /// not remote.
@@ -165,8 +168,9 @@ fn dismisses_on_reuse(manager: &SummonBuddyManager, speffect: i32) -> Option<boo
 /// its entry for a while (until the game cleans it up), so without the HP
 /// check re-using the Ash of a dead spirit - while another Ash still has
 /// live ones - counted as "already out" and only sent it back; the next press
-/// summoned it (user report, 2026-10-08, Noble Sorcerer + Jellyfish).
+/// summoned it (reported with the Noble Sorcerer and the Jellyfish).
 pub(crate) fn group_alive(group: &eldenring::cs::SummonBuddyGroup) -> bool {
+    // SAFETY: the pointer comes from the game's own live structure for this frame.
     !group.disappear_requested && unsafe { group.chr_ins.as_ref() }.modules.data.hp > 0
 }
 
@@ -174,14 +178,19 @@ pub(crate) fn group_alive(group: &eldenring::cs::SummonBuddyGroup) -> bool {
 /// (spirits out): 2 = the pressed Ash is out, so this use sends it back -
 /// free, like vanilla; 0 = a different Ash, charge its normal cost.
 /// `goods_row` = the item's EquipParamGoods row (`refId_default` at +4).
-unsafe extern "system" fn cost_state(manager: *mut SummonBuddyManager, goods_row: *const i32) -> u32 {
+unsafe extern "system" fn cost_state(
+    manager: *mut SummonBuddyManager,
+    goods_row: *const i32,
+) -> u32 {
     if goods_row.is_null() {
         return 2;
     }
     // `refId_default` is at +4 (the row starts with the disableParam bit byte
     // + 3 reserved bytes); read at +0 it was always 0 = "not an Ash", so
-    // every use after the first came out free (user report, 2026-10-09).
+    // every use after the first came out free (a bug report).
+    // SAFETY: the offset stays inside the matched game code or the structure it belongs to.
     let speffect = unsafe { goods_row.add(1).read_unaligned() };
+    // SAFETY: the pointer comes from the game's own live structure for this frame.
     let result = std::panic::catch_unwind(|| dismisses_on_reuse(unsafe { &*manager }, speffect));
     match result {
         Ok(Some(false)) => 0,
@@ -198,6 +207,7 @@ unsafe extern "system" fn cost_state(manager: *mut SummonBuddyManager, goods_row
 /// `SummonBuddyManager::Update`.
 unsafe extern "system" fn decide_state(manager: *mut SummonBuddyManager, speffect: i32) -> u32 {
     let result = std::panic::catch_unwind(|| {
+        // SAFETY: the pointer comes from the game's own live structure for this frame.
         let manager = unsafe { &mut *manager };
         match dismisses_on_reuse(manager, speffect) {
             // Not a Spirit Ash: vanilla dismiss-all, no target.
@@ -366,19 +376,21 @@ fn build_canuse_cost_stub(enabled: u64, get_buddy_state: u64, cost: u64) -> Vec<
     c
 }
 
-/// Calls of [disappear_all_hook] (the dismiss-request branch); read by `PersistProbe`.
-pub(crate) static DISAPPEAR_HOOK_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// Calls of [disappear_all_hook] (the dismiss-request branch).
+pub(crate) static DISAPPEAR_HOOK_CALLS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
 
 /// Patch 6, called by its stub in place of `DisappearAll(mgr)` for the
 /// dismiss-request call: 1 = handled here, 0 = let the stub run the real
 /// `DisappearAll` (vanilla: dismiss everything).
 ///
 /// Only filters when [DISMISS_TARGET] says which Ash asked for it. Like
-/// Solid Uncapper: every live entry of another Ash gets its own
+/// The third-party mod: every live entry of another Ash gets its own
 /// `disappear_requested` raised for the duration of the real call, so it
 /// skips them, then it is lowered again.
 unsafe extern "system" fn disappear_all_hook(manager: *mut SummonBuddyManager) -> u8 {
     DISAPPEAR_HOOK_CALLS.fetch_add(1, Ordering::Relaxed);
+    // SAFETY: the pointer comes from the game's own live structure for this frame.
     if ENABLED.load(Ordering::Relaxed) == 0 || !unsafe { (*manager).disappear_requested } {
         return 0;
     }
@@ -388,10 +400,12 @@ unsafe extern "system" fn disappear_all_hook(manager: *mut SummonBuddyManager) -
         return 0;
     }
     let result = std::panic::catch_unwind(|| {
+        // SAFETY: the pointer comes from the game's own live structure for this frame.
         let ids = buddy_ids(unsafe { &*manager }, target);
         let mut masked: Vec<*mut bool> = Vec::new();
         let mut target_alive = 0usize;
         let mut others_alive = 0usize;
+        // SAFETY: the pointer comes from the game's own live structure for this frame.
         for pair in unsafe { &mut *manager }.groups.iter_mut() {
             for group in pair.second.iter_mut() {
                 if group.disappear_requested {
@@ -409,18 +423,23 @@ unsafe extern "system" fn disappear_all_hook(manager: *mut SummonBuddyManager) -
             }
         }
         if target_alive > 0 {
+            // SAFETY: the pointer comes from the game's own live structure for this frame.
             let active_stone = unsafe { (*manager).active_summmon_buddy_stone_entity_id };
+            // SAFETY: `original` is the destination the call had before the redirect, a function of this signature.
             let original: unsafe extern "system" fn(*mut SummonBuddyManager) -> u64 =
                 unsafe { std::mem::transmute(original) };
+            // SAFETY: `manager` is the live manager the game passed to this hook.
             unsafe { original(manager) };
             // The original zeroes the active stone; with other groups
             // still out that would trip the "left the summoning area"
             // dismiss-all on the next frame (see patch 5).
             if others_alive > 0 {
+                // SAFETY: the pointer comes from the game's own live structure for this frame.
                 unsafe { (*manager).active_summmon_buddy_stone_entity_id = active_stone };
             }
         }
         for flag in masked {
+            // SAFETY: `flag` points into a group of the manager, which stays alive during this hook.
             unsafe { *flag = false };
         }
         (target_alive, others_alive)
@@ -462,14 +481,25 @@ fn build_disappear_stub(hook: u64, disappear_all: u64) -> Vec<u8> {
 
 /// Finds `pattern`, takes the `call` at `offset`, and redirects it to
 /// `build(original destination)`. Returns the original destination.
-fn install(name: &str, pattern: &str, offset: usize, build: impl Fn(u64) -> Vec<u8>) -> Option<u64> {
-    let Some(anchor) = memscan::wait_for_pattern_in_module(pattern, SCAN_RETRY_INTERVAL, SCAN_TIMEOUT) else {
-        logger::error(&format!("MultiSpirit: {name} pattern not found. Game may have been updated."));
+fn install(
+    name: &str,
+    pattern: &str,
+    offset: usize,
+    build: impl Fn(u64) -> Vec<u8>,
+) -> Option<u64> {
+    let Some(anchor) =
+        memscan::wait_for_pattern_in_module(pattern, SCAN_RETRY_INTERVAL, SCAN_TIMEOUT)
+    else {
+        logger::error(&format!(
+            "MultiSpirit: {name} pattern not found. Game may have been updated."
+        ));
         return None;
     };
+    // SAFETY: the offset stays inside the matched game code or the structure it belongs to.
     let site = unsafe { anchor.add(offset) };
     // SAFETY: reads the 5 bytes of a call/jmp found in the game image.
     let Some(target) = (unsafe { codepatch::rel32_target(site) }) else {
+        // SAFETY: `site` is code in the game image, readable for the length checked.
         if !unsafe { crate::conflicts::check(site, &format!("MultiSpirit ({name})")) } {
             logger::error(&format!("MultiSpirit: {name} site is not a call."));
         }
@@ -487,9 +517,11 @@ fn install_all() -> bool {
     let enabled = ENABLED.as_ptr() as u64;
     // DisappearAll first, so a dismiss target is never set without the
     // hook that consumes it.
-    let Some(disappear_all) = install("DisappearAll", DISAPPEAR_CALL_AOB, DISAPPEAR_CALL_OFFSET, |t| {
-        build_disappear_stub(disappear_all_hook as *const () as usize as u64, t)
-    }) else {
+    let Some(disappear_all) =
+        install("DisappearAll", DISAPPEAR_CALL_AOB, DISAPPEAR_CALL_OFFSET, |t| {
+            build_disappear_stub(disappear_all_hook as *const () as usize as u64, t)
+        })
+    else {
         return false;
     };
     DISAPPEAR_ALL.store(disappear_all as usize, Ordering::Relaxed);
@@ -497,42 +529,52 @@ fn install_all() -> bool {
     let decide = decide_state as *const () as usize as u64;
     let cost = cost_state as *const () as usize as u64;
     install("recall", RECALL_AOB, RECALL_CALL_OFFSET, |t| build_recall_stub(enabled, t)).is_some()
-        && install("DoSummon", DOSUMMON_AOB, 0, |t| build_dosummon_stub(enabled, t, decide)).is_some()
+        && install("DoSummon", DOSUMMON_AOB, 0, |t| build_dosummon_stub(enabled, t, decide))
+            .is_some()
         && UI_CALL_SITES.iter().enumerate().all(|(i, (pattern, offset))| {
-            install(&format!("UI site {i}"), pattern, *offset, |t| build_ui_call_stub(enabled, t)).is_some()
+            install(&format!("UI site {i}"), pattern, *offset, |t| build_ui_call_stub(enabled, t))
+                .is_some()
         })
-        && install("CanUseItem", CANUSE_AOB, CANUSE_CALL_OFFSET, |t| build_canuse_stub(enabled, t)).is_some()
+        && install("CanUseItem", CANUSE_AOB, CANUSE_CALL_OFFSET, |t| build_canuse_stub(enabled, t))
+            .is_some()
         && COST_CALL_SITES.iter().enumerate().all(|(i, (pattern, offset))| {
-            install(&format!("item cost site {i}"), pattern, *offset, |t| build_cost_stub(enabled, t, cost)).is_some()
+            install(&format!("item cost site {i}"), pattern, *offset, |t| {
+                build_cost_stub(enabled, t, cost)
+            })
+            .is_some()
         })
         && CANUSE_COST_SITES.iter().enumerate().all(|(i, (pattern, offset))| {
-            install(&format!("CanUseItem cost site {i}"), pattern, *offset, |t| build_canuse_cost_stub(enabled, t, cost))
-                .is_some()
+            install(&format!("CanUseItem cost site {i}"), pattern, *offset, |t| {
+                build_canuse_cost_stub(enabled, t, cost)
+            })
+            .is_some()
         })
 }
 
-/// `MaxSpirits` from the ini, clamped like `band::install` does.
+/// `MaxSpirits` from the config, clamped like `band::install` does.
 fn max_spirits() -> u32 {
-    (config::get_int("MaxSpirits", crate::band::DEFAULT_MAX_SPIRITS as i32).max(0) as u32)
+    (config::get().spirit.max_spirits.max(0) as u32)
         .clamp(crate::band::DEFAULT_MAX_SPIRITS, crate::band::MAX_MAX_SPIRITS)
 }
 
-/// Installs every patch once, then keeps [ENABLED] in sync with the ini.
+/// Installs every patch once, then keeps [ENABLED] in sync with the config.
 /// Never returns.
 pub fn run() {
-    ENABLED.store(config::get_bool("MultiSpirit", true) as u8, Ordering::Relaxed);
-    CLONE.store(config::get_bool("CloneSpirit", false) as u8, Ordering::Relaxed);
+    ENABLED.store(config::get().spirit.multi_spirit as u8, Ordering::Relaxed);
+    CLONE.store(config::get().spirit.clone_spirit as u8, Ordering::Relaxed);
     MAX_SPIRITS.store(max_spirits(), Ordering::Relaxed);
     if !install_all() {
-        logger::error("MultiSpirit: patch incomplete, another Ash may still dismiss the current spirits");
+        logger::error(
+            "MultiSpirit: patch incomplete, another Ash may still dismiss the current spirits",
+        );
         return;
     }
     logger::log("MultiSpirit: patched");
 
-    let cs_task = common::task::wait_for_cs_task();
+    let cs_task = shared::task::wait_for_cs_task();
     let mut elapsed_ms: f64 = 0.0;
     let mut last: Option<bool> = None;
-    let _handle = common::task::run_recurring_safe(
+    let _handle = shared::task::run_recurring_safe(
         cs_task,
         "MultiSpirit",
         CSTaskGroupIndex::FrameBegin,
@@ -542,9 +584,9 @@ pub fn run() {
                 return;
             }
             elapsed_ms = 0.0;
-            let on = config::get_bool("MultiSpirit", true);
+            let on = config::get().spirit.multi_spirit;
             ENABLED.store(on as u8, Ordering::Relaxed);
-            let clone = config::get_bool("CloneSpirit", false) as u8;
+            let clone = config::get().spirit.clone_spirit as u8;
             if CLONE.swap(clone, Ordering::Relaxed) != clone {
                 logger::log(&format!("CloneSpirit={}.", clone == 1));
             }
@@ -564,17 +606,20 @@ pub fn run() {
 mod tests {
     use super::*;
 
-    /// Prints every stub for manual disassembly (capstone).
     #[test]
-    fn dump_stubs() {
-        let hex = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+    fn every_stub_builds_and_stays_small() {
         let (en, gbs, f) = (0x1122334455667788, 0x1404B72F0, 0x99AABBCCDDEEFF00);
-        println!("DOSUMMON_STUB={}", hex(&build_dosummon_stub(en, gbs, f)));
-        println!("RECALL_STUB={}", hex(&build_recall_stub(en, 0x1404BB9A0)));
-        println!("UI_STUB={}", hex(&build_ui_call_stub(en, gbs)));
-        println!("CANUSE_STUB={}", hex(&build_canuse_stub(en, gbs)));
-        println!("COST_STUB={}", hex(&build_cost_stub(en, gbs, f)));
-        println!("CANUSE_COST_STUB={}", hex(&build_canuse_cost_stub(en, gbs, f)));
-        println!("DISAPPEAR_STUB={}", hex(&build_disappear_stub(f, 0x1404B8160)));
+        let stubs = [
+            build_dosummon_stub(en, gbs, f),
+            build_recall_stub(en, 0x1404BB9A0),
+            build_ui_call_stub(en, gbs),
+            build_canuse_stub(en, gbs),
+            build_cost_stub(en, gbs, f),
+            build_canuse_cost_stub(en, gbs, f),
+            build_disappear_stub(f, 0x1404B8160),
+        ];
+        for stub in stubs {
+            assert!(stub.len() > 8 && stub.len() < 256, "{} bytes", stub.len());
+        }
     }
 }

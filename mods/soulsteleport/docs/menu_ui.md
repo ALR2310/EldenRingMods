@@ -1,118 +1,117 @@
-# SoulsTeleport: menu ImGui, input và hiển thị
+# The menu: Dear ImGui over DX12, input and display
 
-**Status 2026-09-25: ĐANG PHÁT HÀNH (1.1.0), đã test trong game** (chạy chung với
-QuestPath, cả ba chế độ màn hình, danh sách dài có thanh cuộn). Code: `src/ui.rs`,
-`src/input_block.rs`, `assets/`. Chưa hỗ trợ điều khiển menu bằng tay cầm.
+Status: **Confirmed** in game: all three window modes, a long list with a scrollbar, together with another
+overlay mod. The menu is not controllable with a gamepad. Conventions:
+[research notes](../../../docs/research/README.md). Code: `src/ui.rs`, `shared::overlay`
+([overlay](../../../shared/docs/overlay.md)).
 
-## Từ addon SoulsChat sang mod độc lập có menu riêng
+## Question
 
-Ban đầu (2026-09-24) mod là addon cho SoulsChat với lệnh `/teleport <tên>`. Phân tích SoulsChat
-v0.1.2 (IDA, bản đã giải nén UPX): không có API plugin (chỉ export `DllMain` và hai hàm hot-patch);
-hàm xử lý lệnh `sub_18000CA1B` so tên lệnh bằng `sub_18001B864`. Bản hook đã chạy được: hook
-hàm `trim` dùng chung `sub_18009B504` (22 chỗ gọi), chỉ xử lý khi địa chỉ trả về đúng là chỗ gọi
-lúc Enter; nếu dòng là `/teleport ...` thì ghi lại tên, trả chuỗi rỗng để SoulsChat tự xoá ô nhập;
-patch `mov rax, imm64; jmp rax` 12 byte (8 lệnh `push` đầu của `trim` nên không cắt ngang lệnh nào);
-hai mẫu AOB (thân `trim`, chỗ gọi lúc Enter) khớp đúng một chỗ trong bộ nhớ đã giải nén.
+How does a mod show a clickable menu over the game, with a free mouse cursor and without the mouse reaching
+the game?
 
-**Đã bỏ hướng đó (2026-09-25)** vì muốn có gợi ý lệnh/tên như `/warpto` thì phải can thiệp sâu vào
-dữ liệu và code nội bộ của mod người khác. Đổi sang mod độc lập có GUI riêng, tên giữ "Souls
-Teleport". Đã xoá `src/soulschat.rs` và hoàn tác hai thay đổi `common` chỉ dùng cho nó. Tên
-"SoulsChat: Teleport" từng bị loại vì kiểu "Mod gốc: Tính năng" dễ bị hiểu là module chính thức
-(báo lỗi nhầm chỗ, gắn tên tác giả khi chưa xin phép); "Souls Teleport" cùng "họ" nhưng không mượn
-nguyên tên.
+## From an add-on to a standalone mod
 
-## Công nghệ GUI
+The first version was an add-on of a third-party chat mod with a `/teleport <name>` command. Its static analysis
+(IDA, the unpacked build): the mod has no plugin API (only `DllMain` and two hot-patch functions); its command
+handler compares command names with a helper function. A hook worked: hook the shared `trim` function (22
+callers), act only when the return address is the call made on Enter, record the name of a `/teleport ...` line
+and return an empty string so the chat clears its input box (a 12-byte `mov rax, imm64; jmp rax` patch over the
+first 8 `push` instructions of `trim`, two AOB patterns that matched exactly once in the unpacked memory).
 
-Đã tham khảo hai mod khác: QuestPath (Dear ImGui + MinHook, hook DXGI `Present` /
-`ExecuteCommandLists` của D3D12, có đường dự phòng cửa sổ trong suốt) và ZB_BossReviver (không hook
-DirectX, cửa sổ Win32 riêng vẽ bằng GDI). Chọn **ImGui qua hudhook** (chỉ feature `dx12`), giống
-SoulsChat, chạy mọi chế độ màn hình. Menu vẽ trên luồng render của game (trong `Present` đã hook);
-mọi thứ đụng tới phiên, Steam hay warp vẫn ở task `FrameBegin`. Hai bên chỉ chia sẻ một snapshot
-danh sách đồng đội (task làm mới mỗi 500 ms khi menu mở), trạng thái và SteamID người được bấm.
+That direction was **dropped**: command and name suggestions would need deep changes to another mod's data and
+code. It became a standalone mod with its own GUI. A name of the form "Other mod: Feature" was rejected because it
+reads like an official module of the other mod.
 
-## Con trỏ chuột và chặn input của game
+## GUI technology
 
-Game ẩn và khoá con trỏ rồi đọc chuột qua raw input, nên `WM_MOUSEMOVE` của hudhook không dùng được.
-Cách làm hiện tại:
+Two other overlay mods were studied: one with Dear ImGui and MinHook hooking the DXGI `Present` and
+`ExecuteCommandLists` of D3D12 (with a transparent-window fallback), one with no DirectX hook and its own Win32
+window drawn with GDI. The choice is **ImGui through hudhook** (the `dx12` feature only), which works in every
+window mode. The menu is drawn on the game's render thread (inside the hooked `Present`); everything that touches
+the session, Steam or the warp stays on the `FrameBegin` task. They share only a snapshot of the partner list
+(refreshed every 500 ms while the menu is open), a status line and the SteamID the player clicked.
 
-- **Đưa chuột vào ImGui** (`feed_mouse`, trong `before_render` khi menu mở và cửa sổ game đang được
-  chọn): tự đọc `GetCursorPos` rồi `ScreenToClient`, quy đổi từ pixel client sang kích thước swapchain
-  (`display_size`, xử lý cả trường hợp Windows scale 150% khi game không DPI-aware), nút chuột đọc bằng
-  `GetAsyncKeyState` (chỉ gửi khi đổi trạng thái, nhả ra khi đóng menu). `before_wnd_proc` trả `Break`
-  cho `WM_INPUT` và mọi `WM_MOUSE*` khi menu mở để các sự kiện tương đối của hudhook (cộng lên giá trị
-  "không có vị trí" của ImGui, vị trí không bao giờ hợp lệ) không đè lên vị trí tuyệt đối.
-- **Hook `SetCursorPos` và `ClipCursor`** (MinHook có sẵn trong hudhook, theo cách QuestPath làm):
-  game liên tục khoá lại con trỏ và kéo về giữa để xoay camera. Khi menu mở, `SetCursorPos` không di
-  chuyển (giả vờ thành công) và `ClipCursor` luôn truyền `NULL`.
-- **Chặn chuột trong game (`input_block.rs`):** `message_filter` không có tác dụng vì game không đọc
-  input qua tin nhắn cửa sổ: import của `eldenring.exe` chỉ có `DINPUT8!DirectInput8Create` và
-  `XINPUT1_4` theo ordinal. Mod tạo một `IDirectInput8` và thiết bị bàn phím tạm để đọc vtable, hook
-  `GetDeviceState` (slot 9) và `GetDeviceData` (slot 10) (dinput8 dùng chung cài đặt thiết bị nên trúng
-  luôn thiết bị của game). Menu mở thì vẫn gọi hàm gốc (để rút cạn bộ đệm, đóng menu không bị "dồn"
-  phím) rồi xoá trạng thái chuột (`DIMOUSESTATE`/`2`) và bỏ sự kiện của thiết bị nhận ra là chuột.
-  **Chỉ chặn chuột**, vẫn cho di chuyển bằng bàn phím và tay cầm (theo yêu cầu người dùng). Không
-  xoá định dạng joystick vì `DIJOYSTATE` toàn 0 là cần gạt bị đẩy hết cỡ. Bản đầu có hook XInput và
-  chặn cả bàn phím, đã bỏ.
+## Cursor and keeping the mouse from the game
 
-### Lỗi mất con trỏ ở cửa sổ nhỏ: `ScaleAllSizes` làm tròn cỡ con trỏ
+The game hides and locks the cursor and reads the mouse through raw input, so hudhook's `WM_MOUSEMOVE` is not
+usable. What is done now (`shared::overlay`):
 
-Ở cửa sổ 1680x945 trở xuống không thấy con trỏ dù log cho thấy vị trí đúng hoàn toàn (người dùng rê
-chuột mù vẫn bấm trúng), nên lỗi ở phần **vẽ**. Nguyên nhân: `ImGuiStyle::ScaleAllSizes` có
-`MouseCursorScale = ImFloor(MouseCursorScale * scale_factor)`. Scale theo độ phân giải: 1080 px cho 1.0
-thành 1; 1440 px cho 1.48 thành 1; 945 px cho 0.875 thành **0**, con trỏ vẽ với cỡ 0. Sửa: sau
-`scale_all_sizes`, đặt lại `mouse_cursor_scale = gốc × scale` không làm tròn. (Gợi ý ban đầu rằng 1680x945 là
-cửa sổ lớn nhất vừa màn hình 2560x1440 ở scale 150% không phải nguyên nhân thật.)
+- **Feeding the mouse to ImGui** (`feed_mouse`, in `before_render` while the menu is open and the game window has
+  focus): `GetCursorPos` and `ScreenToClient`, converted from client pixels to the swap chain size
+  (`display_size`, which also handles Windows scaling of 150% when the game is not DPI aware); the buttons come
+  from `GetAsyncKeyState` and are sent only when they change and released when the menu closes. `before_wnd_proc`
+  returns `Break` for `WM_INPUT` and every `WM_MOUSE*` while the menu is open, so hudhook's relative events
+  (added on top of ImGui's "no position" value, which is never valid) do not overwrite the absolute position.
+- **Hooks of `SetCursorPos` and `ClipCursor`** (MinHook inside hudhook): the game keeps re-locking the cursor
+  and pulling it to the centre for the camera. With the menu open `SetCursorPos` does not move (it pretends to
+  succeed) and `ClipCursor` always passes `NULL`.
+- **Keeping the mouse from the game** (`input_block.rs`): `message_filter` has no effect because the game does
+  not read input through window messages: the imports of `eldenring.exe` are only
+  `DINPUT8!DirectInput8Create` and `XINPUT1_4` by ordinal. The mod creates a temporary `IDirectInput8` and a
+  temporary keyboard device to read the vtable and hooks `GetDeviceState` (slot 9) and `GetDeviceData` (slot
+  10); dinput8 shares the device implementation, so the game's own device is hit too. While the menu is open the
+  original is still called (to drain the buffer so closing the menu does not replay keys), then the mouse state
+  (`DIMOUSESTATE`/`2`) is cleared and the events of a device recognised as a mouse are dropped. **Only the mouse
+  is blocked**; keyboard and gamepad movement still works. The joystick format is not cleared because an
+  all-zero `DIJOYSTATE` is a stick pushed to its limit. An early version also hooked XInput and blocked the
+  keyboard; dropped.
 
-## Hiển thị
+### The cursor vanished in small windows: `ScaleAllSizes` rounds the cursor size
 
-- **Tự co giãn theo độ phân giải:** chuẩn là cửa sổ game 1080p; mọi thứ nhân theo chiều cao cửa sổ
-  chia 1080 (kẹp trong 0.6-3.0), đọc từ `io.display_size` mỗi frame nên đổi độ phân giải lúc chơi vẫn
-  theo kịp. Font nạp một lần ở 40 px rồi hiển thị ở `22 px × scale` qua `font_global_scale`; style
-  `scale_all_sizes(scale)` từ một bản style gốc lưu lúc khởi tạo (không áp chồng lên bản đã scale).
-  Khi scale đổi, lần mở kế tiếp đặt lại kích thước/vị trí cửa sổ một lần.
-- **`MenuScale`:** hệ số người dùng, nhân thêm trên scale tự động; đọc một lần lúc khởi động (đổi
-  xong phải khởi động lại game). Chữ, style và **kích thước** menu theo scale tổng; **vị trí** chỉ theo
-  độ phân giải (tách `pos_scale`) để đổi `MenuScale` không làm menu trôi khỏi chỗ đã đặt. Font raster
-  `40 × MenuScale` kẹp 40-64 px (không cao hơn vì atlas còn chứa chữ CJK).
-- **Theme riêng** (`apply_theme`, áp một lần **trước** khi lưu style gốc nên co giãn vẫn đúng): màu
-  theo tông menu của game (nền đen ấm hơi trong suốt, chữ kem, điểm nhấn vàng đồng), bo góc, padding
-  rộng, tiêu đề căn giữa. Theme mặc định của ImGui (nền đen, viền xanh dương) bị người dùng chê quá thô.
-- **Bố cục:** bỏ thanh tiêu đề mặc định; đầu menu là tên mod căn giữa màu vàng, nút `X` đóng ở góc phải
-  và nút **Reset** nhỏ ở góc trái; mỗi người một dòng kèm vai trò; dòng trạng thái đổi màu đỏ nhạt khi
-  lỗi.
-- **Dòng trạng thái tự xoá** sau 15 giây (`STATUS_TTL`), trừ khi đang có request chờ. Trước đó có hai
-  lỗi: "Teleporting to X..." không bao giờ bị xoá sau warp thành công, và đóng/mở lại menu xoá dòng
-  trạng thái trong khi nút vẫn khoá. Đã bỏ toast banner hệ thống vì trạng thái đã hiện trong menu.
-- **Lưu vị trí và kích thước menu** vào ini: bốn key trong mục `[Menu]`, giá trị -1 là mặc định. Lưu
-  theo đơn vị 1080p (chia cho UI scale). Mỗi frame đọc vị trí/kích thước thật; khi khác bản đã lưu từ 1
-  đơn vị trở lên **và** người chơi đã nhả chuột trái thì ghi ini một lần (không ghi mỗi frame trong
-  lúc kéo). Mở menu lần đầu không ghi gì. Hàm mới trong `common`: `config::set_values(ini_path,
-  &[(key, value)])` sửa đúng dòng `key=value` tại chỗ (giữ comment, section, dòng khác; key chưa có thì nối
-  cuối file; cập nhật luôn map trong bộ nhớ); trước đó cả workspace không có hàm nào ghi giá trị vào
-  ini. Nút Reset ghi -1 cho cả bốn key và đặt lại bố cục ngay frame sau, xoá mốc so sánh để bố cục mặc
-  định vừa áp không bị ghi ngược thành số.
+At 1680x945 and below no cursor was visible although the log showed the position was exactly right (clicking
+blind worked), so the fault was in **drawing**. `ImGuiStyle::ScaleAllSizes` does
+`MouseCursorScale = ImFloor(MouseCursorScale * scale_factor)`. With the resolution scale, 1080 px gives 1.0 (so
+1), 1440 px gives 1.48 (so 1), 945 px gives 0.875 and **0**: the cursor is drawn at size 0. Fix: after
+`scale_all_sizes`, set `mouse_cursor_scale = original * scale` without rounding. (A first guess, that 1680x945
+is the largest window fitting a 2560x1440 screen at 150% scale, was not the cause.)
 
-## Font nhúng
+## Display
 
-`FONT_CANDIDATES` cũ ghi cứng `C:\Windows\Fonts\segoeui.ttf`/`arial`/`tahoma`: hỏng nếu Windows cài
-ổ khác, máy thiếu font, hay chạy **Proton/Steam Deck** (font Windows thường không có trong Wine). Không
-crash (rơi về font mặc định ImGui) nhưng font đó chỉ có ASCII nên tên có dấu thành `?`. Giờ:
+- **Automatic scaling**: the reference is a 1080p game window; everything is multiplied by the window height over
+  1080 (clamped to 0.6 to 3.0), read from `io.display_size` every frame so a resolution change while playing is
+  followed. The font is loaded once at 40 px and shown at `22 px * scale` through `font_global_scale`; the style
+  uses `scale_all_sizes(scale)` from a base style saved at start-up (never stacked on an already scaled one).
+  When the scale changes, the next open resets the window size and position once.
+- **`Menu.Scale`**: a user factor on top of the automatic one, read once at start-up (restart after changing it).
+  Text, style and the **size** of the menu follow the total scale; the **position** follows only the resolution
+  (`pos_scale`), so changing `Scale` does not move the menu from where it was put. The font raster is
+  `40 * Scale` clamped to 40 to 64 px (no higher because the atlas may also hold CJK).
+- **Own theme** (`apply_theme`, applied once **before** the base style is saved so scaling stays right): colours in
+  the tone of the game's menus (warm translucent black, cream text, bronze-gold accents), rounded corners, wide
+  padding, centred title. ImGui's default theme (black with blue borders) was judged too crude.
+- **Layout**: no default title bar; the header is the mod name centred in gold, an `X` close button at the right
+  and a small **Reset** button at the left; one line per player with the role; the status line turns light red on
+  an error.
+- **The status line clears itself** after 15 seconds (`STATUS_TTL`) unless a request is pending. Two earlier
+  faults: "Teleporting to X..." was never cleared after a successful warp, and closing and reopening the menu
+  cleared the status while the button stayed locked.
+- **Saved position and size**: four keys in `[Menu]` (`X`, `Y`, `Width`, `Height`), -1 = default, in 1080p units
+  (divided by the UI scale). Every frame the real position and size are read; when they differ from the saved
+  values by 1 unit or more **and** the left button was released, the file is written once (not every frame while
+  dragging). Opening the menu the first time writes nothing. The Reset button writes -1 for the four keys and
+  resets the layout on the next frame, clearing the comparison so that the default layout just applied is not
+  written back as numbers.
 
-- **Font chính nhúng trong DLL:** `assets/NotoSans-Subset.ttf` (Noto Sans Regular, cắt bằng
-  `pyftsubset` còn dải U+0020-024F, U+0300-036F, U+1E00-1EFF, U+2000-206F, U+20AC: 1007 glyph, 91 KB).
-  Giấy phép SIL OFL 1.1 (`assets/NotoSans-OFL.txt`, không có Reserved Font Name nên giữ nguyên tên
-  khi cắt). Khi đăng cần ghi công font và kèm file giấy phép: `scripts/build-mod.ps1` khi `-Zip` gói
-  thêm mọi `*.txt` trong `mods/<crate>/assets/`.
-- **CJK tuỳ chọn:** tìm thư mục Windows thật bằng `GetWindowsDirectoryW`, lấy font đầu tiên có trong
-  `msyh`/`msjh`/`meiryo`/`msgothic`/`simsun`, ghép vào với dải `chinese_simplified_common`. Không có
-  thì bỏ qua. **Chưa hỗ trợ tiếng Hàn:** dải Hangul của ImGui là toàn bộ 11k âm tiết, quá lớn cho
-  atlas ở cỡ raster 40 px.
-- Không còn `Box::leak`: `FontAtlas::add_font` tự chép dữ liệu font vào atlas.
+## Embedded font
 
-## Phím mở menu
+The first font list hard-coded `C:\Windows\Fonts\segoeui.ttf`, `arial` and `tahoma`: it fails if Windows is on
+another drive, the font is missing or on **Proton / Steam Deck** (Windows fonts are usually absent in Wine). No
+crash (ImGui's default font is used) but that font is ASCII only, so accented names became `?`. Now:
 
-Bản thử nghiệm có nhiều phím (lưu/warp một chỗ đã lưu, log danh sách người, `ReloadKey`...), đã bỏ
-hết (2026-09-25); cấu hình chỉ còn phím mở menu cùng vài thiết lập menu và log. Phím mặc định đổi từ
-`F10` sang **Tab**; `parse_virtual_key` không hiểu tên "TAB" nên ini ghi mã hex và có link bảng mã
-phím. **Lưu ý:** mặc định của SoulsChat cũng gán Tab cho `MatchmakingUIKey`, nên ai dùng cả hai mod
-với mặc định sẽ bị trùng phím.
+- **The main font is embedded in the DLL**: `shared/assets/NotoSans-Subset.ttf` (Noto Sans Regular cut with
+  `pyftsubset` to U+0020-024F, U+0300-036F, U+1E00-1EFF, U+2000-206F, U+20AC: 1007 glyphs, 91 KB), SIL OFL 1.1
+  (`shared/assets/NotoSans-OFL.txt`, no Reserved Font Name). When publishing, credit the font and ship the
+  licence file: `scripts/build-mod.ps1` with `-Zip` packs every `*.txt` of the crate folder.
+- **Optional CJK**: the real Windows folder is found with `GetWindowsDirectoryW`, the first of
+  `msyh`/`msjh`/`meiryo`/`msgothic`/`simsun` is merged with `chinese_simplified_common`; none means none.
+  **Korean is not supported**: ImGui's Hangul range is all 11k syllables, too large for the atlas at a 40 px
+  raster.
+- No more `Box::leak`: `FontAtlas::add_font` copies the font data into the atlas.
+
+## The menu key
+
+An early version had several keys (save or warp to a saved spot, log the player list, a reload key...); they are
+gone. The config has the menu key and a few menu and log settings. The default changed from `F10` to **Tab**;
+`parse_virtual_key` does not understand the name "TAB", so the file holds the hex code and a link to the key
+table. A third-party chat mod also binds Tab by default, so using both with defaults clashes.

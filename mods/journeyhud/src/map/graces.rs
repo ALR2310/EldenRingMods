@@ -9,7 +9,7 @@ use std::time::Duration;
 use eldenring::cs::{BlockId, BonfireWarpParam, CSEventFlagMan, SoloParamRepository};
 use fromsoftware_shared::FromStatic;
 
-use common::{logger, params};
+use shared::{logger, params};
 
 use super::cache::Refreshed;
 use super::world;
@@ -42,7 +42,10 @@ pub fn nearby(position: [f32; 2], space: i32, reach: f32) -> Vec<[f32; 2]> {
 
 /// Every found grace of `space`, or `None` while the table or the flags are not there yet.
 fn found(space: i32) -> Option<Vec<[f32; 2]>> {
-    let (graces, Ok(flags)) = (graces()?, unsafe { CSEventFlagMan::instance() }) else { return None };
+    // SAFETY: the accessor returns `Err` while the singleton does not exist.
+    let (graces, Ok(flags)) = (graces()?, unsafe { CSEventFlagMan::instance() }) else {
+        return None;
+    };
     Some(
         graces
             .iter()
@@ -62,6 +65,7 @@ fn graces() -> Option<&'static [Grace]> {
     if !world::conversions_ready() {
         return None;
     }
+    // SAFETY: the accessor returns `Err` while the singleton does not exist.
     let repo = unsafe { SoloParamRepository::instance() }.ok()?;
     if let Err(reason) = params::check::<BonfireWarpParam>(repo) {
         logger::warn(&format!("Map: grace params unavailable ({reason})"));

@@ -32,7 +32,14 @@ pub fn add(text: &str, [x, y]: [f32; 2], em: f32, color: [f32; 4]) {
 }
 
 /// `text` as [add] draws it, over a copy of it in `shadow` one `offset` pixels down and right.
-pub fn add_shadowed(text: &str, pos: [f32; 2], em: f32, color: [f32; 4], shadow: [f32; 4], offset: f32) {
+pub fn add_shadowed(
+    text: &str,
+    pos: [f32; 2],
+    em: f32,
+    color: [f32; 4],
+    shadow: [f32; 4],
+    offset: f32,
+) {
     add(text, [pos[0] + offset, pos[1] + offset], em, shadow);
     add(text, pos, em, color);
 }

@@ -1,35 +1,37 @@
-# Nạn nhân của đòn chí mạng (backstab / riposte)
+# Victims of critical hits
 
-**Status 2026-10-07: đã làm (`speed.rs::sync_victims`), test trong game ổn. Chưa hỗ trợ Seamless Co-op.**
+Status: **Confirmed** in game on 2.7.1.0. Conventions:
+[research notes](../../../docs/research/README.md).
 
-Người chơi được tăng tốc theo `Critical` nhưng kẻ địch bị túm thì không, nên người chơi xong
-đòn mà kẻ địch vẫn đang "gập người" rồi mới bị hất ra (Nexus, Pietrasante). Mod giờ cho
-nạn nhân chạy cùng tốc độ với người chơi trong lúc đòn diễn ra.
+## Question
 
-## Cách hoạt động
+The player's backstab or riposte runs at the `Critical` speed, but the grabbed enemy did not: the player
+finished and the enemy was still bent over before being thrown. Can the victim follow the player?
 
-`ChrIns.modules.throw` (`CSChrThrowModule`, fromsoftware-rs `throw.rs`) → `throw_node.throw_state`.
-Đọc bằng log probe (cùng số cho backstab `a0xx_031710` và riposte `a0xx_031700`):
+## Mechanism
 
-| | Đòn không giết | Đòn giết |
+`ChrIns.modules.throw` (`CSChrThrowModule`) leads to `throw_node.throw_state`. The values, read with the
+probe, are the same for backstab (`a0xx_031710`) and riposte (`a0xx_031700`):
+
+| | Hit that does not kill | Hit that kills |
 |---|---|---|
-| Người chơi | 0 → 1 → 3 → 0 | 0 → 1 → 3 → 5 → 0 |
-| Kẻ địch | 0 → 2 → 4 → 0 | 0 → 2 → 4 → 6 → 0 |
+| Player | 0, 1, 3, 0 | 0, 1, 3, 5, 0 |
+| Enemy | 0, 2, 4, 0 | 0, 2, 4, 6, 0 |
 
-Người chơi ở 1/3/5 thì kẻ địch ở 2/4/6 ghi `animation_speed` bằng tốc độ hiện tại của người
-chơi; người chơi về 0 thì kẻ địch về 1.0 ngay. Kẻ địch về state 0 muộn hơn người chơi 1-2 giây
-(đoạn đứng dậy), đoạn đó để tốc độ gốc.
+While the player is in 1, 3 or 5, an enemy in 2, 4 or 6 gets the player's current `animation_speed`
+(`sync_victims` in `src/speed.rs`). When the player goes back to 0 the enemy goes back to 1.0 at once. The
+enemy returns to state 0 one or two seconds later (getting up); that part keeps the original speed.
 
-## Đã thử / bỏ
+## Rejected
 
-- **Giữ tốc độ tới hết state của kẻ địch:** kẻ địch còn sống bị tăng tốc cả lúc đứng dậy. Bỏ.
-- **Key thử `VictimStopState`** (dừng khi state người chơi vượt N): người chơi chỉ qua 1, 3, 5, cả đòn là
-  1 state 3 liền nên không có số nào cắt giữa chừng. Đã bỏ.
-- **Đọc anim time của kẻ địch:** `time_act` của nạn nhân chỉ là anim giữ chỗ `a004_043000` dài 0.033 s
-  (anim cặp chạy ở chỗ khác), không dùng được. Anim của người chơi dài 5.37 s (`a042_031700`).
-- Nếu sau này cần cắt giữa chừng: dùng `play_time / anim_length` của người chơi làm mốc.
+- **Keeping the speed until the enemy's state ends.** A surviving enemy was sped up while getting up too.
+- **A key to stop at a given state.** The player only passes 1, 3, 5 and a whole hit is one state 3, so no
+  number cuts it halfway.
+- **Reading the victim's animation time.** The victim's time-act is a placeholder animation
+  (`a004_043000`, 0.033 s); the paired animation plays elsewhere. The player's own is 5.37 s
+  (`a042_031700`). If a cut in the middle is ever needed, use the player's `play_time / anim_length`.
 
-## Giới hạn
+## Open risks
 
-Seamless Co-op: stub getter `animation_speed` chỉ cho qua con trỏ người chơi và Torrent
-(`seamless.rs`), nên nạn nhân vẫn đọc 1.0 (không hại).
+Under Seamless Co-op ([animation_speed.md](animation_speed.md)) the victim reads 1.0, which is
+harmless.

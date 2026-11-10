@@ -6,11 +6,10 @@ mod menu;
 mod probe;
 mod weapon;
 
-use common::{dll_dir, logger};
+use shared::{dll_dir, logger};
 
 /// # Safety
-/// This is exposed this way so the library loader can call it. Do not call it
-/// yourself.
+/// Called by the loader only.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     const DLL_PROCESS_ATTACH: u32 = 1;
@@ -20,21 +19,22 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
 
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
-        let report = config::init(&format!("{dir}\\AnimCancelV1.toml"));
+        let name = shared::dll_stem(hmodule);
+        let path = format!("{dir}\\{name}.toml");
+        config::adopt_legacy_file(&path, &format!("{dir}\\{name}V1.toml"));
+        let report = config::init(&path);
 
-        // [Logging] LogFile gates the log file entirely - see common::logger.
         logger::set_enabled(config::get().logging.log_file);
-        logger::init(&dir, "AnimCancel.log");
+        logger::init(&dir, &format!("{name}.log"));
         logger::install_panic_hook();
 
-        // Registers the in-game menu right away: the host only accepts
-        // registrations in its first seconds. No-op without ERNativeUI.
+        // The menu host accepts registrations only in its first seconds.
         menu::start(hmodule);
 
-        report.log("AnimCancelV1.toml");
+        report.log(&format!("{name}.toml"));
 
         std::thread::spawn(|| {
-            common::reload::run_with(
+            shared::reload::run(
                 || config::get().general.reload_key.clone(),
                 || config::get().general.reload_banner,
                 || {
@@ -46,7 +46,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
             )
         });
 
-        common::diag::log_environment_when_game_ready();
+        shared::diag::log_environment_when_game_ready();
         probe::start();
         cancel::run();
     });

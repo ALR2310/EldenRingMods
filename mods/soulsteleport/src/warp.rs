@@ -10,15 +10,16 @@ use std::time::{Duration, Instant};
 use eldenring::cs::CSTaskGroupIndex;
 use eldenring::fd4::FD4TaskData;
 
-// `common::input`, not `eldenring::util::input` (`GetKeyState` reflects the whole
+// `shared::input`, not `eldenring::util::input` (`GetKeyState` reflects the whole
 // desktop: one hotkey press made BOTH game instances warp, `shared/docs/input.md`).
-use common::input::{self, parse_virtual_key};
-use common::{config, logger, memscan};
+use shared::input::{self, parse_virtual_key};
+use shared::{logger, memscan};
 
+use crate::config;
 use crate::net::{self, Net};
 use crate::party;
-use crate::ui;
 use crate::steam::SteamMessages;
+use crate::ui;
 
 const VK_TAB: i32 = 0x09;
 
@@ -44,10 +45,12 @@ const GAME_MAN_NEXT_INSN_OFFSET: usize = 10;
 const GAME_MAN_WARP_REQUESTED: usize = 0x10;
 
 // sub_14067BA20(out, &block, unused) -> out
-type RequestMoveMapFn = unsafe extern "C" fn(out: *mut i32, block: *const i32, unused: u64) -> *mut i32;
+type RequestMoveMapFn =
+    unsafe extern "C" fn(out: *mut i32, block: *const i32, unused: u64) -> *mut i32;
 // sub_14067B970(&position, &orientation) - both read with `movaps`, so the
 // pointers must be 16-byte aligned (see [Vec4]).
-type SetCustomSpawnFn = unsafe extern "C" fn(position: *const Vec4, orientation: *const Vec4) -> u64;
+type SetCustomSpawnFn =
+    unsafe extern "C" fn(position: *const Vec4, orientation: *const Vec4) -> u64;
 
 #[repr(C, align(16))]
 struct Vec4([f32; 4]);
@@ -76,7 +79,9 @@ pub fn warp_pending() -> bool {
     if static_addr == 0 {
         return false;
     }
+    // SAFETY: the address is the `GameMan` global found from the pattern; a null instance is checked.
     let game_man = unsafe { *(static_addr as *const usize) };
+    // SAFETY: `game_man` is the non-null `GameMan`, and `warp_requested` is a bool inside it.
     game_man != 0 && unsafe { *((game_man + GAME_MAN_WARP_REQUESTED) as *const bool) }
 }
 
@@ -90,18 +95,26 @@ pub struct GameFns {
 
 // Raw pointers aren't Send by default; these are process-lifetime addresses
 // inside eldenring.exe's image, read only from the game's own task thread.
+// SAFETY: the pointers are addresses in the game image, valid for the whole process.
 unsafe impl Send for GameFns {}
 
 fn resolve_game_fns() -> Option<GameFns> {
     let request_move_map = memscan::find_pattern_in_module(AOB_REQUEST_MOVE_MAP)?;
     let set_custom_spawn = memscan::find_pattern_in_module(AOB_SET_CUSTOM_SPAWN)?;
+    // SAFETY: the pattern guarantees the instruction at these offsets, so the displacement lies inside the matched code.
     let game_man_static = unsafe {
         let disp = (set_custom_spawn.add(GAME_MAN_DISP_OFFSET) as *const i32).read_unaligned();
         set_custom_spawn.add(GAME_MAN_NEXT_INSN_OFFSET).offset(disp as isize) as *const usize
     };
     Some(GameFns {
-        request_move_map: unsafe { std::mem::transmute::<*mut u8, RequestMoveMapFn>(request_move_map) },
-        set_custom_spawn: unsafe { std::mem::transmute::<*mut u8, SetCustomSpawnFn>(set_custom_spawn) },
+        // SAFETY: the address was found by its pattern and is a function of this signature.
+        request_move_map: unsafe {
+            std::mem::transmute::<*mut u8, RequestMoveMapFn>(request_move_map)
+        },
+        // SAFETY: the address was found by its pattern and is a function of this signature.
+        set_custom_spawn: unsafe {
+            std::mem::transmute::<*mut u8, SetCustomSpawnFn>(set_custom_spawn)
+        },
         game_man_static,
     })
 }
@@ -111,9 +124,10 @@ fn resolve_game_fns() -> Option<GameFns> {
 pub fn warp_to(fns: &GameFns, spot: &Spot) -> bool {
     // Same "actually in the world" gate as every other mod here - warping
     // from a loading screen or the title menu is not something to test.
-    if common::player::main_player_chr_ins_ptr().is_none() || warp_pending() {
+    if shared::player::main_player_chr_ins_ptr().is_none() || warp_pending() {
         return false;
     }
+    // SAFETY: the address is the `GameMan` global found from the pattern; a null instance is checked.
     let game_man = unsafe { *fns.game_man_static };
     if game_man == 0 {
         logger::error("Warp: GameMan not allocated");
@@ -125,6 +139,7 @@ pub fn warp_to(fns: &GameFns, spot: &Spot) -> bool {
     // Same layout the game builds for multiplay_join_orientation in
     // sub_1406FC370: (0, yaw, 0, 0).
     let orientation = Vec4([0.0, spot.yaw, 0.0, 0.0]);
+    // SAFETY: the functions were found by their patterns and take the arguments the game gives them; the pointers are valid and aligned.
     unsafe {
         (fns.request_move_map)(&mut normalized_block, &spot.block_id, 0);
         (fns.set_custom_spawn)(&position, &orientation);
@@ -152,7 +167,8 @@ fn request_partner_position(net: &mut Net, steam_id: u64) {
     }
     // Re-checked here, not just when the list was drawn: they may have left
     // the session since.
-    let Some(target) = members.iter().find(|m| m.steam_id == steam_id && m.is_teleport_target()) else {
+    let Some(target) = members.iter().find(|m| m.steam_id == steam_id && m.is_teleport_target())
+    else {
         ui::set_status("That player is no longer available.");
         return;
     };
@@ -190,7 +206,7 @@ fn handle_net_event(fns: &GameFns, event: net::Event) {
         net::Event::Arrived { character_name, spot } => {
             ui::with_shared(|s| s.busy = false);
             // No offset: the game itself pushes apart 2 characters spawned on
-            // top of each other (confirmed by the user in-game).
+            // top of each other (seen in game).
             if warp_to(fns, &spot) {
                 ui::set_status(format!("Teleporting to {character_name}..."));
                 ui::MENU_OPEN.store(false, Ordering::Relaxed);
@@ -217,43 +233,48 @@ pub fn run() {
     logger::log("Warp: ready");
     GAME_MAN_STATIC.store(fns.game_man_static as usize, Ordering::Relaxed);
 
-    let cs_task = common::task::wait_for_cs_task();
+    let cs_task = shared::task::wait_for_cs_task();
     // Steam's messaging interface may not exist yet this early - retried
     // from the task until it does (logged once either way).
     let mut net: Option<Net> = None;
     let mut steam_attempts = 0u32;
     let mut last_snapshot: Option<Instant> = None;
-    common::task::run_recurring_safe(cs_task, "Teleport", CSTaskGroupIndex::FrameBegin, move |_data: &FD4TaskData| {
-        if net.is_none() && steam_attempts < STEAM_LOAD_ATTEMPTS {
-            steam_attempts += 1;
-            if let Some(steam) = SteamMessages::load() {
-                logger::log("Net: Steam messaging ready");
-                net = Some(Net::new(steam));
-            } else if steam_attempts == STEAM_LOAD_ATTEMPTS {
-                logger::error("Net: Steam messaging unavailable, teleport to partner off");
+    shared::task::run_recurring_safe(
+        cs_task,
+        "Teleport",
+        CSTaskGroupIndex::FrameBegin,
+        move |_data: &FD4TaskData| {
+            if net.is_none() && steam_attempts < STEAM_LOAD_ATTEMPTS {
+                steam_attempts += 1;
+                if let Some(steam) = SteamMessages::load() {
+                    logger::log("Net: Steam messaging ready");
+                    net = Some(Net::new(steam));
+                } else if steam_attempts == STEAM_LOAD_ATTEMPTS {
+                    logger::error("Net: Steam messaging unavailable, teleport to partner off");
+                }
             }
-        }
-        if let Some(event) = net.as_mut().and_then(Net::tick) {
-            handle_net_event(&fns, event);
-        }
+            if let Some(event) = net.as_mut().and_then(Net::tick) {
+                handle_net_event(&fns, event);
+            }
 
-        let menu_key = parse_virtual_key(&config::get_string("MenuKey", "0x09"), VK_TAB);
-        if input::is_key_pressed(menu_key) {
-            ui::toggle();
-        }
-        if ui::MENU_OPEN.load(Ordering::Relaxed)
-            && last_snapshot.is_none_or(|t: Instant| t.elapsed() >= MENU_REFRESH_EVERY)
-        {
-            last_snapshot = Some(Instant::now());
-            refresh_menu_snapshot();
-        }
-        if let Some(steam_id) = ui::REQUEST.lock().unwrap().take() {
-            match net.as_mut() {
-                Some(net) => request_partner_position(net, steam_id),
-                None => ui::set_status("Steam networking unavailable."),
+            let menu_key = parse_virtual_key(&config::get().menu.key, VK_TAB);
+            if input::is_key_pressed(menu_key) {
+                ui::toggle();
             }
-        }
-    });
+            if ui::MENU_OPEN.load(Ordering::Relaxed)
+                && last_snapshot.is_none_or(|t: Instant| t.elapsed() >= MENU_REFRESH_EVERY)
+            {
+                last_snapshot = Some(Instant::now());
+                refresh_menu_snapshot();
+            }
+            if let Some(steam_id) = ui::REQUEST.lock().unwrap().take() {
+                match net.as_mut() {
+                    Some(net) => request_partner_position(net, steam_id),
+                    None => ui::set_status("Steam networking unavailable."),
+                }
+            }
+        },
+    );
 
     loop {
         std::thread::sleep(std::time::Duration::from_secs(60));

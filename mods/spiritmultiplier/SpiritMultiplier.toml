@@ -1,0 +1,98 @@
+[General]
+# File format version, managed by the mod - don't change.
+ConfigVersion = 1
+
+# Key that reloads this config file in-game, no restart needed.
+# https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
+ReloadKey = "F5"
+
+# Show a banner at the top of the screen after a reload.
+ReloadBanner = false
+
+
+[Spirit]
+# Spirit-count multiplier: an Ash that normally summons 3 with a
+# multiplier of 2 summons 6. Capped at MaxSpirits per Ash. Set to 1 for
+# vanilla. Only used when Amount = 0.
+Multiplier = 2.0
+
+# Number of spirits every Ash summons, regardless of its normal count.
+# Capped at MaxSpirits. Set 0 to use Multiplier instead.
+Amount = 0
+
+# Max spirits per Ash (60-1000). Above 60 at your own risk:
+# lower FPS, possible crash.
+# Applied once at startup (no hot-reload)
+MaxSpirits = 60
+
+# Ghostly blue tint on summoned spirits. true = vanilla look,
+# false = remove it (spirits look like normal characters).
+GhostColor = false
+
+# The Mimic Tear skips the blob stage.
+# false = vanilla.
+InstantMimic = true
+
+# Spirit HP regeneration per second (also Torrent).
+# RegenMode: 1 = flat HP, 2 = % of max HP, 3 = % of missing HP
+RegenMode = 2
+RegenValue = 0.75
+
+# Summon several different Spirit Ashes at once
+MultiSpirit = true
+
+# Needs MultiSpirit. Summon another copy of a spirit instead of sending it back
+CloneSpirit = false
+
+# Re-summon spirits without resting
+NoRestResummon = true
+
+# Summon spirits outside summoning pool areas
+SummonAnywhere = true
+
+# Spirits stay when you rest at a Site of Grace
+KeepSpiritsOnRest = true
+
+# Notice enemies from farther away and remember them longer
+ImproveSenses = true
+
+# Start fighting sooner, attack together, call for help
+ImproveAggression = true
+
+# Stay closer to you and cross ledges, ladders and holes to keep up
+ImproveFollow = true
+
+# EXPERIMENTAL: spirits teleport to you sooner. Set 0 to default.
+WarpWhenFar = true    # Teleport spirits that are far away even if they can see you
+WarpDistance = 25     # Teleport when farther than this (m)
+WarpBlockedTime = 1   # Teleport after this long without line of sight (s)
+WarpStuckTime = 2     # Teleport after being stuck this long (s)
+WarpStuckRange = 3    # Moving less than this (m) counts as stuck
+
+# Spirit HP bars on the HUD (5-30). 5 = vanilla.
+# Applied once at startup (no hot-reload)
+HubHpBars = 15
+
+
+[Logging]
+# Write a log file next to the DLL, for troubleshooting.
+LogFile = true
+
+# Logs the spirit summon slot layout
+SlotProbe = false
+
+# Logs the player's SpEffect changes
+EffectProbe = false
+
+# Logs nearby enemies (load/update state) when it changes
+EnemyProbe = false
+
+# Logs the spirit warp-to-player machine's state when it changes
+WarpProbe = false
+
+# Logs the spirit groups, player block and SpEffects when they change
+PersistProbe = false
+
+# !!! DO NOT CHANGE THIS VALUE !!!
+# forces a fixed limit on characters active at once
+ActiveCharacterLimit = 0

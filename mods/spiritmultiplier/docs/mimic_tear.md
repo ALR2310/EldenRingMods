@@ -1,73 +1,115 @@
-# Mimic Tear: Blob và số lượng
+# Mimic Tear: the Blob stage and the count
 
-**Status 2026-10-22: `InstantMimic` hoạt động (test trong game 2.7.2.0: Mimic ra ngay, đi theo, đánh, có thanh HP trên HUD). Gồm ghi đè dòng Blob + cờ + animation 1830, và stub HUD; xem các mục cuối file. Fade-in giữ nguyên.**
+Status: **Confirmed** in game on 2.7.2.0 for `Amount` (10 gives 10 Mimic Tears) and for `InstantMimic`
+(the Mimic appears at once, follows, fights and has an HP bar on the HUD). The fade-in is left as in
+vanilla. Many Mimic Tears can crash the game on the GPU side, see the end. Conventions:
+[research notes](../../../docs/research/README.md). Code: `src/chain.rs`, `src/mimic.rs`.
 
-**Status 2026-10-16: sửa chế độ `Amount` (test trong game: 10 ra đủ 10 Mimic). Crash khi gọi nhiều Mimic Tear (Seamless) là lỗi của game/GPU, xem cuối file.**
+## Question
 
-## Hiện tượng
+Why does `Amount = 10` give only 5 Mimic Tears, and how can the Blob stage be skipped?
 
-Nexus (LordNick9911, 2026-10-16) và test của người dùng: `Amount=10` chỉ ra 5 Mimic Tear. Log (`slots changed`): 10 spirit xen kẽ NPC `133201000` (`[Spirit Summon] Mimic Tear - Blob`) và `100000010` (`[Spirit Summon] Mimic Tear`); khoảng 7 giây sau 5 con Blob biến mất, còn 5 Mimic.
+## Why only 5
 
-## Nguyên nhân
+The SpEffect `207010` -> BuddyParam chain of the Mimic Tear has two elements: a Blob (appears briefly and
+disappears) and the real Mimic. The log (`slots changed`) shows 10 spirits alternating NPC `133201000`
+(`[Spirit Summon] Mimic Tear - Blob`) and `100000010` (`[Spirit Summon] Mimic Tear`); about 7 seconds
+later the 5 Blobs vanish and 5 Mimics remain. `Amount` counts chain elements, so 10 elements are 5 Blobs
+and 5 Mimics. `Multiplier` multiplies the original length (2), so it was already right: 5 gives 5 + 5.
 
-Chuỗi SpEffect 207010 -> BuddyParam của Mimic Tear có 2 phần tử: Blob (xuất hiện tạm rồi mất) và Mimic thật. `Amount` đếm phần tử chuỗi nên 10 phần tử = 5 Blob + 5 Mimic. `Multiplier` nhân độ dài chuỗi gốc (2) nên đúng sẵn: nhân 5 ra 5 Blob + 5 Mimic.
+## Fix in `chain.rs`
 
-## Cách sửa (`src/chain.rs`)
+`TRANSIENT_NPCS` (only `133201000`) gives the set of BuddyParam IDs holding that NPC, built once from
+`BuddyParam` through `shared::params`. In `Amount` mode the element count is
+`Amount * original chain length / real elements`, rounded up: 10 Mimics need 20 elements. Chains without
+a transient element are unchanged. The exported `NpcParam` data has exactly one "Blob" row.
 
-`TRANSIENT_NPCS` (hiện chỉ `133201000`) -> tập BuddyParam ID có NPC đó, dựng 1 lần từ `BuddyParam` qua `common::params`. Chế độ `Amount`: số phần tử = `Amount x độ dài chuỗi gốc / số phần tử thật` (làm tròn lên). Mimic Tear: 10 -> 20 phần tử (10 Blob + 10 Mimic). Chuỗi không có phần tử tạm không đổi. Dữ liệu `NpcParam` export chỉ có đúng 1 dòng "Blob".
+## `InstantMimic`: dropping the Blob
 
-## Crash khi gọi nhiều Mimic Tear (kết luận 2026-10-16: lỗi của game/GPU, không phải mod)
+Method (`mimic.rs`, `chain.rs`):
 
-Báo cáo Nexus (LordNick9911) và tái hiện: `Multiplier=100` (chuỗi bị cắt ở `MaxSpirits=60` = 30 Blob + 30 Mimic) trong Seamless Co-op thì game thoát khoảng 7 giây sau khi gọi, đúng lúc Blob bắt đầu biến mất. Không có dump WER, không có sự kiện `Application Error`; `common::crash` (vectored handler) ghi được:
+- Group `BuddyParam` rows by `triggerSpEffectId`. The row holding the Blob NPC takes the spawn fields of
+  the non-Blob row of the same group: NPC and think, ridden, offset, doping lv 0 to 10, init,
+  `generateAnimId`, **and the three flag bytes (+36 to +38)**. **The row ID stays**: the game recognises
+  "this is a Mimic Tear" by that ID and copies the player's build.
+- The chain shrinks because the Blob became a Mimic, so one link is one Mimic: `[Blob, Mimic]` becomes
+  one link (`Amount = 10` gives 10, `Multiplier = 5` gives 5). It shrinks only when the Blob is at the head
+  of the chain (the head is a game node the mod does not write) and only after the Blob row was rewritten
+  (`mimic::blob_replaced`).
+- Everything is captured once and applied from the snapshot, so F5 works both ways.
+- The fade-in is **kept**: `NpcParam` Mimic slot `spEffectID24` = 16316 "Spirit Summon - Fade In" is a
+  visual only (vfx 53202, 3 s, no damage or buff).
 
-- **Có Seamless** (2/2 lần, cùng chữ ký): `access violation, read 0x0, at nvwgf2umx.dll+0x7E3868`, stack `D3D12Core.dll+0x22A38D < 0x2395D4 < eldenring.exe+0x19E4344 < 0x19EC3ED < 0x1C4AC70 < 0x1C4A793`. `eldenring.exe+0x19EC310` là hàm đặt render target (lặp qua mảng con trỏ tài nguyên đồ hoạ) gọi D3D12; con trỏ tới tài nguyên đã hỏng/NULL.
-- **Không Seamless**: cùng cấu hình chạy ổn khi Blob biến mất (30 Mimic còn lại); nhưng về sau gặp một crash khác: `write 0x0` trong `memmove` (`eldenring.exe+0x251E7FB`, vòng sao chép theo bước `sub_1411B1700`).
+The animation on the Blob row also matters: the most common non-Blob animation (1830) is set on both
+the Blob row and the real Mimic row (the Mimic's own 60500, the Blob's 1831).
 
-Giả thuyết: mỗi Mimic sao chép model và trang bị người chơi nên tốn nhiều tài nguyên đồ hoạ/bộ nhớ; cấp phát thất bại bị engine bỏ qua rồi truy cập NULL (cùng kiểu crash render 2026-10-04). Chưa đo VRAM/RAM. `Amount=10` ổn nhiều lần, `Amount=30` có sửa ổn một lần.
+### Rejected attempts
 
-Kết luận: gọi Mimic Tear số lượng lớn (khoảng 30 con) với Seamless có thể làm game thoát; không sửa được ở mod. Mỗi Mimic chiếm 2 slot lúc mới ra nên `MaxSpirits=60` chỉ ra tối đa 30 Mimic thật.
+- **Blob row takes only NPC, think, offset, doping and animation fields**: two NPC `100000010` slots, one
+  stood still forever and one rose and followed, with a single HP bar. The three flag bytes were missing:
+  the Blob row's `pcFollowType` is a kind that does not follow the player, so the Mimic copy on that row
+  stood still. Copying the flags fixed it.
+- **Chain `[Blob, Mimic]` with the Blob row copied only partly**: same result; reverted.
 
-## Các báo cáo khác của cùng người dùng (không tái hiện được trên 1.2.2)
+### HP bar on the HUD
 
-- "Không gọi lại được sau khi cho về": thực ra triệu hồi lại **trước khi** game dọn xong spirit cũ (60 spirit mất khoảng 5-6 giây) thì lần gọi đó bị mất; chờ vài giây là gọi lại bình thường.
-- "`Amount`/`Multiplier` không vượt số lượng gốc": không tái hiện; nghi sửa ini mà không bấm `ReloadKey`, hoặc không khởi động lại sau khi đổi `MaxSpirits`.
+With `InstantMimic` two Mimics fought but the HUD showed one bar; with `Multiplier = 1` (one Mimic, from
+the Blob row) **no bar at all**. Params do not explain it: after the copy the `20700000` row differs from
+`20700001` only in ID. Cause in game code (2.7.2.0): the HUD buddy list builder `sub_140771ED0` skips a
+character for which `sub_1404B7A10` (RVA 0x4B7A10, "this character is a Mimic Blob": the character's
+group has an entry with BuddyParam id **20700000**, flag bit 4 at chr +457) returns 1. The ID `20700000`
+is also used by the buddy spawn routine `sub_1404BBEB0` to raise a "Mimic Tear requested" flag; only two
+places in the executable hold that constant.
 
-## `InstantMimic`: bỏ Blob và fade-in (2026-10-22, chưa test trong game)
+Fix (`mimic.rs`): redirect the `call sub_1404B7A10` inside `sub_140771ED0` to a stub returning `al = 0`
+while `InstantMimic` is applied (every character from the Blob row is now a real Mimic), otherwise it
+jumps to the original. Pattern `84 C0 74 ?? 48 8B D6 49 8B CE E8 ?? ?? ?? ?? 84 C0 75 ?? 83 FF 05`, `call`
+at +10, unique on 2.6.2, 2.7.0, 2.7.1 and 2.7.2. The same call is what [buddy_hud.md](buddy_hud.md) hooks
+to record the spirits that get a slot.
 
-Port từ `er10x.dll` ("10x Spirit Summons", `tmp/repos/erx10/`): các chuỗi `drop_mimic_blob`, `remove_mimic_fade`, `mimic_blob_row=20700000`, `mimic_npc_row=100000010`, `mimic_fade_value=16316`; log của nó: "row was the blob stage; rewritten with row ... so both links are the real mimic. The row id stays, which is what makes the game copy your build". Đã giải mã er10x (171 hàm, `dumps/er10x/export.c`, tạo bằng `scripts/ida/export_all.py` chạy trực tiếp bằng idat): xem mục "er10x làm gì" cuối file.
+## What the reference "10x" mod does (decompiled)
 
-Cách làm (`src/mimic.rs`, `src/chain.rs`):
+For every `BuddyParam` row (by index):
 
-- Nhóm `BuddyParam` theo `triggerSpEffectId`; dòng có NPC Blob (`TRANSIENT_NPCS`) nhận các trường spawn của dòng không-Blob cùng nhóm (NPC/think, ridden, offset, doping lv0-10, init, `generateAnimId`). **Giữ nguyên ID dòng**: game dùng ID đó để nhận ra "đây là Mimic Tear" và copy build.
-- Fade-in **giữ nguyên** (người dùng chọn, 2026-10-22): `NpcParam` Mimic slot `spEffectID24` = 16316 "Spirit Summon - Fade In" chỉ là hiệu ứng hình (vfx 53202, sống 3 s, không có sát thương/buff); er10x xoá nó (-1). Test lần đầu: Mimic vẫn trồi lên, nghi do `generateAnimId` chứ không phải fade-in.
-- Chuỗi: Blob thành Mimic nên 1 link = 1 Mimic; chuỗi `[Blob, Mimic]` rút còn 1 link (`Amount=10` ra 10 Mimic, `Multiplier=5` ra 5). Chỉ rút khi Blob đứng đầu chuỗi (đầu chuỗi là nút của game, mod không ghi), và chỉ sau khi dòng Blob đã được sửa (`mimic::blob_replaced`).
-- Mọi thứ chụp một lần rồi áp từ bản chụp nên F5 bật/tắt hai chiều.
+- A row with `generateAnimId` (dword 22, +0x58) = 1831 and the Blob row ID (20700000) is the Blob. With its
+  `drop_mimic_blob` option it **copies the next row's 156 bytes (index +1, same `triggerSpEffectId`) over
+  the Blob row**, keeping dword +0x9C; the row ID stays.
+- A `fix_fields` step (on by default) on **every** row sets `appearOnAroundSekihi = 0`,
+  `disablePCTargetShare = 0`, `pcFollowType = 0`, and any `generateAnimId > 0` other than 1830 to 1830
+  (the Mimic too: 60500 -> 1830). That is what makes the Mimic appear at once.
+- Fade: `NpcParam` row 100000010, the field holding 16316, is set to -1 (this mod keeps the fade).
+- Chain: rebuilt with a loop cycling the original IDs, head unchanged, real entry count = the number of
+  non-Blob entries (at least 1); the same as `chain.rs`.
 
-**Kết quả test 2026-10-22 (log + quan sát của người dùng):** tính năng chưa đạt mục tiêu "ra tức thì". Thử 2 (blob nhận animation spirit thường 1830 và mọi link chuỗi là dòng Blob): 2 slot NPC 100000010, một con đứng yên mãi, một con trồi lên rồi đi theo, thanh HP chỉ 1. Kết luận tạm: game coi thực thể sinh từ dòng Blob là chỗ giữ chỗ (vanilla nó là NPC Blob tự biến mất sau ~8 s), nên NPC Mimic gắn vào dòng Blob đứng yên; hiệu ứng trồi lên không nằm ở `generateAnimId` (Mimic 60500, spirit thường 1830, Blob 1831). Đã hoàn tác thử 2 (chuỗi `[Blob, Mimic]`, Blob nhận trường Mimic nguyên bản). Muốn ra tức thì thật cần decompile `er10x.dll` xem nó làm gì khác.
+## Many Mimic Tears can crash the game (not the mod)
 
-Cần test: Mimic ra ngay với vũ khí/giáp/talisman đã copy; nếu build không copy (game cần cả link thứ 2 trong chuỗi) thì đổi sang giữ chuỗi 2 link như er10x (khi đó 1 lần gọi ra 2 Mimic).
+Reproduced with `Multiplier = 100` (chain cut at `MaxSpirits = 60` = 30 Blobs + 30 Mimics) in Seamless
+Co-op: the game exits about 7 seconds after the summon, as the Blobs start to vanish. There is no WER
+dump and no `Application Error` event; the vectored handler of the mods' crash module logged:
 
-## er10x làm gì (giải mã 2026-10-22, `dumps/er10x/export.c`)
+- **With Seamless** (2 of 2 runs, same signature): `access violation, read 0x0, at nvwgf2umx.dll+0x7E3868`,
+  stack `D3D12Core.dll+0x22A38D < 0x2395D4 < eldenring.exe+0x19E4344 < 0x19EC3ED < 0x1C4AC70 < 0x1C4A793`.
+  `eldenring.exe+0x19EC310` is the render-target setter (it loops over an array of graphics resource
+  pointers) calling D3D12; a pointer to a broken or NULL resource.
+- **Without Seamless**: the same settings ran fine when the Blobs vanished (30 Mimics left); a different
+  crash appeared later: `write 0x0` in a `memmove` (`eldenring.exe+0x251E7FB`, a copy loop stepping by
+  `sub_1411B1700`).
+- **Two-player Seamless, 2.7.2.0** (`Multiplier = 25`, `MaxSpirits = 100`, both logs): the same fault within
+  one second, stack `...+0x19E5A34 < 0x19EDADD < 0x1C4C360`. The timing differed: not when the Blobs
+  vanished (the first summon of 25 + 25 went fine) but **right after the second summon**, while the new
+  characters were being created (the host had 25 Blobs + 34 Mimics at the crash: 25 old Mimics, 25 new
+  Blobs and 9 new Mimics; states `NetworkInitializing` / `ReadyForActivation`).
 
-Trên mỗi dòng `BuddyParam` (duyệt theo chỉ số):
+**Inferred**: each Mimic copies the player's model and equipment, so many of them exhaust graphics or
+memory resources; a failed allocation is ignored by the engine and a NULL is used later. VRAM and RAM
+were not measured. `Amount = 10` ran fine many times and `Amount = 30` ran once. With Seamless a count
+near 30 can make the game exit and the mod cannot fix it. Each Mimic takes 2 slots when it first
+appears, so `MaxSpirits = 60` gives at most 30 real Mimics. `InstantMimic` halves the characters per
+summon (no Blobs) and may help; it was not tested for this.
 
-- Dòng có `generateAnimId` (dword 22, +0x58) = 1831 và ID = `mimic_blob_row` (20700000) là Blob. Nếu `drop_mimic_blob`: **chép nguyên 156 byte của dòng kế tiếp (chỉ số +1, phải cùng `triggerSpEffectId`) đè lên dòng Blob**, trừ dword +0x9C giữ lại. ID dòng không đổi.
-- Bước `fix_fields` (mặc định bật), áp cho **mọi** dòng: `appearOnAroundSekihi` = 0, `disablePCTargetShare` = 0, `pcFollowType` = 0, và `generateAnimId` > 0 khác 1830 thì đặt 1830 (kể cả Mimic: 60500 -> 1830). Đây là cái làm Mimic hiện tức thì; log của nó gọi là "sekihi/targetShare/followType/appearAnim".
-- Fade: `NpcParam` dòng 100000010, trường chứa 16316 đặt -1 (bản mod này giữ fade theo ý người dùng).
-- Chuỗi: dựng lại bằng vòng lặp xoay vòng ID gốc, đầu chuỗi giữ nguyên, số entry thật = số entry không phải Blob (tối thiểu 1); giống `chain.rs`.
+## Reports that did not reproduce
 
-Vì sao thử 2 của mod này hỏng (một Mimic đứng yên mãi, một Mimic chạy): `Spawn` chỉ chép NPC/think/offset/doping/anim, **thiếu 3 byte cờ** (+36..38). `pcFollowType` của dòng Blob là kiểu không đi theo người chơi, nên bản sao Mimic trên dòng Blob đứng yên. Bản hiện tại chép thêm 3 byte cờ từ dòng Mimic, và đặt animation phổ biến nhất của dòng không-Blob (1830) cho cả dòng Blob lẫn dòng Mimic thật (chuỗi `[Blob, Mimic]` vẫn xoay vòng cả hai).
-
-## Thanh HP trên HUD (2026-10-22, giải mã eldenring.exe 2.7.2.0)
-
-Quan sát: với `InstantMimic` (Blob đã thành Mimic), 2 Mimic cùng chạy/đánh nhưng HUD chỉ hiện 1 thanh HP; `Multiplier=1` (1 Mimic, từ dòng Blob) thì **không có thanh nào**. Param không giải thích được: sau khi sao chép, dòng `20700000` chỉ khác `20700001` ở ID (CSV BuddyParam/NpcParam đã đối chiếu).
-
-Nguyên nhân (code game, 2.7.2.0): hàm dựng danh sách thanh HP của HUD buddy `sub_140771ED0` (RVA 0x771ED0) duyệt các chr đã triệu hồi và **bỏ qua** chr nào mà `sub_1404B7A10` (RVA 0x4B7A10, "chr này là Blob của Mimic": nhóm của chr có entry với BuddyParam id **20700000**, cờ chr +457 bit 4) trả 1; tối đa 5 thanh. ID `20700000` còn được `sub_1404BBEB0` (hàm sinh buddy) dùng để bật cờ "yêu cầu Mimic Tear". Chỉ có 2 chỗ trong exe chứa hằng này.
-
-Cách sửa (`src/mimic.rs`): đổi đích `call sub_1404B7A10` trong `sub_140771ED0` sang stub trả `al = 0` khi `InstantMimic` đang áp (mọi chr từ dòng Blob giờ là Mimic thật nên đáng có thanh), còn không thì nhảy sang hàm gốc. AOB `84 C0 74 ?? 48 8B D6 49 8B CE E8 ?? ?? ?? ?? 84 C0 75 ?? 83 FF 05`, `call` ở +10, unique trên 2.6.2/2.7.0/2.7.1/2.7.2. Chưa test trong game.
-
-## Crash Seamless 2 người, test 2026-10-22 (1.3.1, game 2.7.2.0, host + joined)
-
-Cấu hình cả hai máy: `Multiplier=25`, `MaxSpirits=100`, Mimic Tear. Cả hai log có cùng một lỗi trong vòng 1 giây: `access violation, read 0x0, at nvwgf2umx.dll+0x7E3868`, stack `D3D12Core.dll+0x22A38D < 0x2395D4 < eldenring.exe+0x19E5A34 < 0x19EDADD < 0x1C4C360` (cùng chữ ký với crash 2026-10-16 trên 2.7.1.0, `+0x19E4344` ở bản đó). Thời điểm khác lần trước: không phải lúc Blob biến mất (lần gọi đầu 25 Blob + 25 Mimic, Blob biến mất êm, còn 25 Mimic), mà **ngay sau lần gọi thứ hai**, khi các chr mới đang được tạo (host: 25 Blob + 34 Mimic tại lúc crash = 25 Mimic cũ còn sống + 25 Blob mới + 9 Mimic mới; trạng thái `NetworkInitializing`/`ReadyForActivation`).
-
-Kết luận tạm: vẫn là lỗi bộ vẽ của game khi số chr Mimic (mỗi con sao chép model và trang bị của người chơi) vượt khả năng tài nguyên đồ hoạ, không do mod ghi sai bộ nhớ. Khác biệt chính với solo (100/200 không crash) là Seamless đồng bộ model cho cả 2 máy. `InstantMimic` giảm khoảng một nửa số chr mỗi lần gọi (không còn Blob) nên có thể giúp, chưa test. Log 1.3.1 trên 2.7.2.0 còn có panic Warp lặp mỗi frame (đã sửa ở bản sau, không liên quan crash này).
+- "Cannot summon again after dismissing": a summon made **before** the game finished clearing the old
+  spirits (60 spirits take about 5 to 6 seconds) is lost; waiting a few seconds works.
+- "`Amount` or `Multiplier` does not exceed the original count": not reproduced; likely an edited config
+  without pressing `ReloadKey`, or no restart after changing `MaxSpirits`.

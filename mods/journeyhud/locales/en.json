@@ -34,6 +34,18 @@
     "label": "Buildup gauge size",
     "help": "Size of your own buildup gauge (poison, rot...) at the top left. 1 = the game's own size."
   },
+  "boss_bar": {
+    "label": "Boss bars",
+    "help": "Move the game's boss bars down and add the boss's posture and effects under them. Needs a restart."
+  },
+  "rune_counter": {
+    "label": "Rune counter at the top right",
+    "help": "Move the game's rune counter to the top right. Drag it with the drag key."
+  },
+  "rune_counter_scale": {
+    "label": "Rune counter size",
+    "help": "Size of the moved rune counter. 1 = the game's own."
+  },
   "buildup": {
     "label": "Status buildup",
     "help": "Show the poison, rot, bleed, death blight, frost, sleep and madness buildup of the target."

@@ -1,45 +1,26 @@
-//! Watches a hotkey (`ReloadKey` by convention) and reloads the config on
-//! press, independent of any feature module. [RELOAD_GENERATION] counts
-//! reloads for features that must react to the reload edge. This must be the
-//! only poller of the reload key in a process. Details: `shared/docs/reload.md`.
+//! Watches the reload hotkey and reloads the config on press. [RELOAD_GENERATION] counts reloads.
+//! Must be the only poller of the reload key in a process.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use eldenring::cs::CSTaskGroupIndex;
 
-use crate::config;
 use crate::input::{self, parse_virtual_key};
 use crate::logger;
 
 const VK_F5: i32 = 0x74;
 
-/// Bumped on every successful reload.
 pub static RELOAD_GENERATION: AtomicU64 = AtomicU64::new(0);
 
-/// Watches `ReloadKey` on the game's `FrameBegin` task group for the rest of
-/// the process's life: on a press it reloads `ini_path` into the shared config
-/// map, bumps [RELOAD_GENERATION] and, if `ReloadBanner` is on, shows a
-/// "Config reloaded" banner. Meant to run on its own worker thread spawned
-/// from `DllMain`; never returns.
-pub fn run(ini_path: String) {
-    run_with(
-        || config::get_string("ReloadKey", "F5"),
-        || config::get_bool("ReloadBanner", false),
-        move || {
-            config::load(&ini_path);
-            Ok(())
-        },
-    );
-}
-
-/// [run] for a config that isn't the ini map ([`crate::toml_config`]).
-/// `reload_key` gives the current key name (re-read every frame), `reload`
-/// re-reads the config; an `Err` is logged and shown as "Config error - see
-/// log" (always, or a failed reload would be silent in game) and leaves
-/// [RELOAD_GENERATION] alone. `banner`, read after the reload, says whether
-/// to show "Config reloaded".
-pub fn run_with<K, B, R>(reload_key: K, banner: B, mut reload: R)
+/// Watches the reload key on the game's `FrameBegin` task group for the rest of the process's
+/// life. Meant to run on its own worker thread spawned from `DllMain`; never returns.
+///
+/// `reload_key` gives the current key name (read every frame, so the key itself can change on
+/// reload) and `reload` re-reads the config. An `Err` is logged and shown in game as
+/// "Config error - see log", and leaves [RELOAD_GENERATION] alone. `banner`, read after a
+/// successful reload, says whether to show "Config reloaded".
+pub fn run<K, B, R>(reload_key: K, banner: B, mut reload: R)
 where
     K: Fn() -> String + Send + 'static,
     B: Fn() -> bool + Send + 'static,
@@ -59,13 +40,13 @@ where
             match reload() {
                 Ok(()) => {
                     RELOAD_GENERATION.fetch_add(1, Ordering::Relaxed);
-                    logger::log("Config reloaded");
+                    logger::log("Reload: done");
                     if banner() {
                         crate::announce::show_announcement("Config reloaded");
                     }
                 }
                 Err(err) => {
-                    logger::error(&format!("Reload: config not reloaded, the previous one stays in use:\n{err}"));
+                    logger::error(&format!("Reload: failed, previous config kept\n{err}"));
                     crate::announce::show_announcement("Config error - see log");
                 }
             }

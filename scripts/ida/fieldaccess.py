@@ -1,16 +1,16 @@
-"""Tìm mọi lệnh truy cập [reg+offset] với offset cho trước - tức mọi hàm đọc/ghi
-1 field của struct (tốc độ, HP, cờ...) khi biết offset từ crash dump hay Cheat
-Engine.
+"""Find every [reg+offset] access with a given offset, that is every function that reads or
+writes one struct field (speed, HP, a flag...) when the offset is known from a crash dump or a
+memory scanner.
 
-Dùng:
-    run.ps1 fieldaccess <offset hex>... [--float] [--limit=N]
+Usage:
+    run.ps1 fieldaccess <hex offset>... [--float] [--limit=N]
 
-    --float      chỉ lệnh SSE float (movss/mulss/comiss/...), bớt nhiễu khi
-                 offset nhỏ và phổ biến
-    --limit=N    in tối đa N lệnh (mặc định 500)
+    --float      only SSE float instructions (movss/mulss/comiss/...), less noise when the
+                 offset is small and common
+    --limit=N    print at most N instructions (default 500)
 
-Quét toàn bộ hàm nên lâu (vài phút). Ghi fieldaccess.txt, mỗi dòng:
-`+offset  func=RVA  ea=RVA  tên hàm | lệnh`, sắp theo offset rồi địa chỉ.
+Scans every function, so it is slow (a few minutes). Writes fieldaccess.txt, one line each:
+`+offset  func=RVA  ea=RVA  function name | instruction`, sorted by offset then address.
 """
 import os
 import sys
@@ -32,7 +32,7 @@ FLOAT_MN = {"movss", "mulss", "divss", "addss", "subss", "comiss", "ucomiss", "m
 def main():
     pos, flags = common.parse_args()
     if not pos:
-        common.die("thiếu offset; xem docstring")
+        common.die("missing offset; see the docstring")
     targets = {int(p, 16) for p in pos}
     limit = int(flags.get("limit", 500))
     only_float = "float" in flags
@@ -55,9 +55,9 @@ def main():
     for off, fs, ea, dis in hits[:limit]:
         out.write("+%X  func=%X  ea=%X  %s | %s\n" % (off, common.rva(fs), common.rva(ea), common.fn_name(fs), dis))
     if len(hits) > limit:
-        out.write("... còn %d lệnh nữa (tăng --limit)\n" % (len(hits) - limit))
+        out.write("... %d more instructions (raise --limit)\n" % (len(hits) - limit))
     out.close()
-    print("%d lệnh khớp -> %s" % (len(hits), common.out_path("fieldaccess.txt")))
+    print("%d matching instructions -> %s" % (len(hits), common.out_path("fieldaccess.txt")))
 
 
 common.init()

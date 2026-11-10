@@ -31,7 +31,8 @@ impl SteamNetworkingIdentity {
     }
 
     fn steam_id(&self) -> Option<u64> {
-        (self.kind == IDENTITY_TYPE_STEAM_ID).then(|| u64::from_le_bytes(self.data[..8].try_into().unwrap()))
+        (self.kind == IDENTITY_TYPE_STEAM_ID)
+            .then(|| u64::from_le_bytes(self.data[..8].try_into().unwrap()))
     }
 }
 
@@ -39,8 +40,8 @@ impl SteamNetworkingIdentity {
 /// (steamnetworkingtypes.h, unchanged since the struct was introduced):
 /// payload pointer, size, connection handle, and `m_identityPeer` - the
 /// sender as authenticated by Steam, used to reject packets that claim to be
-/// from someone else (review 2026-09-25: the sender used to be taken from our
-/// own payload only, which anyone can write). Releasing goes through the
+/// from someone else (the sender used to be taken from our own payload only,
+/// which anyone can write). Releasing goes through the
 /// exported `SteamAPI_SteamNetworkingMessage_t_Release`, not the struct's own
 /// function pointer, so no deeper layout assumption is needed.
 #[repr(C)]
@@ -72,9 +73,14 @@ type SendMessageToUserFn = unsafe extern "C" fn(
     flags: i32,
     channel: i32,
 ) -> i32;
-type ReceiveMessagesOnChannelFn =
-    unsafe extern "C" fn(iface: *mut c_void, channel: i32, out: *mut *mut SteamNetworkingMessage, max: i32) -> i32;
-type AcceptSessionWithUserFn = unsafe extern "C" fn(iface: *mut c_void, identity: *const SteamNetworkingIdentity) -> bool;
+type ReceiveMessagesOnChannelFn = unsafe extern "C" fn(
+    iface: *mut c_void,
+    channel: i32,
+    out: *mut *mut SteamNetworkingMessage,
+    max: i32,
+) -> i32;
+type AcceptSessionWithUserFn =
+    unsafe extern "C" fn(iface: *mut c_void, identity: *const SteamNetworkingIdentity) -> bool;
 type ReleaseFn = unsafe extern "C" fn(message: *mut SteamNetworkingMessage);
 
 pub struct SteamMessages {
@@ -87,10 +93,12 @@ pub struct SteamMessages {
 
 // The interface pointer is process-lifetime and only used from the game's
 // own task thread.
+// SAFETY: the interface and function pointers belong to `steam_api64.dll`, which lives for the whole process, and the value is used from one thread at a time.
 unsafe impl Send for SteamMessages {}
 
 fn proc_address(module: *mut c_void, name: &str) -> Option<*mut c_void> {
     let c_name = format!("{name}\0");
+    // SAFETY: plain Win32 calls with NUL-terminated names.
     let addr = unsafe { GetProcAddress(module, c_name.as_ptr()) };
     (!addr.is_null()).then_some(addr)
 }
@@ -99,15 +107,19 @@ impl SteamMessages {
     /// `None` if `steam_api64.dll` isn't loaded, an export is missing, or
     /// Steam hasn't created the interface (e.g. not initialized yet).
     pub fn load() -> Option<Self> {
+        // SAFETY: plain Win32 calls with NUL-terminated names.
         let module = unsafe { GetModuleHandleA(c"steam_api64.dll".as_ptr() as *const u8) };
         if module.is_null() {
             return None;
         }
         let get_iface = proc_address(module, "SteamAPI_SteamNetworkingMessages_SteamAPI_v002")?;
         let send = proc_address(module, "SteamAPI_ISteamNetworkingMessages_SendMessageToUser")?;
-        let receive = proc_address(module, "SteamAPI_ISteamNetworkingMessages_ReceiveMessagesOnChannel")?;
-        let accept = proc_address(module, "SteamAPI_ISteamNetworkingMessages_AcceptSessionWithUser")?;
+        let receive =
+            proc_address(module, "SteamAPI_ISteamNetworkingMessages_ReceiveMessagesOnChannel")?;
+        let accept =
+            proc_address(module, "SteamAPI_ISteamNetworkingMessages_AcceptSessionWithUser")?;
         let release = proc_address(module, "SteamAPI_SteamNetworkingMessage_t_Release")?;
+        // SAFETY: `get_iface` is the exported accessor of the Steam interface, of this signature.
         unsafe {
             let iface = std::mem::transmute::<*mut c_void, GetInterfaceFn>(get_iface)();
             if iface.is_null() {
@@ -126,6 +138,7 @@ impl SteamMessages {
     /// Returns Steam's `EResult` (1 = OK).
     pub fn send_to(&self, steam_id: u64, payload: &[u8], channel: i32) -> i32 {
         let identity = SteamNetworkingIdentity::from_steam_id(steam_id);
+        // SAFETY: the function pointers are the interface's own and `iface` is its live object.
         unsafe {
             (self.send)(
                 self.iface,
@@ -143,6 +156,7 @@ impl SteamMessages {
     /// session request is answered. Cheap to repeat.
     pub fn accept(&self, steam_id: u64) {
         let identity = SteamNetworkingIdentity::from_steam_id(steam_id);
+        // SAFETY: the function pointers are the interface's own and `iface` is its live object.
         unsafe { (self.accept)(self.iface, &identity) };
     }
 
@@ -153,11 +167,14 @@ impl SteamMessages {
         let mut out = Vec::new();
         loop {
             let mut messages: [*mut SteamNetworkingMessage; BATCH] = [std::ptr::null_mut(); BATCH];
-            let count = unsafe { (self.receive)(self.iface, channel, messages.as_mut_ptr(), BATCH as i32) };
+            let count =
+                // SAFETY: the function pointers are the interface's own and `iface` is its live object.
+                unsafe { (self.receive)(self.iface, channel, messages.as_mut_ptr(), BATCH as i32) };
             if count <= 0 {
                 break;
             }
             for &message in &messages[..count as usize] {
+                // SAFETY: Steam returned `count` valid messages, released after use.
                 unsafe {
                     let m = &*message;
                     if !m.data.is_null() && m.size > 0 {

@@ -1,34 +1,32 @@
-//! Skips the pause after "YOU DIED": sets
-//! `MenuCommonParam[0].soloPlayDeath_ToFadeOutTime` (vanilla 3.8s) to 0, once.
-//! The same effect as ImAxel0's FasterRespawn, which patches the jump that
-//! decides whether that wait comes from this param; writing the param needs no
-//! code patch. Why this field: `docs/respawn_fade.md`.
+//! Skips the pause after "YOU DIED": sets `MenuCommonParam[0].soloPlayDeath_ToFadeOutTime`
+//! (vanilla 3.8 s) to 0, once. Why this field: `docs/respawn_fade.md`.
 
 use eldenring::cs::{MenuCommonParam, SoloParamRepository};
 use fromsoftware_shared::FromStatic;
 
-use common::logger;
+use shared::logger;
 
 #[derive(Default)]
 pub struct FadeState {
     done: bool,
 }
 
-/// Writes the param once. Only call it while the main player exists:
-/// `SoloParamRepository` reads before that can panic (see `common::player`).
+/// Writes the param once. Only call it while the main player exists: reading
+/// `SoloParamRepository` before that can panic (`shared/docs/player.md`).
 pub fn apply(state: &mut FadeState) {
     if state.done {
         return;
     }
+    // SAFETY: called from a game task; `instance_mut` returns `Err` while the singleton does not exist.
     let Ok(repo) = (unsafe { SoloParamRepository::instance_mut() }) else { return };
-    // Whatever happens below, don't retry every frame.
+    // Whatever happens below, do not retry every frame.
     state.done = true;
-    if let Err(reason) = common::params::check::<MenuCommonParam>(repo) {
-        logger::error(&format!("Fade: failed ({reason})"));
+    if let Err(reason) = shared::params::check::<MenuCommonParam>(repo) {
+        logger::error(&format!("Fade: {reason}"));
         return;
     }
     let Some(row) = repo.get_row_by_index_mut::<MenuCommonParam>(0) else {
-        logger::error("Fade: failed (MenuCommonParam has no row)");
+        logger::error("Fade: MenuCommonParam has no row");
         return;
     };
     let vanilla = row.solo_play_death_to_fade_out_time();

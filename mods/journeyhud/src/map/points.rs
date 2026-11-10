@@ -12,7 +12,7 @@ use std::time::Duration;
 use eldenring::cs::{BlockId, CSEventFlagMan, SoloParamRepository, WorldMapPointParam};
 use fromsoftware_shared::FromStatic;
 
-use common::{logger, params};
+use shared::{logger, params};
 
 use super::cache::Refreshed;
 use super::tiles::MapId;
@@ -96,6 +96,7 @@ pub fn nearby(map: MapId, position: [f32; 2], space: i32, reach: f32) -> Vec<Poi
 /// Every point of `space` on `map` that the game shows now, or `None` while the table or the
 /// flags are not there yet.
 fn visible(map: MapId, space: i32) -> Option<Vec<Visible>> {
+    // SAFETY: the accessor returns `Err` while the singleton does not exist.
     let (rows, Ok(flags)) = (rows()?, unsafe { CSEventFlagMan::instance() }) else { return None };
     let flags = &flags.virtual_memory_flag;
     let on = |flag: u32| flag != 0 && flags.get_flag(flag);
@@ -118,7 +119,11 @@ fn visible(map: MapId, space: i32) -> Option<Vec<Visible>> {
                 if row.needs_text && active_texts.peek().is_none() {
                     return None;
                 }
-                let icon = if active_texts.any(|text| text.kind == 1) && row.alt_icon != 0 { row.alt_icon } else { row.icon };
+                let icon = if active_texts.any(|text| text.kind == 1) && row.alt_icon != 0 {
+                    row.alt_icon
+                } else {
+                    row.icon
+                };
                 (!skipped(icon)).then(|| Visible {
                     position: row.position,
                     icon,
@@ -138,6 +143,7 @@ fn rows() -> Option<&'static [Row]> {
     if !world::conversions_ready() {
         return None;
     }
+    // SAFETY: the accessor returns `Err` while the singleton does not exist.
     let repo = unsafe { SoloParamRepository::instance() }.ok()?;
     if let Err(reason) = params::check::<WorldMapPointParam>(repo) {
         logger::warn(&format!("Map: point params unavailable ({reason})"));
@@ -152,21 +158,78 @@ fn rows() -> Option<&'static [Row]> {
             let (position, space, _) = world::locate(block, [row.pos_x(), row.pos_z()]);
             // The second set of text flags is signed; non-positive means unused.
             let flag2 = |flag: i32| u32::try_from(flag).unwrap_or(0);
-            let text = |id: i32, enable: u32, disable: u32, enable2: i32, disable2: i32, kind: u8| Text {
-                id,
-                enable: [enable, flag2(enable2)],
-                disable: [disable, flag2(disable2)],
-                kind,
-            };
+            let text =
+                |id: i32, enable: u32, disable: u32, enable2: i32, disable2: i32, kind: u8| Text {
+                    id,
+                    enable: [enable, flag2(enable2)],
+                    disable: [disable, flag2(disable2)],
+                    kind,
+                };
             let texts = [
-                text(row.text_id1(), row.text_enable_flag_id1(), row.text_disable_flag_id1(), row.text_enable_flag2_id1(), row.text_disable_flag2_id1(), row.text_type1()),
-                text(row.text_id2(), row.text_enable_flag_id2(), row.text_disable_flag_id2(), row.text_enable_flag2_id2(), row.text_disable_flag2_id2(), row.text_type2()),
-                text(row.text_id3(), row.text_enable_flag_id3(), row.text_disable_flag_id3(), row.text_enable_flag2_id3(), row.text_disable_flag2_id3(), row.text_type3()),
-                text(row.text_id4(), row.text_enable_flag_id4(), row.text_disable_flag_id4(), row.text_enable_flag2_id4(), row.text_disable_flag2_id4(), row.text_type4()),
-                text(row.text_id5(), row.text_enable_flag_id5(), row.text_disable_flag_id5(), row.text_enable_flag2_id5(), row.text_disable_flag2_id5(), row.text_type5()),
-                text(row.text_id6(), row.text_enable_flag_id6(), row.text_disable_flag_id6(), row.text_enable_flag2_id6(), row.text_disable_flag2_id6(), row.text_type6()),
-                text(row.text_id7(), row.text_enable_flag_id7(), row.text_disable_flag_id7(), row.text_enable_flag2_id7(), row.text_disable_flag2_id7(), row.text_type7()),
-                text(row.text_id8(), row.text_enable_flag_id8(), row.text_disable_flag_id8(), row.text_enable_flag2_id8(), row.text_disable_flag2_id8(), row.text_type8()),
+                text(
+                    row.text_id1(),
+                    row.text_enable_flag_id1(),
+                    row.text_disable_flag_id1(),
+                    row.text_enable_flag2_id1(),
+                    row.text_disable_flag2_id1(),
+                    row.text_type1(),
+                ),
+                text(
+                    row.text_id2(),
+                    row.text_enable_flag_id2(),
+                    row.text_disable_flag_id2(),
+                    row.text_enable_flag2_id2(),
+                    row.text_disable_flag2_id2(),
+                    row.text_type2(),
+                ),
+                text(
+                    row.text_id3(),
+                    row.text_enable_flag_id3(),
+                    row.text_disable_flag_id3(),
+                    row.text_enable_flag2_id3(),
+                    row.text_disable_flag2_id3(),
+                    row.text_type3(),
+                ),
+                text(
+                    row.text_id4(),
+                    row.text_enable_flag_id4(),
+                    row.text_disable_flag_id4(),
+                    row.text_enable_flag2_id4(),
+                    row.text_disable_flag2_id4(),
+                    row.text_type4(),
+                ),
+                text(
+                    row.text_id5(),
+                    row.text_enable_flag_id5(),
+                    row.text_disable_flag_id5(),
+                    row.text_enable_flag2_id5(),
+                    row.text_disable_flag2_id5(),
+                    row.text_type5(),
+                ),
+                text(
+                    row.text_id6(),
+                    row.text_enable_flag_id6(),
+                    row.text_disable_flag_id6(),
+                    row.text_enable_flag2_id6(),
+                    row.text_disable_flag2_id6(),
+                    row.text_type6(),
+                ),
+                text(
+                    row.text_id7(),
+                    row.text_enable_flag_id7(),
+                    row.text_disable_flag_id7(),
+                    row.text_enable_flag2_id7(),
+                    row.text_disable_flag2_id7(),
+                    row.text_type7(),
+                ),
+                text(
+                    row.text_id8(),
+                    row.text_enable_flag_id8(),
+                    row.text_disable_flag_id8(),
+                    row.text_enable_flag2_id8(),
+                    row.text_disable_flag2_id8(),
+                    row.text_type8(),
+                ),
             ];
             Row {
                 position,

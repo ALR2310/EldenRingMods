@@ -6,19 +6,35 @@ A DLL mod that lets you make Poison and Scarlet Rot's damage-over-time effect la
 [*]Longer Black Flame and Destined Death burn duration (10 seconds).[/*]
 [*]Destined Death's max HP loss can last forever.[/*]
 [*]Fully customizable damage and duration via the config file.[/*]
-[*]Hotkey to reload the ini without restarting the game.[/*]
+[*]Hotkey to reload the config file without restarting the game.[/*]
 [/list]
 
 [size=4][b][color=#D93A2B]D[/color][color=#DB3E2F]i[/color][color=#DC4333]s[/color][color=#DE4738]c[/color][color=#E04B3C]l[/color][color=#E14F40]a[/color][color=#E35444]i[/color][color=#E55849]m[/color][color=#E65C4D]e[/color][color=#E86051]r[/color][color=#EA6555]:[/color] [color=#EB6959]O[/color][color=#ED6D5E]n[/color][color=#EE7162]l[/color][color=#F07666]y[/color] [color=#F27A6A]u[/color][color=#F37E6E]s[/color][color=#F58273]e[/color] [color=#F78777]i[/color][color=#F88B7B]n[/color] [color=#FA8F7F]o[/color][color=#FC9384]f[/color][color=#FD9888]f[/color][color=#FF9C8C]l[/color][color=#FD9888]i[/color][color=#FC9384]n[/color][color=#FA8F7F]e[/color] [color=#F88B7B]m[/color][color=#F78777]o[/color][color=#F58273]d[/color][color=#F37E6E]e[/color] [color=#F27A6A]w[/color][color=#F07666]i[/color][color=#EE7162]t[/color][color=#ED6D5E]h[/color] [color=#EB6959]E[/color][color=#EA6555]A[/color][color=#E86051]C[/color] [color=#E65C4D]d[/color][color=#E55849]i[/color][color=#E35444]s[/color][color=#E14F40]a[/color][color=#E04B3C]b[/color][color=#DE4738]l[/color][color=#DC4333]e[/color][color=#DB3E2F]d[/color][color=#D93A2B]![/color][/b][/size]
 
 [size=4][b][color=#C0860A]I[/color][color=#CA9623]n[/color][color=#D4A63B]s[/color][color=#DDB654]t[/color][color=#E7C66D]a[/color][color=#F1D686]l[/color][color=#F1D686]l[/color][color=#E7C66D]a[/color][color=#DDB654]t[/color][color=#D4A63B]i[/color][color=#CA9623]o[/color][color=#C0860A]n[/color][/b][/size]
 
-Any DLL mod loader works, e.g. [url=https://www.nexusmods.com/eldenring/mods/117]Elden Mod Loader[/url], [url=https://github.com/soulsmods/ModEngine2/releases]Mod Engine 2[/url], [url=https://github.com/garyttierney/me3/releases]Mod Engine 3[/url].
+Any DLL mod loader works, e.g. [url=https://github.com/garyttierney/me3/releases]Mod Engine 3[/url], [url=https://github.com/soulsmods/ModEngine2/releases]Mod Engine 2[/url], [url=https://www.nexusmods.com/eldenring/mods/117]Elden Mod Loader[/url].
 
-[b]Option 1 - [url=https://github.com/soulsmods/ModEngine2/releases]Mod Engine 2[/url] (recommended)[/b]
+[b]Option 1 - [url=https://github.com/garyttierney/me3/releases]Mod Engine 3[/url][/b]
+[list=1]
+[*]Download Mod Engine 3 from the link above and run its installer.[/*]
+[*]Download this mod and put [b]InfiniteAilment.dll[/b] and [b]InfiniteAilment.toml[/b] in a [b]natives[/b] folder, next to the profile file you create in the next step.[/*]
+[*]Create a profile file named [b]InfiniteAilment.me3[/b] with this content (the path is relative to the profile file):
+[code]profileVersion = "v1"
+
+[[supports]]
+game = "eldenring"
+
+[[natives]]
+path = "natives/InfiniteAilment.dll"[/code]
+[/*]
+[*]Launch the game by double-clicking [b]InfiniteAilment.me3[/b], or run [b]me3 launch -p InfiniteAilment.me3[/b].[/*]
+[/list]
+
+[b]Option 2 - [url=https://github.com/soulsmods/ModEngine2/releases]Mod Engine 2[/url][/b]
 [list=1]
 [*]Download Mod Engine 2 from the link above and extract it into your game folder (the same folder as [i]eldenring.exe[/i]).[/*]
-[*]Download this mod, then create a folder to hold it and its INI file - for example, inside your game folder create a [b]natives[/b] folder.[/*]
+[*]Download this mod, then create a folder to hold it and its config file - for example, inside your game folder create a [b]natives[/b] folder.[/*]
 [*]Open [b]config_eldenring.toml[/b] and edit [b]external_dlls = [ ][/b] to add the DLL, e.g.:
 [code]external_dlls = [
     "natives\\InfiniteAilment.dll",
@@ -27,10 +43,10 @@ Any DLL mod loader works, e.g. [url=https://www.nexusmods.com/eldenring/mods/117
 [*]Launch the game using Mod Engine 2's launcher, [b]modengine2_launcher.exe[/b].[/*]
 [/list]
 
-[b]Option 2 - [url=https://www.nexusmods.com/eldenring/mods/117]Elden Mod Loader[/url][/b]
+[b]Option 3 - [url=https://www.nexusmods.com/eldenring/mods/117]Elden Mod Loader[/url][/b]
 [list=1]
 [*]Download Elden Mod Loader from the link above and extract it into your game folder.[/*]
-[*]Download this mod and drag [b]InfiniteAilment.dll[/b] and [b]InfiniteAilment.ini[/b] into the [b]mods[/b] folder.[/*]
+[*]Download this mod and drag [b]InfiniteAilment.dll[/b] and [b]InfiniteAilment.toml[/b] into the [b]mods[/b] folder.[/*]
 [*]Launch the game - the mod will be loaded automatically.[/*]
 [/list]
 

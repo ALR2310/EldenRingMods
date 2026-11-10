@@ -1,164 +1,110 @@
-# Animation cancel (guard / dodge / đổi vũ khí cắt animation): nghiên cứu khả thi
+# Animation cancel
 
-**Status 2026-10-12: ĐÃ LÀM, test trong game: guard, lăn và đổi vũ khí huỷ được
-đòn đánh, weapon skill và phép (người dùng xác nhận bằng mod thật: cấu hình TOML,
-lọc theo loại anim, hot reload).** Cách làm: ghi quyền cancel vào `cancel_entries`
-của hàng đợi của `CSChrActionRequestModule` (người chơi luôn ở queue mode), xem
-mục "Cơ chế đúng". Nguồn yêu cầu: tin nhắn Nexus của DAM127 (2026-10-12). Người
-dùng đã hỏi lại họ muốn cancel animation nào, lúc nào; chưa có trả lời. Probe
-(log `WINDOW`/`FLAG`) vẫn còn trong mod làm tuỳ chọn (`CancelProbe`, `FlagProbe`).
+Status: **Confirmed** in game on 2.7.1.0 for guard, dodge, weapon swap and jump; the guard rules
+are **Inferred** from logs and param data (not every grip was measured). Conventions:
+[research notes](../../../docs/research/README.md).
 
-## Cơ chế của game (đã xác nhận một phần)
+## Question
 
-Cancel trong Elden Ring không nằm ở animation mà ở **cửa sổ do TAE bật**: trong
-anim đòn đánh, các event `CANCEL_*` (R1/R2, L1/L2, magic, đổi style/slot, item
-nhanh, `CANCEL_LS_MOVEMENT`...) báo cho `CSChrActionRequestModule` rằng từ frame
-này hành động nào được phép cắt. Module này nằm ở `ChrIns.modules.action_request`
-(`fromsoftware-rs`: `crates/eldenring/src/cs/chr_ins/module/action_request.rs`,
-size 0x140), các trường chính:
+An animation lets another action take over only inside a cancel window that its own events open,
+usually in the second half of a move. Can a mod open that window earlier, so guard, dodge, weapon
+swap or jump act as soon as the button is pressed?
 
-| Offset | Trường | Ý nghĩa |
+## How the game decides
+
+`CSChrActionRequestModule` (`ChrIns.modules.action_request`, 0x140 bytes in fromsoftware-rs) holds
+the state. The fields that matter:
+
+| Field | Meaning |
+|---|---|
+| `action_requests` | buttons held now (`ChrActions` bitmask: bit 5 `sp_move`, 24 `guard`, 9 and 10 weapon change) |
+| `possible_action_inputs` | which actions may be queued during this animation (set by the TAE) |
+| `possible_action_cancels` | which actions may cut this animation (set by the TAE) |
+| `disabled_action_inputs` | presses dropped before queueing |
+| `tae_cancels` | TAE cancel flags; bit 11 `cancel_disable` blocks every cancel |
+| `action_request_queue.cancel_entries[id]` | the permission the HKS reads for animation `id` |
+| `action_request_queue.input_entries[id]` | the request being carried out; filled each frame, never written by the mod |
+
+Each frame the module resets, then computes `queued = presses AND possible_action_inputs` and
+`cancel_ready = queued AND possible_action_cancels AND NOT cancel_disable` (function at RVA
+`0x408190` on 2.7.1.0), and fills `input_entries[id] = queued AND cancel_entries[id]`. The player
+always runs in queue mode; `id` is the queue's `current_tae_id`, or `queue_tae_id_override` when
+that is not negative, written as `aXXX_YYYYYY` without the `a` and `_` (`a020_032000` is
+`20032000`). Cancel is recomputed from scratch every frame, so nothing stays set that needs
+cleaning up.
+
+Task order within a frame: `ChrIns_PreBehavior` (module reads the pad) → `HavokBehavior` (HKS and
+TAE run) → `ChrIns_BehaviorSafe` → `ChrIns_PrePhysics`.
+
+## What works
+
+Each frame, at `ChrIns_PreBehaviorSafe` and at `ChrIns_BehaviorSafe`, for the animation that is
+playing:
+
+1. OR the action bits into `possible_action_inputs` and `possible_action_cancels`, and clear them
+   from `disabled_action_inputs`.
+2. OR them into `cancel_entries[id]`, **creating the entry if it is missing** (it only exists once
+   an event wrote it).
+3. OR the `tae_cancels` flags the action needs and clear `cancel_disable`.
+
+Bits per action: guard = 24 and 2 (guard is the L1 button, bit 2; bit 24 alone queued no press);
+dodge = 5, 16, 17, 18, 25; jump = 6; weapon swap = 4, 9, 10 and the queue-only bit 37. Weapon swap
+also needs the `slot_switch` flag. Jump needs only bit 6 and the general action flag; bit 6 is
+`ACTION_ARM_CHANGE_STYLE`, which Elden Ring uses for jumping.
+
+Which animation is playing is decided by the **queue id**, not by `anim_queue`: while casting
+during a walk, `anim_queue` shows the leg layer `a000_020010` (group Other) for a moment although
+the queue id is still the spell's. The id lags a few frames when a new animation starts, which only
+means the previous animation is still being cut.
+
+`group_for_cancel` is `group_of` except that every spell animation (TAE `a400` to `a599`) is a
+cast, so a long beam phase that `group_of` files under Other can still be cancelled. Critical hits
+are not Attack and are never cut.
+
+## Verification
+
+| Try | Change | Result |
 |---|---|---|
-| +0x10 | `action_requests` | phím đang giữ (bitmask `ChrActions`, bit 5 = `sp_move` lăn/lùi, 24 = `guard`, 9/10 = đổi vũ khí R/L...) |
-| +0x30 | `cancel_ready_actions` | = `queued_action_inputs` AND `possible_action_cancels`, trừ khi `cancel_disable` |
-| +0x38 | `queued_action_inputs` | = `new_action_presses` AND `possible_action_inputs` |
-| +0x98 | `possible_action_inputs` | hành động nào được xếp hàng ở anim hiện tại (TAE đặt) |
-| +0xA0 | `possible_action_cancels` | hành động nào được cắt anim hiện tại (TAE đặt) |
-| +0x100 | `tae_cancels` | cờ cancel của TAE; bit 11 `cancel_disable` chặn mọi cancel |
+| 1 | force the bitmask at `BehaviorSafe` | `cancel_ready` has the bit early, no cancel |
+| 2 | + bit 18, `tae_cancels` flags, write at `PreBehaviorSafe` too | still only cancels at the vanilla time (about 0.57 s) |
+| 3 | + write `cancel_entries` and `input_entries` | strange fake commands (attack, swap, swap, roll) |
+| 4 | `cancel_entries` only, create the entry | **roll and guard cancel an attack** |
+| 5 | + clear `disabled_action_inputs`, bit 4 for weapon swap | swap registered early but ran late |
+| 6 | + queue bit 37 for weapon swap | **weapon swap cancels an attack** |
 
-Kiểm chứng trong IDA (db 2.7.1.0): `sub_1404085A0` (RVA 0x4085A0) là bước reset
-đầu frame của module, gọi từ `sub_1403CD510`/`sub_1403CDAB0` (hàm của ChrIns):
-chép `action_requests` sang `previous_action_requests`, **xoá `cancel_ready_actions`
-(+0x30)**, đặt `requested_gesture = -1` (+0xF8), **xoá bit `cancel_disable`**
-(+0x100 bit 11) rồi chỉ đặt lại nếu cờ `falling_jump_frames` (bit 10) đang bật và
-điều kiện về vật lý thoả. Vậy cancel được tính lại từ đầu mỗi frame, không có
-trạng thái nào "kẹt" cần dọn. Vtable của module chỉ có 2 slot (huỷ và 1 hàm
-khác), hàm tính `cancel_ready` không đi qua vtable; chưa lần ra chỗ tính (hàm
-lớn `0x409270` trong vùng module chỉ là code vẽ debug, không liên quan).
+## Rejected paths
 
-Thứ tự task trong frame (`CSTaskGroupIndex`): `ChrIns_PreBehavior` (module đọc
-pad, tính `cancel_ready`) → `HavokBehavior` (HKS và TAE chạy) →
-`ChrIns_BehaviorSafe` → `ChrIns_PrePhysics`. HKS đọc kết quả qua
-`env(ActionRequest, ACTION_ARM_*)`, `env(IsMoveCancelPossible)`...
+- **Widening the module's bitmasks alone.** The module did the right thing, but the HKS did not
+  switch state until the vanilla moment. The HKS reads the per-animation entry.
+- **A flag in `CSChrActionFlagModule` blocking the cancel.** Logging every change of that module
+  showed flags that follow the animation, none that block the cancel.
+- **Writing `input_entries`.** It is the list of requests; writing it turns each press into a fake
+  command.
 
-## Kết quả probe 1 và 2 (2026-10-12, test trong game, log `AnimCancel.log`)
+## Guard rules
 
-Hàm tính cancel là `sub_140408190` (RVA 0x408190, 2.7.1.0): `queued = press AND
-possible_inputs`, `cancel_ready = queued AND possible_cancels AND NOT
-cancel_disable`, khớp mô hình ở trên. Các getter HKS đọc module này (có `AND NOT
-cancel_disable`): `sub_140407930` (`env(ActionRequest)`: bit của `cancel_ready`,
-hoặc của `new_action_presses` khi `stay_state`), `sub_140407B90` (bit của
-`possible_cancels`), `sub_140407B50/C90/B10/C50/...` (các cờ `tae_cancels`).
+Guard (L1) only cancels while L1 really guards. With twin blades or one weapon in each hand L1 is an
+attack, and letting it cut would break the combo. `EquipParamWeapon`: `enableGuard` is 1 only for
+real shields; the shield animation sets (`wepmotionCategory`) are 47 greatshield, 48 small shield,
+49 medium shield, 57; twin blades have `isDualBlade = 1`.
 
-- Vanilla, đòn đánh `a020_032000` (1,87 s): cửa sổ lăn mở ở t≈0,55-0,57
-  (`possible_cancels` có bit 16-18), game chuyển sang anim lăn ngay sau đó.
-- **Ép bit (guard/lăn/đổi vũ khí, kèm bit 18 và cờ `tae_cancels` 0x218, ghi ở
-  `PreBehaviorSafe`+`BehaviorSafe`): module làm đúng, `cancel_ready` có bit từ
-  t=0,17-0,28, nhưng HKS không chuyển state cho tới t≈0,57**, đúng lúc vanilla.
-  Lăn và đổi vũ khí đều thế (đổi vũ khí: `ready=0x200` từ 0,28, anim đổi vũ khí
-  `a000_029001` bắt đầu ở 0,62). Mọi lần chuyển state đều trùng lúc cờ
-  `tae_cancels` bit 10 (0x400) tắt (0x618 → 0x218/0x219).
-- Kết luận: **nới bitmask của module không đủ**. HKS còn điều kiện khác, có thể
-  là cờ do TAE event đặt ở nơi khác (`CSChrActionFlagModule`, biến HKS/EzState).
-- Lỗi test guard: lần 1 chỉ ép bit 24 `ACTION_ARM_GUARD`, trong khi giữ guard là
-  L1 (bit 2) nên không có press nào được xếp hàng; đã thêm L1 vào nhóm Guard.
-- Bước tiếp: log mọi thay đổi của `CSChrActionFlagModule` (FLAG ...) để tìm cờ
-  lật đúng lúc cancel được thực hiện.
+- Both hands on one weapon (`RightBothHands`, `LeftBothHands`): guards, because the other slot's
+  weapon is put away, unless the weapon is a twin blade.
+- One-handed (`OneHanded`): guards only with a shield in the left hand.
+- Weapon unknown or no param row: guard cancels nothing.
 
-## Cơ chế đúng (queue mode) và cách ép
+The param row is found by the equipped ID, else by the ID without its last two digits (9080009 is row
+9080000 + 9); the answer is cached by (grip, left ID, right ID). Not measured in game: both hands on
+one weapon, shield plus one-handed weapon, two katanas, twin blades.
 
-Người chơi luôn có `queue_mode_enabled = true`; id của hàng đợi (`current_tae_id`,
-hoặc `queue_tae_id_override` nếu >= 0) là id anim dạng `aXXX_YYYYYY` bỏ dấu `a`
-và `_` (vd. `a020_032000` = 20032000). HKS đọc **theo entry của id hiện tại**:
+A guard that is already held when an animation begins is no new press: letting it cancel would cut an
+attack started from a raised guard at once (hold guard, press attack: the attack was cut and the guard
+raised again). A new animation therefore starts with guard blocked while L1 or guard (bits 2 and 24)
+is held; the block ends when it is released, and pressing again counts as new.
 
-- `cancel_entries[id]` = *quyền* cancel của state, TAE ghi dần theo cửa sổ
-  (`sub_140408020`/`sub_1404088F0`).
-- `input_entries[id]` = *yêu cầu đang thực hiện*: mỗi frame `sub_140408420` điền
-  `queued AND cancel_entries[id]` (xoá đầu frame ở `sub_1404085A0`). `env(ActionRequest)`
-  (`sub_140407930` -> `sub_140407A70`) đọc entry này.
-- Bit chỉ có trong queue: 35 (movement), 36 (movement prev), 37 (slot switch).
-  Đổi vũ khí cần thêm bit 37 trong `cancel_entries[id]` (`sub_140407CC0`).
-- `queued = new_presses AND possible_action_inputs`; `new_presses` bỏ các bit trong
-  `disabled_action_inputs` (+0x40) trước (`sub_140408190`).
+## Open risks
 
-Cách ép đã chạy (probe `1b4e3e8`, nay là `src/cancel.rs`, `open_windows()`): mỗi
-frame, ở `ChrIns_PreBehaviorSafe` và `ChrIns_BehaviorSafe`: OR mask vào `possible_action_inputs`
-và `possible_action_cancels`, OR vào `cancel_entries[id]` (**tạo entry nếu thiếu**),
-xoá các bit đó khỏi `disabled_action_inputs`, OR cờ `tae_cancels` 0x218 và xoá
-`cancel_disable`. Mask: Guard = bit 24 + L1 (2), Dodge = bit 5, 16, 17, 18, 25,
-Weapon = bit 4, 9, 10, 37.
-
-**Không** được ghi vào `input_entries`: lần test 3 (ghi mask vào cả hai danh sách)
-làm mỗi lần bấm biến thành một lệnh giả (đánh -> đổi vũ khí -> đổi vũ khí -> lăn).
-
-## Kết quả test (2026-10-12)
-
-| Lần | Thay đổi | Kết quả |
-|---|---|---|
-| 1 | ép bitmask ở `BehaviorSafe` | `ready` có bit từ t=0,2 nhưng không cancel được |
-| 2 | + bit 18, cờ `tae_cancels`, ghi ở `PreBehaviorSafe` | vẫn chỉ cancel ở t=0,57 (đúng vanilla) |
-| 3 | + ép vào `cancel_entries` và `input_entries` | hành vi lạ (lệnh giả), chứng tỏ HKS đọc queue |
-| 4 | chỉ `cancel_entries` (tạo entry nếu thiếu) | **lăn và đỡ huỷ được đòn đánh** |
-| 5 | + gỡ `disabled_action_inputs`, nhóm Weapon thêm bit 4 | đổi vũ khí được ghi nhận từ t=0,28 nhưng chỉ chạy ở t=0,83 |
-| 6 | + bit 37 cho Weapon | **đổi vũ khí huỷ được đòn đánh (t=0,20-0,32 của đòn)** |
-
-Cửa sổ vanilla của đòn đánh (`a020_032000`, 1,87 s): lăn mở ở t≈0,55-0,57.
-Cờ `CSChrActionFlagModule` (log `FLAG`) đổi theo anim nhưng không có cờ nào chặn
-cancel: giả thuyết đó đã loại.
-
-## Mod thật (khác với probe)
-
-- Cấu hình `AnimCancel.toml`: mỗi hành động một section (`[Guard]`, `[Dodge]`,
-  `[WeaponSwap]`) có `Enabled` và bộ animation riêng (Attack, Skill, Cast, Item),
-  mặc định bật hết (2026-10-15, trước đó `[Cancel]` + `[Animations]` dùng chung). Hot reload qua
-  `common::reload` (F5).
-- Anim nào đang chạy do **id hàng đợi** quyết định (`group_for_cancel(queue_id)`),
-  không phải anim đọc từ `anim_queue`: khi niệm phép lúc đang đi, `anim_queue` hiện
-  lớp chân `a000_020010` (nhóm Other) một lúc dù id hàng đợi vẫn là của phép, nên
-  dùng anim id thì phép không huỷ được trong lúc đó (log 2026-10-12, `grp=Other
-  qgrp=Cast`). Id trễ vài frame lúc vào anim mới: chỉ có nghĩa là anim trước vẫn
-  đang được cắt.
-- `group_for_cancel` = `group_of` (`common::anim`) trừ việc mọi anim TAE a400-a599
-  là Cast: `group_of` xếp tia của Placidusax's Ruin (`a451_045110`, ~9 s) vào Other
-  vì SpeedMultiplier không được tăng tốc anim mà tia gắn theo, còn với cancel thì
-  không có lý do loại. Đòn chí mạng không thuộc Attack nên không bị cắt.
-- Nhóm Dodge/Guard/Weapon chỉ ép cờ `tae_cancels` cần cho nó (`action_general`,
-  thêm `slot_switch` cho Weapon); probe ép thêm `rh_attack` (bit 4), mod bỏ vì đó
-  là cancel đòn đánh sang đòn đánh. Test xong, không thấy thiếu gì.
-- Probe còn lại làm tuỳ chọn trong `[Logging]`; không còn phím F7.
-
-## Chưa làm
-
-1. Tác dụng phụ: i-frame/hitbox của anim bị cắt, stamina, hướng nhân vật, FP bị
-   trừ khi cắt phép (chưa kiểm tra kỹ).
-2. Seamless Co-op (anim id đồng bộ qua mạng, người khác có thể thấy giật hình);
-   `cancel_entries.push_back` dùng bộ cấp phát của game (chưa thấy lỗi trong test).
-3. Chờ DAM127 nói rõ muốn cancel gì (có thể thêm Item, Jump, cancel từ lăn...).
-4. Trang Nexus (`nexus_page.bbcode`), CHANGELOG, logo khi quyết định đăng.
-
-## Guard chỉ huỷ khi L1 thật sự là đỡ (2026-10-17)
-
-Báo cáo người dùng: cầm Rellana's Twin Blades hoặc một vũ khí mỗi tay (dual wield) thì bấm nhanh chuột phải (L1) làm đòn đánh bị huỷ giữa chừng. Log (`STYLE` + `WINDOW`): L1 (`queued=0x4`, bit 2) lúc `mod=forced` cắt các chuỗi L1 `a029_035000 -> 035010` (cắt ở 0,57 / 2,30 s) và `a249_032000 -> 032100 -> 032110`. Với các vũ khí đó L1 là đòn đánh, không phải đỡ, nên "guard huỷ đòn" làm cụt combo.
-
-Dữ liệu `EquipParamWeapon` (bản xuất trong `tmp/csv/`): `enableGuard` chỉ bằng 1 với khiên thật (Heater Shield `31330000`: `wepType 67`, `wepmotionCategory 49`), katana bằng 0; Rellana's Twin Blades: `wepType 93`, `isDualBlade 1`, `wepmotionCategory 60`. Nhóm animation khiên: 47 Greatshield, 48 Small Shield, 49 Medium Shield, 57.
-
-Quy tắc (`src/weapon.rs`, `guard_possible`): đọc kiểu cầm `arm=` và hai vũ khí đang chọn.
-- Cầm hai tay (`RightBothHands` / `LeftBothHands`): một vũ khí đang cầm, vũ khí ở ô bên kia được cất, nên L1 là đỡ, trừ Twin Blades (`isDualBlade`).
-- Cầm một tay (`OneHanded`): chỉ khi tay trái là khiên. Một vũ khí mỗi tay không phải khiên là dual wield, L1 là đòn đánh.
-- Không đọc được vũ khí hoặc không có dòng param: Guard không huỷ gì.
-
-Hàng param tra theo ID đang cầm, nếu không có thì theo ID bỏ hai chữ số cuối (9080009 = hàng 9080000 +9); kết quả lưu theo (kiểu cầm, ID trái, ID phải). Probe `STYLE` ghi `type/guard/dual/motion/shield` của hai tay. Chưa đo trong game các tình huống: hai tay một vũ khí, khiên + vũ khí một tay, hai katana (dual wield), Twin Blades.
-
-## Giữ guard rồi tấn công: không huỷ đòn vừa bắt đầu (2026-10-17)
-
-Báo cáo Nexus (wlpo1266): giữ đỡ đòn rồi bấm tấn công thì không đánh được (vanilla: chuyển sang đánh, đánh xong tự quay lại đỡ). Log (`WINDOW`, Heater Shield + katana): `a000_000100` (đứng giữ khiên) -> bấm R1 (`press=0x1`) -> `a029_030000` (đòn đánh) -> ở t=0,20-0,22 s mod mở cửa sổ có Guard (`can=0x2003070634`) -> game chuyển ngay sang `a000_019000` (vào guard), đòn bị cắt; lặp lại mỗi lần bấm.
-
-Nguyên nhân: guard vẫn **đang được giữ** từ trước khi đòn bắt đầu, nên khi cửa sổ Guard mở, game coi là yêu cầu guard và huỷ đòn. Sửa (`cancel.rs`, `next_guard_block`): khi animation mới bắt đầu mà L1 hoặc Guard (`action_requests`, bit 2 và 24) đang giữ thì chặn Guard cho animation đó; hết chặn khi thả guard (bấm lại sau đó là guard mới, huỷ được như thường). Probe `WINDOW` ghi thêm `held=` (phím đang giữ) và `gblock=` (1 = đang chặn).
-
-## Nhảy huỷ animation (2026-10-19)
-
-Nút nhảy là bit 6 của `ChrActions` (`ACTION_ARM_CHANGE_STYLE`, ghi chú trong
-`fromsoftware-rs`: "repurposed to jump in Elden Ring"). Mở bit 6 trong `cancel_entries[id]` (cùng
-`possible_action_inputs` / `possible_action_cancels`) và cờ chung `ACTION_GENERAL` là đủ: test trong
-game, nhảy huỷ được đòn đánh, weapon art, phép và dùng item. Không cần thêm cờ `slot_switch` hay bit 37
-như đổi vũ khí. Cấu hình `[Jump]` có cùng bộ `Enabled` / `Attack` / `Skill` / `Cast` / `Item` với các hành động khác.
+- Side effects of the cut animation: invincibility frames, hitboxes, stamina, facing, FP spent when
+  cutting a spell.
+- Seamless Co-op: animation IDs are synchronised, so other players may see jerky motion.
+  `cancel_entries.push_back` uses the game's allocator; no problem seen in testing.

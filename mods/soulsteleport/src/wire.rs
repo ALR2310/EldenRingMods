@@ -96,7 +96,12 @@ impl Packet {
                 yaw: f32_at(p, 32),
             };
             let name = std::array::from_fn(|k| u16::from_le_bytes([p[36 + k * 2], p[37 + k * 2]]));
-            return Some(Packet::Here(Here { sender: u64_at(p, 4), request_id: u32_at(p, 12), spot, name }));
+            return Some(Packet::Here(Here {
+                sender: u64_at(p, 4),
+                request_id: u32_at(p, 12),
+                spot,
+                name,
+            }));
         }
         None
     }
@@ -143,7 +148,13 @@ mod tests {
 
     #[test]
     fn a_negative_block_id_survives_the_round_trip() {
-        let bytes = Here { sender: 1, request_id: 1, spot: Spot { block_id: -1, ..spot() }, name: [0; NAME_UNITS] }.encode();
+        let bytes = Here {
+            sender: 1,
+            request_id: 1,
+            spot: Spot { block_id: -1, ..spot() },
+            name: [0; NAME_UNITS],
+        }
+        .encode();
         let Some(Packet::Here(h)) = Packet::decode(&bytes) else { panic!() };
         assert_eq!(h.spot.block_id, -1);
     }
@@ -168,7 +179,10 @@ mod tests {
 
     #[test]
     fn the_claimed_sender_is_the_same_for_both_kinds() {
-        assert_eq!(Packet::decode(&Where { sender: 42, request_id: 1 }.encode()).unwrap().sender(), 42);
+        assert_eq!(
+            Packet::decode(&Where { sender: 42, request_id: 1 }.encode()).unwrap().sender(),
+            42
+        );
         let here = Here { sender: 43, request_id: 1, spot: spot(), name: [0; NAME_UNITS] };
         assert_eq!(Packet::decode(&here.encode()).unwrap().sender(), 43);
     }

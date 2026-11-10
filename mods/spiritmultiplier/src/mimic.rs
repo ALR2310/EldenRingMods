@@ -1,4 +1,4 @@
-//! `InstantMimic` (default `true`): the Mimic Tear skips the "Blob" stage. Analysis and the er10x origin: `docs/mimic_tear.md`.
+//! `InstantMimic` (default `true`): the Mimic Tear skips the "Blob" stage. Analysis: `docs/mimic_tear.md`.
 //!
 //! One param edit, from a snapshot so F5 works both ways: the Blob `BuddyParam` row (NPC in [crate::chain]'s `TRANSIENT_NPCS`)
 //! takes the real Mimic's spawn fields from the row with the same
@@ -17,7 +17,9 @@ use eldenring::cs::{BuddyParam, CSTaskGroupIndex, SoloParamRepository};
 use eldenring::param::BUDDY_PARAM_ST;
 use fromsoftware_shared::FromStatic;
 
-use common::{config, logger};
+use shared::logger;
+
+use crate::config;
 
 const TICK_INTERVAL_MS: f64 = 1000.0;
 
@@ -26,7 +28,7 @@ static BLOB_REPLACED: AtomicBool = AtomicBool::new(false);
 /// 1 while the HUD's Blob check answers "not a Blob".
 static HUD_FLAG: AtomicU8 = AtomicU8::new(0);
 
-/// True while the HUD's Blob check ([crate::buddy_hud]) answers "not a Blob".
+/// True while the HUD's Blob check ([crate::buddy::hud]) answers "not a Blob".
 pub fn hud_flag() -> bool {
     HUD_FLAG.load(Ordering::Relaxed) != 0
 }
@@ -74,7 +76,11 @@ impl Spawn {
             ],
             init: row.npc_player_init_param_id(),
             anim: row.generate_anim_id(),
-            flags: [row.appear_on_around_sekihi(), row.disable_pc_target_share(), row.pc_follow_type()],
+            flags: [
+                row.appear_on_around_sekihi(),
+                row.disable_pc_target_share(),
+                row.pc_follow_type(),
+            ],
         }
     }
 
@@ -113,11 +119,11 @@ struct Plan {
 }
 
 fn capture(repo: &mut SoloParamRepository) -> Option<Plan> {
-    if let Err(err) = common::params::check::<BuddyParam>(repo) {
+    if let Err(err) = shared::params::check::<BuddyParam>(repo) {
         logger::error(&format!("InstantMimic: {err} - not touching params."));
         return None;
     }
-    let Some(ids) = common::params::row_ids::<BuddyParam>(repo) else {
+    let Some(ids) = shared::params::row_ids::<BuddyParam>(repo) else {
         logger::error("InstantMimic: param row IDs unreadable - not touching params.");
         return None;
     };
@@ -128,7 +134,7 @@ fn capture(repo: &mut SoloParamRepository) -> Option<Plan> {
     // trigger -> (Blob row indexes, first non-Blob row's index)
     let mut groups: HashMap<i32, (Vec<usize>, Option<usize>)> = HashMap::new();
     let mut spawns: Vec<Spawn> = Vec::new();
-    common::params::for_each_row_mut::<BuddyParam>(repo, |index, row| {
+    shared::params::for_each_row_mut::<BuddyParam>(repo, |index, row| {
         spawns.push(Spawn::read(row));
         let entry = groups.entry(row.trigger_sp_effect_id()).or_default();
         if transient.contains(&(ids[index] as i32)) {
@@ -138,12 +144,12 @@ fn capture(repo: &mut SoloParamRepository) -> Option<Plan> {
         }
     });
 
-    // What er10x does (decompiled, `docs/mimic_tear.md`): the Blob row becomes
+    // What another mod does (decompiled, `docs/mimic_tear.md`): the Blob row becomes
     // a copy of the Mimic row, and every spirit's rise-out-of-the-ground spawn
     // animation (the Mimic's 60500) becomes the plain one all ordinary spirits
     // share (1830, found as the most common non-Blob value). The three flag
     // bytes matter too: a Blob row's follow type is what left the copy standing
-    // still (test 2026-10-22).
+    // still (seen in a test).
     let mut counts: HashMap<i32, usize> = HashMap::new();
     for (index, spawn) in spawns.iter().enumerate() {
         if !transient.contains(&(ids[index] as i32)) {
@@ -174,14 +180,14 @@ fn capture(repo: &mut SoloParamRepository) -> Option<Plan> {
 }
 
 pub fn run() {
-    let cs_task = common::task::wait_for_cs_task();
+    let cs_task = shared::task::wait_for_cs_task();
 
     let mut elapsed_ms: f64 = 0.0;
     // None = not captured yet; Some(None) = capture failed, stay off.
     let mut plan: Option<Option<Plan>> = None;
     let mut applied: Option<bool> = None;
 
-    let _handle = common::task::run_recurring_safe(
+    let _handle = shared::task::run_recurring_safe(
         cs_task,
         "InstantMimic",
         CSTaskGroupIndex::FrameBegin,
@@ -193,14 +199,15 @@ pub fn run() {
             elapsed_ms = 0.0;
 
             // Same in-world gate as every other param-touching feature.
-            if common::player::main_player_chr_ins_ptr().is_none() {
+            if shared::player::main_player_chr_ins_ptr().is_none() {
                 return;
             }
+            // SAFETY: called from a game task; the accessor returns `Err` while the singleton does not exist.
             let Ok(repo) = (unsafe { SoloParamRepository::instance_mut() }) else {
                 return;
             };
 
-            let instant = config::get_bool("InstantMimic", true);
+            let instant = config::get().spirit.instant_mimic;
             let Some(plan) = plan.get_or_insert_with(|| capture(repo)) else {
                 return;
             };

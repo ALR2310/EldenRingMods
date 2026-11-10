@@ -1,6 +1,6 @@
 [General]
 # file format version, managed by the mod - don't change
-ConfigVersion = 1
+ConfigVersion = 3
 
 # Key that reloads this file in-game, no restart needed.
 # https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
@@ -19,35 +19,31 @@ ToggleKey = "F6"
 DragKey = "F7"
 
 
-[Layout]
-# Position of the minimap and target bar, from the top-right corner of the
-# screen, in pixels at 1080p.
-OffsetX = 48            # distance from the right edge; negative moves right
-OffsetY = 47            # distance from the top edge
-TargetOffsetX = 0       # moves the target bar from its place under the minimap, same directions as
-TargetOffsetY = 0       # OffsetX and OffsetY (dragging sets these); a moved bar no longer slides up
-
-
 [Target]
 # The locked-on enemy's health and posture bars.
 Enabled = true
+OffsetX = 0             # Moves the panel away from under the minimap (from the right edge, pixels at 1080p).
+OffsetY = 0             # Same, from the top edge. Moved, it stops following the minimap.
 Width = 250             # Bar length in pixels (100 - 1600).
 Scale = 1.0             # Panel size multiplier (0.5 - 3.0).
 Buildup = true          # Status buildup bars (poison, rot, bleed...).
 Effects = true          # The enemy's effects with the time left, as icons under its bars.
 Numbers = true          # Show health, posture and buildup numbers.
+BossBar = true          # Move the boss health bars down, with posture and effects under them (restart needed).
 
 
 [Player]
 # Your own status icons and buildup bars at the top-left.
 Scale = 0.7             # Size of the buildup gauge, 1 = the game's own (0.5 - 3.0).
-Effects = true          # Time left under each of the game's status icons.
+EffectTimer = true      # Time left under each of the game's status icons.
 Buildup = true          # Move your buildup gauge to the top-left, under the status icons.
 
 
 [Minimap]
 # Round minimap: other players, your spirits, the locked-on enemy.
 Enabled = true
+OffsetX = 35            # Distance from the right edge, pixels at 1080p (negative moves right).
+OffsetY = 50            # Distance from the top edge. The target panel follows.
 Size = 125              # radius in pixels at 1080p (40 - 200)
 Scale = 1.0             # size multiplier (0.5 - 3.0)
 Range = 100             # meters from center to rim (20 - 200)
@@ -74,8 +70,16 @@ Enemies = false         # hostile enemies near you, as red dots
 
 [Minimap.Hide]
 InCaves = false         # caves, catacombs and tunnels
-AtRoundtable = false    # Roundtable Hold
+AtRoundtable = true     # Roundtable Hold
 InBossFights = false    # while a boss health bar is on screen
+
+
+[HUD.RuneCounter]
+# The game's rune counter, moved to the top right; the minimap moves down if it would cover it.
+Enabled = false
+Scale = 0.7             # Size, 1 = the game's own (0.3 - 1.5).
+OffsetX = 35            # Distance from the right edge, pixels at 1080p.
+OffsetY = 20            # Distance from the top edge.
 
 
 [Rendering]

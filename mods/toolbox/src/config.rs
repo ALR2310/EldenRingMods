@@ -1,4 +1,4 @@
-//! `Toolbox.toml`, loaded through `common::toml_config`. Defaults live only in the embedded
+//! `Toolbox.toml`, loaded through `shared::toml_config`. Defaults live only in the embedded
 //! template: `Default` on these structs is the derived zero value the loader needs while
 //! parsing, never a config in use (see the test `template_sets_every_field`).
 
@@ -6,7 +6,7 @@ use std::sync::{Arc, OnceLock};
 
 use serde::{Deserialize, Serialize};
 
-use common::toml_config::{LoadReport, Migration, Step, TomlConfig};
+use shared::toml_config::{LoadReport, Migration, Step, TomlConfig};
 
 /// Embedded verbatim at compile time - single source of truth for the default file.
 pub const TEMPLATE: &str = include_str!("../Toolbox.toml");
@@ -35,7 +35,7 @@ pub struct Config {
 pub struct General {
     /// File format version, managed by the mod.
     pub config_version: u32,
-    #[serde(deserialize_with = "common::toml_config::key_name")]
+    #[serde(deserialize_with = "shared::toml_config::key_name")]
     pub reload_key: String,
     pub reload_banner: bool,
     pub load_delay: u32,
@@ -44,7 +44,7 @@ pub struct General {
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct Menu {
-    #[serde(deserialize_with = "common::toml_config::key_name")]
+    #[serde(deserialize_with = "shared::toml_config::key_name")]
     pub key: String,
     pub scale: f64,
     pub x: f64,
@@ -107,7 +107,8 @@ pub struct Logging {
     pub log_file: bool,
 }
 
-const MIGRATION: Migration = Migration { version_key: "General.ConfigVersion", steps: STEPS, keep: &[] };
+const MIGRATION: Migration =
+    Migration { version_key: "General.ConfigVersion", steps: STEPS, keep: &[] };
 
 static CONFIG: OnceLock<TomlConfig<Config>> = OnceLock::new();
 
@@ -129,7 +130,7 @@ pub fn get() -> Arc<Config> {
 
 /// The template's values - the defaults.
 pub fn template() -> Config {
-    common::toml_config::defaults(TEMPLATE)
+    shared::toml_config::defaults(TEMPLATE)
 }
 
 pub fn reload() -> Result<(), String> {
@@ -170,13 +171,14 @@ fn overlay_save(values: &[(&str, String)]) -> bool {
         .iter()
         .map(|(key, text)| (menu_path(key).unwrap_or_else(|| (*key).to_string()), text.clone()))
         .collect();
-    let refs: Vec<(&str, String)> = mapped.iter().map(|(key, text)| (key.as_str(), text.clone())).collect();
+    let refs: Vec<(&str, String)> =
+        mapped.iter().map(|(key, text)| (key.as_str(), text.clone())).collect();
     save(&refs)
 }
 
-/// What `common::overlay` needs to keep the menu's layout and scale in this file.
-pub fn overlay_store() -> common::overlay::Store {
-    common::overlay::Store { get: overlay_get, save: overlay_save }
+/// What `shared::overlay` needs to keep the menu's layout and scale in this file.
+pub fn overlay_store() -> shared::overlay::Store {
+    shared::overlay::Store { get: overlay_get, save: overlay_save }
 }
 
 #[cfg(test)]
@@ -185,7 +187,7 @@ mod tests {
 
     #[test]
     fn template_sets_every_field() {
-        let missing = common::toml_config::template_missing_keys::<Config>(TEMPLATE, &[]);
+        let missing = shared::toml_config::template_missing_keys::<Config>(TEMPLATE, &[]);
         assert!(missing.is_empty(), "template lacks {missing:?}");
     }
 
@@ -198,7 +200,8 @@ mod tests {
 
     #[test]
     fn missing_keys_fall_back_to_the_template() {
-        let parsed: Config = common::toml_config::parse("[Buildup]\nAmount = 50\n", TEMPLATE).unwrap();
+        let parsed: Config =
+            shared::toml_config::parse("[Buildup]\nAmount = 50\n", TEMPLATE).unwrap();
         assert_eq!(parsed.buildup.amount, 50);
         assert_eq!(parsed.general.load_delay, template().general.load_delay);
         assert!(parsed.map_anywhere.enabled);
@@ -206,14 +209,16 @@ mod tests {
 
     #[test]
     fn misspelled_key_is_an_error_with_its_line() {
-        let err = common::toml_config::parse::<Config>("[Buildup]\nAmmount = 1\n", TEMPLATE).unwrap_err();
+        let err =
+            shared::toml_config::parse::<Config>("[Buildup]\nAmmount = 1\n", TEMPLATE).unwrap_err();
         assert!(err.contains("Ammount") && err.contains("line 2"), "{err}");
     }
 
     /// The overlay's `MenuX`... keys land in `[Menu]` and every comment of the template survives.
     #[test]
     fn overlay_layout_is_saved_into_the_menu_table() {
-        let path = std::env::temp_dir().join(format!("toolbox_overlay_save_{}.toml", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("toolbox_overlay_save_{}.toml", std::process::id()));
         let path_text = path.to_string_lossy().to_string();
         let _ = std::fs::remove_file(&path);
         init(&path_text);

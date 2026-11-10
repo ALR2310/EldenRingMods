@@ -1,50 +1,27 @@
-# player: cổng "người chơi đã vào thế giới"
+# The player and its characters
 
-**Status 2026-10-13: hoạt động, `main_player_chr_ins_ptr` được hơn 20 nơi dùng, `wait_for_solo_param_repository` bởi các mod đụng param. Code ở `shared/src/player.rs`. Không có test tự động (cần `WorldChrMan` thật của game).**
+Status: **Confirmed** in released mods of the old repository (not yet re-tested in game from this one). Conventions: [research notes](../../docs/research/README.md).
+Code: `shared/src/player.rs`.
 
-## Quy tắc
+## Question
 
-Mọi tính năng chạm vào singleton mà dữ liệu chỉ được điền khi có nhân vật người
-chơi thật (`GameDataMan` với dữ liệu save, `SoloParamRepository` với bảng param)
-phải chờ `WorldChrMan::main_player`, **không** chỉ chờ `instance()` /
-`instance_mut()` trả `Ok`. `Ok` chỉ nghĩa là đối tượng quản lý đã tồn tại, việc
-này xảy ra ngay khi một ô save được nạp, vẫn ở màn hình tiêu đề hoặc đang loading,
-rất lâu trước khi dữ liệu có thật.
+When is it safe to read or change the player, and how are the characters of a set walked safely?
 
-Đã bị cắn ở `sometweaks` (2026-08-24/25): cộng rune sớm trong `rune::reward`, và
-crash trong `drop_rate` trước khi `SoloParamRepository` được chặn theo cùng cách.
-Hàm gom từ `sometweaks::player` và `risearcher::player` (hai bản y hệt) khi mod
-thứ ba cần cùng cổng này.
+## Mechanism
 
-## `ActionSnapshot`
+- **`main_player_chr_ins_ptr()` is the gate.** A singleton's `instance()` returning `Ok` only says the
+  manager exists, which it does at the title screen. Features that need real data (`GameDataMan` save data,
+  the param tables of `SoloParamRepository`) must wait until the main player exists. `SoloParamRepository`
+  can be `Ok` while its tables are still empty.
+- **`wait_for_solo_param_repository()`** waits for both, logging once because picking a save and loading
+  in can take minutes.
+- **`for_each_active_chr(set, f)`** dereferences only `Active` and `ReadyForActivation` entries; any other
+  entry can be stale.
+- **`main_player_action_snapshot()`** reads the pad input of `CSChrActionRequestModule`. `r1`, `r2`, `l1`,
+  `l2` and `new_gesture` are true for one frame, on the press, and `requested_gesture` means something only
+  on that frame. `busy` is every other way the player is not idle: held actions and movement input.
 
-Đọc các bit input của pad mỗi frame từ `CSChrActionRequestModule` của người chơi
-chính, cho mọi tính năng cần phân loại input ("đòn đánh này là đòn thường hay
-Ash of War?", "người chơi có đang rảnh không?", "vừa bắt đầu cử chỉ?").
+## Use
 
-- `r1/r2/l1/l2/new_gesture` lấy từ `new_action_presses`, đúng 1 frame ở lúc bấm.
-  Kiểm trong game (2026-09-03): tương quan với đòn Ash of War/Skill đáng tin hơn
-  nhiều so với bất kỳ trường `AtkParam` nào (xem README của autoregen).
-- `requested_gesture` là giá trị thường, chỉ có nghĩa trong frame `new_gesture` bật.
-- `busy` gồm mọi cách khác khiến người chơi "không rảnh": các hành động đang giữ
-  (không chỉ mới bấm) từ `action_requests`, cộng input di chuyển, đọc từ cùng module
-  để người gọi khỏi phải gọi thêm `WorldChrMan::instance()`.
-
-Gom từ `autoregen::regen` (2026-09-17) khi `NewActionPresses` hẹp hơn của
-`sometweaks::player` (chỉ `r1/r2/l1/l2`) hoá ra là tập con của đúng các trường
-này; ai chỉ cần 4 bit bấm thì bỏ qua phần còn lại.
-
-## `wait_for_solo_param_repository`: chờ mãi mãi
-
-Chờ cả `SoloParamRepository` lẫn người chơi trong thế giới. Từ 2026-08-24 đến
-2026-09-17 hàm nhận `timeout` và trả `Option`; mọi nơi gọi đều truyền
-`Duration::from_secs(300)` và coi hết hạn là "tắt cho phiên này" (có mod, như
-`risearcher`, còn không giữ task theo dõi reload sau mốc đó). Thực tế người chơi
-alt-tab hoặc chậm chọn save mất tính năng đến hết phiên mà chỉ có một dòng log dễ
-bỏ sót, trừ khi họ biết bấm `ReloadKey`. Không có lý do thật sự để bỏ cuộc ở đây:
-khác với việc tra cứu khoá theo phiên bản, đây chỉ là "chưa xảy ra", nên hàm giờ
-thử mãi, giống `wait_for_cs_task`.
-
-Cứ 30 giây trong lúc chờ có một dòng log nhắc. Không phải cảnh báo (mất vài phút
-để chọn save và vào game là bình thường, khác với `CSTaskImp` khởi tạo chậm), chỉ để
-thấy thread không chết.
+Check the gate at the start of every tick and return when it is `None`. Write to the player only from a
+game task (`FrameBegin` for stats), never from a worker thread.

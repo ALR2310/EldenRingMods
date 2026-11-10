@@ -41,7 +41,7 @@ pub struct Beacon {
 
 /// Reads a `T` at `address`, or `None` if that memory cannot be read.
 fn read<T: Copy>(address: usize) -> Option<T> {
-    common::memscan::read_safe(address)
+    shared::memscan::read_safe(address)
 }
 
 /// A non-null pointer stored at `address`.
@@ -105,10 +105,7 @@ fn parse(slots: &[[u8; 16]], wanted: u8) -> Vec<Beacon> {
             return Vec::new();
         }
         if map == wanted {
-            beacons.push(Beacon {
-                position: from_game_map([x, y]),
-                number: i as u8 + 1,
-            });
+            beacons.push(Beacon { position: from_game_map([x, y]), number: i as u8 + 1 });
         }
     }
     beacons
@@ -119,10 +116,7 @@ fn parse(slots: &[[u8; 16]], wanted: u8) -> Vec<Beacon> {
 fn from_game_map([x, y]: [f32; 2]) -> [f32; 2] {
     const HALF: f32 = TILE as f32 / 2.0;
     let y_up = 41.0 * TILE as f32 - y;
-    [
-        x - HALF + 28.0 * TILE as f32,
-        y_up - HALF + 24.0 * TILE as f32,
-    ]
+    [x - HALF + 28.0 * TILE as f32, y_up - HALF + 24.0 * TILE as f32]
 }
 
 #[cfg(test)]

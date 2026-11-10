@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-05
+
+- Clean code, hoping to fix false positives.
+
 ## [1.4.0] - 2026-10-21
 
 - Fixed the reload key working outside the game window.

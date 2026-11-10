@@ -219,12 +219,12 @@ fn decode_lossless2(body: &[u8]) -> Option<Image> {
             }
         }
     } else {
-        for argb in raw.get(..w * h * 4)?.chunks_exact(4) {
+        for argb in raw.get(..w * h * 4)?.as_chunks::<4>().0 {
             rgba.extend_from_slice(&[argb[1], argb[2], argb[3], argb[0]]);
         }
     }
     // The art is premultiplied; the texture is straight.
-    for pixel in rgba.chunks_exact_mut(4) {
+    for pixel in rgba.as_chunks_mut::<4>().0 {
         let a = u16::from(pixel[3]);
         for c in &mut pixel[..3] {
             if let Some(straight) = (u16::from(*c) * 255 + a / 2).checked_div(a) {

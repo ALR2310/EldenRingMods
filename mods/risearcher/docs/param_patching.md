@@ -1,98 +1,107 @@
-# RiseArcher: patch param sống cho Bow / Crossbow / Ballista / Arrow / Bolt
+# Patching the live params for bows, crossbows, ballistas, arrows and bolts
 
-**Status 2026-10-07: ĐANG PHÁT HÀNH, test trong game (2026-09-08): áp đúng 99
-dòng `EquipParamWeapon` và 352 dòng `Bullet`.** Code:
-`mods/risearcher/src/weapon.rs`, `src/bullet.rs`, `src/lib.rs`. Hai sự cố khi
-khởi động và khi đọc ini nằm ở `startup_and_ini_bugs.md`.
+Status: **Confirmed** in game: the first release applied exactly 99 `EquipParamWeapon` rows and 352
+`Bullet` rows. Conventions: [research notes](../../../docs/research/README.md). Code: `src/weapon.rs`,
+`src/bullet.rs`, `src/lib.rs`.
 
-## Hai cách triển khai, cùng tồn tại
+## Question
 
-Từ 2026-08-18 project giữ **cả hai**:
+How can the ranged weapons and their ammunition be buffed without shipping a modified `regulation.bin`,
+and how do the changes survive a reload and a start-up that is too early?
 
-1. **DLL Rust (`src/`, khuyến nghị):** patch sống `SoloParamRepository` bằng
-   `fromsoftware-rs`, không đụng `regulation.bin` trên đĩa nên không xung đột
-   với mod `regulation.bin` khác; mọi hệ số đọc từ `RiseArcher.ini`.
-2. **Sửa tĩnh `regulation.bin` qua Smithbox:** `csv/RiseArcher.MASSEDIT` cùng
-   `csv/Bullet.csv`, `csv/EquipParamWeapon.csv` để dán vào Smithbox Mass Edit /
-   CSV import; `.smithbox/` là cache project (machine-specific, git-ignored).
-   Hữu ích khi cần merge tay với một mod `regulation.bin` cụ thể hoặc không muốn
-   cài DLL.
+## Two ways that coexist
 
-**Hai cách này độc lập, không tự đồng bộ.** Hệ số mặc định của DLL được port
-trực tiếp từ giá trị hardcode trong `.MASSEDIT` nên hiện khớp nhau, nhưng sửa
-một bên (vd. ini) không cập nhật bên kia. Đổi hệ số mặc định thì sửa cả hai nếu
-muốn chúng khớp.
+1. **The Rust DLL (recommended).** It patches `SoloParamRepository` live through fromsoftware-rs and never
+   touches `regulation.bin` on disk, so it does not conflict with another mod that does; every multiplier
+   comes from `RiseArcher.toml`.
+2. **A static edit of `regulation.bin` through a param editor.** `RiseArcher.MASSEDIT` is the Mass Edit
+   script of the original release, to paste into the param editor. It is useful when the changes have to be
+   merged by hand with one particular `regulation.bin` mod, or for someone who does not want a DLL.
 
-Hướng DLL dùng `fromsoftware-rs` (Rust) thay vì `libER` (C++) như dự tính ban
-đầu, vì `SoloParamRepository` đã có sẵn accessor `EQUIP_PARAM_WEAPON_ST` /
-`BULLET_PARAM_ST` map đủ mọi field đang dùng, không cần tự dò offset.
+**They are independent and do not synchronise.** The DLL's default multipliers were ported from the values
+hard-coded in the script, so they match today, but changing one (for example in the config) does not update
+the other. Change the default multipliers in both if they should match.
+
+The DLL uses fromsoftware-rs (Rust) rather than a C++ library as first planned, because
+`SoloParamRepository` already has the `EQUIP_PARAM_WEAPON_ST` and `BULLET_PARAM_ST` accessors for every field
+in use, so no offset has to be found.
 
 ## `EquipParamWeapon` (`weapon.rs`)
 
-Bộ lọc y hệt `.MASSEDIT`, chạy một lần trên mọi dòng thay vì hàng chục lệnh Mass
-Edit riêng cho từng field:
+The same filters as the script, run once over every row instead of dozens of Mass Edit commands per field:
 
-| Loại | Điều kiện |
+| Kind | Condition |
 |---|---|
-| Bow / Greatbow | `weaponCategory == 10` |
-| Crossbow | `weaponCategory == 11` và `wepType == 55` |
-| Ballista | `weaponCategory == 11` và `wepType == 56` (Crossbow và Ballista chung category, tách bằng `wepType`) |
+| Bow, Greatbow | `weaponCategory == 10` |
+| Crossbow | `weaponCategory == 11` and `wepType == 55` |
+| Ballista | `weaponCategory == 11` and `wepType == 56` (crossbow and ballista share a category, told apart by `wepType`) |
 | Arrow | `weaponCategory == 13` |
 | Bolt | `weaponCategory == 14` |
 
-`sortId == 9999999` là quy ước của FromSoftware cho dòng trùng chỉ dành cho NPC
-(ẩn khỏi menu người chơi), luôn bị loại, đúng như `!prop sortId 9999999` trên
-mọi lệnh Mass Edit gốc. `enum WeaponKind` phân loại một lần và dùng chung cho cả
-việc lọc dòng liên quan lẫn chọn hệ số áp dụng.
+`sortId == 9999999` is FromSoftware's convention for a duplicate row that is only for NPCs, hidden from the
+player's menu; it is always excluded, like `!prop sortId 9999999` on every original Mass Edit command.
+`enum WeaponKind` classifies once and serves both the filter and the choice of multipliers.
 
-Field được chỉnh (tên MASSEDIT → accessor Rust): `attackBase*` (Physics/Magic/
-Fire/Thunder/Dark, `u16`), `correct*` (Strength/Agility/Magic/Faith/Luck, `f32`),
-`gemMountType`, `weight` (`f32`), `sellValue` (`i32`), `maxArrowQuantity` (`u8`).
+Fields written (script name, then the Rust accessor): `attackBase*` (Physics, Magic, Fire, Thunder, Dark,
+`u16`), `correct*` (Strength, Agility, Magic, Faith, Luck, `f32`), `gemMountType`, `weight` (`f32`),
+`sellValue` (`i32`) and `maxArrowQuantity` (`u8`).
 
 ## `Bullet` (`bullet.rs`)
 
-`Bullet` không có field nào để lọc như `weaponCategory` (đã xác nhận khi phân
-tích CSV gốc), nên tập dòng cần chỉnh **phải là dữ liệu**. Điều đều đặn là bố
-cục ID trong mỗi "họ" đạn: một ID gốc cộng bộ offset cố định cho các biến thể
-Ash of War (vd. `base+11` Mighty Shot, `base+50` tốc độ của Rain of Arrows,
-`base+51` tầm của nó). Mod mã hoá cấu trúc đó một lần (danh sách ID gốc ghép với
-4 bảng offset: Arrow, Great Arrow, Radahn's Spear, Bolt) thay cho ~1000 dòng Mass
-Edit viết tay. Hiện có 63 ID gốc (32 Arrow, 6 Great Arrow, 1 Radahn's Spear, 24
+`Bullet` has no field to filter on like `weaponCategory` (confirmed while analysing the original CSV), so
+the set of rows to edit **has to be data**. What is regular is the layout of ids inside each "family" of
+ammunition: a base id plus fixed offsets for the Ash of War variants (for example `base + 11` Mighty Shot,
+`base + 50` the speed of Rain of Arrows, `base + 51` its range). The mod encodes that structure once (a list
+of base ids combined with 4 offset tables: Arrow, Great Arrow, Radahn's Spear, Bolt) instead of about 1000
+hand-written Mass Edit lines. Today there are 63 base ids (32 Arrow, 6 Great Arrow, 1 Radahn's Spear, 24
 Bolt).
 
-Mỗi offset có một vai trò: `Speed` (`initVellocity`/`maxVellocity`), và riêng
-Rain of Arrows tách thành 3 đạn con vì cần chỉnh độc lập: tầm (`dist`, điểm bắt
-đầu suy giảm sát thương chứ không phải quãng bay), số lượng (`numShoot`) và độ
-loe (`shootAngleYMaxRandom`/`shootAngleXMaxRandom`).
+Each offset has a role: `Speed` (`initVellocity`, `maxVellocity`), and only Rain of Arrows is split into 3
+sub-bullets because they need separate tuning: the range (`dist`, where damage falloff starts, not how far it
+flies), the count (`numShoot`) and the spread (`shootAngleYMaxRandom`, `shootAngleXMaxRandom`).
 
-- **`numShoot` gán tuyệt đối**, không nhân: giá trị vanilla luôn là 1, nên "số
-  lượng" là cái tên trung thực hơn một hệ số của giá trị luôn bằng 1.
-- Great Arrow không bắn được Mighty Shot/Barrage/Enchanted Shot nên bảng offset
-  của nó nhảy thẳng từ đạn gốc sang Rain of Arrows.
-- `apply` tự đếm số ID không tìm thấy và ghi cảnh báo nếu lớn hơn 0: đó là dấu hiệu
-  game đã cập nhật và danh sách ID gốc cần dò lại (Smithbox, export `Bullet.csv`,
-  so khớp ID).
+- **`numShoot` is assigned, not multiplied.** The vanilla value is always 1, so "count" is a more honest key
+  than a multiplier of a value that is always 1.
+- Great Arrows cannot fire Mighty Shot, Barrage or Enchanted Shot, so their offset table jumps from the plain
+  bullet straight to Rain of Arrows.
+- `apply` counts the ids it did not find and warns when there are any: a sign that the game updated and the
+  base id lists need checking (export `Bullet.csv` from a param editor and compare the ids).
 
-## Hot reload không cộng dồn
+## A reload does not compound
 
-`weapon::apply`/`bullet::apply` từng scale **trực tiếp trên giá trị đang đọc từ
-dòng**; gọi lại lần hai sẽ cộng dồn (`* 1.5` hai lần ra `* 2.25`). Sửa bằng cách
-lưu **giá trị gốc** của từng dòng (`weapon::Baseline`/`bullet::Baseline`, khoá
-theo ID dòng) ngay lần `apply` đầu và mọi lần sau (kể cả reload) luôn scale từ
-baseline đó. Field gán tuyệt đối thì không cần baseline: `max_arrow_quantity`,
-`num_shoot`, `gem_mount_type` (luôn gán `2`).
+`weapon::apply` and `bullet::apply` once scaled **the value currently read from the row**, so a second call
+compounded (`* 1.5` twice gave `* 2.25`). The **original** values of each row (`weapon::Baseline`,
+`bullet::Baseline`, keyed by row index and by row id) are now saved on the first `apply`, and every later
+one, reloads included, scales from that baseline. Fields assigned absolutely need none: `max_arrow_quantity`,
+`num_shoot` and `gem_mount_type` (always `2`).
 
-## Rủi ro đã biết
+## Start-up
 
-- **Làm tròn số nguyên:** field `u16` (sát thương) và `u8` (`max_arrow_quantity`)
-  dùng `.round()` trước khi ép kiểu. Chưa kiểm chứng khác biệt với Smithbox Mass
-  Edit (không rõ dùng round hay truncate).
-- **Regulation lệch header (Convergence và overhaul tương tự):** `weapon.rs` dùng
-  `repo.rows_mut::<EquipParamWeapon>()` và `bullet.rs` dùng `repo.get_mut::<Bullet>(id)`.
-  Cả hai đi qua lookup table của param file, và lookup table có thể thiếu một phần
-  tử so với header ở regulation của Convergence, dẫn tới panic (xem
-  `mods/dropmultiplier/docs/convergence_panic.md`; cách sửa là
-  `common::params::for_each_row_mut` / `row_ids`). Mod này **chưa chuyển** sang
-  hàm đó và chưa có ghi nhận chạy trên regulation lệch như vậy.
-- **Danh sách ID đạn gắn với regulation vanilla:** overhaul đổi bố cục ID sẽ làm
-  một số ID "không tìm thấy" (chỉ cảnh báo, không crash).
+`SoloParamRepository::instance_mut()` returns `Ok` as soon as the object exists, which is **earlier** than the
+moment the resource file of each param (`EquipParamWeapon`, `Bullet`) finishes loading. Calling `rows_mut`
+then reaches `get_param_file_mut`'s `.expect("Expected param holder to have exactly one res cap")` and
+panics, which on a thread spawned with `std::thread::spawn` ends the thread silently: no crash and no log
+line. The first test showed it as a log that stopped right after "SoloParamRepository ready", with nothing
+applied.
+
+- `shared::player::wait_for_solo_param_repository` also waits for `WorldChrMan::main_player`, meaning the
+  player is in the world and the params are loaded ([player.md](../../../shared/docs/player.md)). It waits
+  forever, as `wait_for_cs_task` does, so there is no early give-up that would also drop the reload task.
+- A second layer, `apply_with_retry` in `lib.rs`: the first `apply` runs under `catch_unwind` and is retried
+  for up to 30 seconds if it still panics. Retrying is safe because the panic always comes before any row is
+  edited.
+- The `Mutex` that keeps the original values recovers from poisoning, so a retry does not panic again at the
+  lock.
+
+## Rows are walked by index
+
+Both files use `shared::params` (`for_each_row_mut` and `row_ids_or_reason`) instead of the `rows()` and
+`get_mut(id)` of fromsoftware-rs, which go through a lookup table that can be one entry shorter than the
+header on a regulation such as Convergence's and panic ([params.md](../../../shared/docs/params.md)).
+
+## Open risks
+
+- **Integer rounding:** `u16` fields (damage) and `u8` (`max_arrow_quantity`) use `.round()` before the cast.
+  The difference from a param editor's Mass Edit, which may round or truncate, has not been checked.
+- **The bullet id lists belong to the vanilla regulation:** an overhaul that changes the id layout makes some
+  ids "not found" (a warning, no crash).

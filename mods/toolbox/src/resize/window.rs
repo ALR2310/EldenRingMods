@@ -11,7 +11,7 @@ use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::time::{Duration, Instant};
 
-use common::logger;
+use shared::logger;
 
 use crate::config;
 
@@ -52,7 +52,13 @@ unsafe extern "system" {
     fn SetWindowPos(hwnd: Hwnd, after: Hwnd, x: i32, y: i32, cx: i32, cy: i32, flags: u32) -> i32;
     fn CallWindowProcW(prev: isize, hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize;
     fn DefWindowProcW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize;
-    fn AdjustWindowRectExForDpi(rect: *mut Rect, style: u32, menu: i32, ex_style: u32, dpi: u32) -> i32;
+    fn AdjustWindowRectExForDpi(
+        rect: *mut Rect,
+        style: u32,
+        menu: i32,
+        ex_style: u32,
+        dpi: u32,
+    ) -> i32;
     fn GetDpiForWindow(hwnd: Hwnd) -> u32;
 }
 
@@ -100,16 +106,18 @@ static USER_RESIZED: AtomicBool = AtomicBool::new(false);
 const START_SIZE_WINDOW: Duration = Duration::from_secs(20);
 
 /// Hooks the game window once it exists, then keeps its resize border in
-/// sync with the ini for the rest of the process's life. Never returns.
+/// sync with the config for the rest of the process's life. Never returns.
 pub fn run() {
     // Physical pixels for this thread's own calls (`Width`/`Height`,
     // `GetClientRect`/`SetWindowPos`), whatever DPI mode the game runs in -
     // a DPI-unaware caller gets scaled coordinates (a 480x300 request came out
     // 720x450 at 150% in the first outside test).
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let mut hooked: Hwnd = null_mut();
     let mut hooked_at = Instant::now();
     loop {
+        // SAFETY: plain Win32 calls on the game window with valid pointers.
         if hooked.is_null() || unsafe { IsWindow(hooked) } == 0 {
             hooked = null_mut();
             if let Some(hwnd) = find_game_window() {
@@ -130,15 +138,19 @@ pub fn run() {
 
 unsafe extern "system" fn find_callback(hwnd: Hwnd, out: isize) -> i32 {
     let mut pid = 0u32;
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     unsafe { GetWindowThreadProcessId(hwnd, &mut pid) };
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     if pid != unsafe { GetCurrentProcessId() } || unsafe { IsWindowVisible(hwnd) } == 0 {
         return 1;
     }
     let mut buf = [0u16; 64];
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     let len = unsafe { GetClassNameW(hwnd, buf.as_mut_ptr(), buf.len() as i32) }.max(0) as usize;
     // Class (and title) is "ELDEN RING™"; the process also owns hidden
     // "IME"/"DIEmWin" helper windows.
     if String::from_utf16_lossy(&buf[..len]).starts_with("ELDEN RING") {
+        // SAFETY: the pointer is the one the window procedure or the callback was given.
         unsafe { *(out as *mut Hwnd) = hwnd };
         return 0;
     }
@@ -147,6 +159,7 @@ unsafe extern "system" fn find_callback(hwnd: Hwnd, out: isize) -> i32 {
 
 pub fn find_game_window() -> Option<Hwnd> {
     let mut found: Hwnd = null_mut();
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     unsafe { EnumWindows(find_callback, &mut found as *mut Hwnd as isize) };
     (!found.is_null()).then_some(found)
 }
@@ -154,20 +167,26 @@ pub fn find_game_window() -> Option<Hwnd> {
 fn hook(hwnd: Hwnd) {
     // Store the current procedure before swapping, so a message arriving
     // between the swap and the store below never sees 0.
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     ORIG_WNDPROC.store(unsafe { GetWindowLongPtrW(hwnd, GWLP_WNDPROC) }, Ordering::SeqCst);
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     let prev = unsafe { SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wnd_proc as *const () as isize) };
     if prev == 0 {
-        logger::error("Window: subclass failed (SetWindowLongPtr returned 0), resizing unavailable");
+        logger::error(
+            "Window: subclass failed (SetWindowLongPtr returned 0), resizing unavailable",
+        );
         return;
     }
     ORIG_WNDPROC.store(prev, Ordering::SeqCst);
     FRAME_ADDED.store(false, Ordering::SeqCst);
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     logger::log(&format!("Window: hooked (DPI {})", unsafe { GetDpiForWindow(hwnd) }));
 }
 
 /// Adds or removes `WS_THICKFRAME` to match `Resizable`, windowed mode only
 /// (fullscreen/borderless windows have no caption and are left alone).
 fn sync_frame(hwnd: Hwnd) {
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     let style = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) } as u32;
     let windowed = style & WS_CAPTION == WS_CAPTION;
     let has_frame = style & WS_THICKFRAME != 0;
@@ -193,6 +212,7 @@ fn sync_frame(hwnd: Hwnd) {
         }
         return;
     };
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     unsafe {
         SetWindowLongPtrW(hwnd, GWL_STYLE, new_style as isize);
         SetWindowPos(
@@ -212,6 +232,7 @@ fn sync_frame(hwnd: Hwnd) {
 /// the window is minimized.
 fn frame_size(hwnd: Hwnd) -> (i32, i32) {
     let mut rect = Rect::default();
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     unsafe {
         let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
         let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
@@ -220,15 +241,18 @@ fn frame_size(hwnd: Hwnd) -> (i32, i32) {
     (rect.right - rect.left, rect.bottom - rect.top)
 }
 
-/// Resizes the window so its client area is the ini's startup size, keeping
+/// Resizes the window so its client area is the config's startup size, keeping
 /// its position. No-op when already that size, minimized, or not windowed.
 fn apply_start_size(hwnd: Hwnd) {
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     let style = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) } as u32;
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     if style & WS_CAPTION != WS_CAPTION || unsafe { IsIconic(hwnd) } != 0 {
         return;
     }
     let mut client = Rect::default();
     let mut window = Rect::default();
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     unsafe {
         GetClientRect(hwnd, &mut client);
         GetWindowRect(hwnd, &mut window);
@@ -238,7 +262,8 @@ fn apply_start_size(hwnd: Hwnd) {
         let config = config::get();
         (config.window_resize.width, config.window_resize.height)
     };
-    let Some((w, h)) = geometry::start_client_size(width, height, current, &Limits::from_config()) else {
+    let Some((w, h)) = geometry::start_client_size(width, height, current, &Limits::from_config())
+    else {
         return;
     };
     if current == (w, h) {
@@ -248,8 +273,17 @@ fn apply_start_size(hwnd: Hwnd) {
     // call below) rather than `frame_size`, which uses the window's DPI.
     let frame_w = (window.right - window.left) - current.0;
     let frame_h = (window.bottom - window.top) - current.1;
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     unsafe {
-        SetWindowPos(hwnd, null_mut(), 0, 0, w + frame_w, h + frame_h, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(
+            hwnd,
+            null_mut(),
+            0,
+            0,
+            w + frame_w,
+            h + frame_h,
+            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+        );
     }
     logger::log(&format!("Window: set to {w}x{h} (was {}x{})", current.0, current.1));
 }
@@ -260,6 +294,7 @@ unsafe extern "system" fn wnd_proc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: 
     if msg == WM_SETICON
         && let Some(icon) = crate::taskbar::override_icon()
     {
+        // SAFETY: plain Win32 calls on the game window with valid pointers.
         return unsafe { CallWindowProcW(orig, hwnd, msg, wparam, icon) };
     }
     if FRAME_ADDED.load(Ordering::SeqCst) {
@@ -268,24 +303,35 @@ unsafe extern "system" fn wnd_proc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: 
             WM_SETCURSOR => {
                 let hit = (lparam & 0xFFFF) as u32;
                 if (HT_SIZE_FIRST..=HT_SIZE_LAST).contains(&hit) {
+                    // SAFETY: plain Win32 calls on the game window with valid pointers.
                     return unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) };
                 }
             }
             WM_GETMINMAXINFO => {
+                // SAFETY: plain Win32 calls on the game window with valid pointers.
                 let result = unsafe { CallWindowProcW(orig, hwnd, msg, wparam, lparam) };
                 let (frame_w, frame_h) = frame_size(hwnd);
                 let (min_w, min_h) = Limits::from_config().min;
+                // SAFETY: the pointer is the one the window procedure or the callback was given.
                 let info = unsafe { &mut *(lparam as *mut MinMaxInfo) };
                 info.min_track_size = Point { x: min_w + frame_w, y: min_h + frame_h };
                 return result;
             }
             WM_SIZING => {
+                // SAFETY: the pointer is the one the window procedure or the callback was given.
                 unsafe { CallWindowProcW(orig, hwnd, msg, wparam, lparam) };
-                geometry::constrain(wparam, unsafe { &mut *(lparam as *mut Rect) }, frame_size(hwnd), &Limits::from_config());
+                // SAFETY: the pointer is the one the window procedure or the callback was given.
+                geometry::constrain(
+                    wparam,
+                    unsafe { &mut *(lparam as *mut Rect) },
+                    frame_size(hwnd),
+                    &Limits::from_config(),
+                );
                 return 1;
             }
             _ => {}
         }
     }
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     unsafe { CallWindowProcW(orig, hwnd, msg, wparam, lparam) }
 }

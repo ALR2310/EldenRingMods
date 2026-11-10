@@ -8,7 +8,7 @@
 use std::ffi::c_void;
 use std::time::{Duration, Instant};
 
-use common::logger;
+use shared::logger;
 
 use crate::config;
 use crate::resize::find_game_window;
@@ -61,6 +61,7 @@ pub fn run() {
             continue;
         }
         let Some(game) = find_game_window() else { continue };
+        // SAFETY: plain Win32 calls on the game window.
         let iconic = unsafe { IsIconic(game) } != 0;
         let restored = was_iconic && !iconic;
         was_iconic = iconic;
@@ -74,10 +75,14 @@ pub fn run() {
                 logger::log("Startup: the game was restored right after minimizing, leaving it");
             }
             Verdict::Minimize => {
+                // SAFETY: plain Win32 calls on the game window.
                 unsafe { ShowWindow(game, SW_SHOWMINNOACTIVE) };
                 minimized_at = Some(Instant::now());
                 was_iconic = true;
-                logger::log(&format!("Startup: the game window minimized at {:.1}s", started.elapsed().as_secs_f32()));
+                logger::log(&format!(
+                    "Startup: the game window minimized at {:.1}s",
+                    started.elapsed().as_secs_f32()
+                ));
             }
         }
     }

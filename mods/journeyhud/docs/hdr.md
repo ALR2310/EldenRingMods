@@ -1,53 +1,90 @@
-# Overlay quá sáng trên màn hình HDR
+# The overlay is too bright on an HDR display
 
-**Status 2026-11-02: đã có code (`[Rendering] HDRMode`, hudhook chép vào `vendor/`), người dùng đã thử với ERSS-FG (`Auto` chọn HDR10, minimap hết cháy màu cam); chờ liziai996 xác nhận trên máy họ.**
+Status: **Confirmed** on one HDR setup (ERSS-FG with `IsHDR` and `Force10Bit`): `Auto` picks HDR10 and
+the minimap is no longer burnt orange. Brightness against the game's own HUD was not compared with
+screenshots. Conventions: [research notes](../../../docs/research/README.md). Code: `[Rendering] HDRMode`,
+`vendor/hudhook` (see `vendor/README.md`), `ui::apply_hdr`.
 
-Báo cáo: liziai996 (Nexus, 2026-11-01), Convergence 3.0.4.1 + ERSS-FG 4.14.1 (`IsHDR = true`, `Force10Bit = true`): swap chain `DXGI_FORMAT_R10G10B10A2_UNORM`, overlay sáng và bão hoà hơn HUD của game (đo trên ảnh 4K: luma trung bình vùng minimap 59,8 so với 41,8 của cảnh; bão hoà 178 so với 148). Cách tránh duy nhất của họ là giảm `HDRBrightnessHUD` của ERSS, làm tối cả HUD của game.
+## Question
 
-## Nguyên nhân
+With the swap chain in `DXGI_FORMAT_R10G10B10A2_UNORM` and ERSS-FG's HDR output, the overlay is brighter and
+more saturated than the game's HUD (on a 4K screenshot: mean luma of the minimap area 59.8 against 41.8 for
+the scene, saturation 178 against 148). Lowering `HDRBrightnessHUD` of ERSS-FG darkens the game's HUD too.
 
-Màu ImGui và texel icon là sRGB 8 bit; hudhook vẽ thẳng vào back buffer, không đổi màu. Trên swap chain SDR đúng như vậy. Trên swap chain HDR10 (ST2084, Rec.2020) cùng con số được đọc như PQ nên trắng 1.0 thành 10.000 nit, và sRGB đọc như Rec.2020 nên màu bão hoà hơn. Với scRGB (FP16 tuyến tính, 1.0 = 80 nit) cũng sáng hơn nhiều. Suy luận từ số đo và cấu hình ERSS, **chưa kiểm** bằng ảnh chụp HDR của ta.
+## Cause (inferred from the measurements and ERSS-FG's settings)
 
-## Cách sửa
+ImGui colours and icon texels are 8-bit sRGB; hudhook draws straight into the back buffer without a colour
+conversion. On an SDR swap chain that is right. On an HDR10 swap chain (ST2084, Rec.2020) the same numbers
+are read as PQ, so white 1.0 becomes 10,000 nit, and sRGB read as Rec.2020 is oversaturated. On scRGB
+(linear FP16, 1.0 = 80 nit) it is also much brighter.
 
-hudhook dùng pixel shader cố định nên không đổi được từ ngoài. Ta chép hudhook 0.9.3 vào `vendor/hudhook` (xem `vendor/README.md`) và đổi pixel shader DX12 (`src/color.rs` trong bản chép): sau khi tính `màu đỉnh * texel`, chuyển
+## Fix
 
-- **HDR10:** sRGB sang tuyến tính, ma trận Rec.709 sang Rec.2020, nhân `203 nit * HDRBrightness`, mã hoá PQ;
-- **scRGB:** sRGB sang tuyến tính, nhân `203 / 80 * HDRBrightness`.
+hudhook has a fixed pixel shader, so a copy of hudhook 0.9.3 lives in `vendor/hudhook` with a changed DX12
+pixel shader (`src/color.rs`): after `vertex colour * texel`, convert
 
-203 nit là trắng tham chiếu HDR (BT.2408): trắng của overlay ngang trắng giấy của HUD tiêu chuẩn. `HDRGamma` là số mũ áp lên giá trị tuyến tính trước khi mã hoá. Pha màu (blend alpha) vẫn làm trong không gian đã mã hoá, như khi SDR.
+- **HDR10**: sRGB to linear, Rec.709 to Rec.2020 matrix, multiply by `203 nit * HDRBrightness`, PQ encode;
+- **scRGB**: sRGB to linear, multiply by `203 / 80 * HDRBrightness`.
 
-Chế độ (`[Rendering] HDRMode`):
+203 nit is the HDR reference white (BT.2408), so the overlay's white matches the paper white of a standard
+HUD. `HDRGamma` is an exponent applied to the linear value before encoding. Alpha blending is still done in
+the encoded space, as in SDR.
 
-| Giá trị | Ý nghĩa |
+| `HDRMode` | Meaning |
 |---|---|
-| `Auto` (mặc định) | theo colour space mà game hoặc mod khác vừa đặt cho swap chain bằng `SetColorSpace1`: G2084 (HDR10) chuyển như `HDR10`, G10 Rec.709 (scRGB) chuyển như `scRGB`, còn lại không chuyển. Đổi theo ngay khi bật/tắt HDR trong game (vd. menu ERSS) |
-| `SDR` | không chuyển, như bản 1.0.0 |
-| `HDR10` / `scRGB` | ép kiểu đó |
+| `Auto` (default) | follows the colour space the game or another mod last set on the swap chain with `SetColorSpace1`: G2084 (HDR10) converts as `HDR10`, G10 Rec.709 (scRGB) as `scRGB`, anything else is not converted. It follows an HDR toggle at once. |
+| `SDR` | no conversion, as before |
+| `HDR10` / `scRGB` | force that type |
 
-**Cách `Auto` biết colour space.** DXGI không có hàm đọc colour space của swap chain, nên bản hudhook chép (`color.rs`) đổi con trỏ slot `SetColorSpace1` (38) trong vtable của swap chain tạm: chỉ sửa dữ liệu, không vá mã nên không xung đột với hook của Steam overlay, QuestPath hay ERSS. Vtable nằm trong `dxgi.dll` và dùng chung, nên mọi swap chain cùng lớp đi qua hàm ghi lại giá trị rồi gọi hàm gốc. Hai giới hạn: (1) lần gọi xảy ra **trước** khi hook cài thì ta không thấy (khi đó `Auto` ở `SDR` tới lần gọi sau; hoặc đặt tay `HDR10`); (2) nếu mod như ERSS gọi trên lớp swap chain khác (proxy riêng) thì ta không thấy, cần kiểm bằng log.
+**How `Auto` learns the colour space.** DXGI cannot read a swap chain's colour space, so the copied hudhook
+(`color.rs`) swaps the `SetColorSpace1` slot (38) pointer in the vtable of a temporary swap chain. It changes
+data only and patches no code, so it does not conflict with the hooks of the Steam overlay or other mods. The
+vtable lives in `dxgi.dll` and is shared, so every swap chain of that class goes through a function that
+records the value and calls the original. Two limits: a call made **before** the hook is installed is not
+seen (`Auto` stays `SDR` until the next call, or set `HDR10` by hand); and a call made on another swap chain
+class (a mod's own proxy) is not seen, which the log shows.
 
-Mode, độ sáng và gamma không còn viết cứng vào shader: renderer đặt chúng vào hàng thứ ba của ma trận chiếu (vertex shader không dùng, vì z = 0), pixel shader đọc từ đó mỗi frame. Nên đổi `HDRMode`, `HDRBrightness`, `HDRGamma` rồi bấm F5 là có hiệu lực, không cần khởi động lại. Đã từng thử cách đọc `IsHDR` trong `ERSS-FG.toml`: **bỏ**, vì tên file và tên khoá có thể bị tác giả đổi (người dùng, 2026-11-02).
+The mode, brightness and gamma are not hard-coded into the shader: the renderer puts them in the third row of
+the projection matrix (unused by the vertex shader, z = 0) and the pixel shader reads them every frame, so
+changing the keys and pressing the reload key takes effect without a restart. The log has
+`Overlay: colour output <type> (swap chain colour space N, set M time(s), HDRMode ...)` whenever it changes.
 
-Log ghi `Overlay: colour output <kiểu> (swap chain colour space N, set M time(s), HDRMode ...)` mỗi khi giá trị đổi.
+A mod that uses hudhook but never calls `color::set` stays `Sdr` and draws as before.
 
-## Chưa làm / chưa kiểm
+## Rejected path
 
-- **Chưa thử** `Auto` theo `SetColorSpace1`: cần bật/tắt HDR trong menu ERSS khi game chạy và xem log `colour output`, để biết ERSS có gọi qua lớp ta bắt được không (nếu `set 0 time(s)` thì không). Ta mới thử trên một máy HDR, chưa đối chiếu độ sáng với HUD gốc bằng ảnh. Cần liziai996 thử bản `Auto`, gửi dòng log `colour output`, và nói trắng/màu đã khớp HUD chưa; chỉnh `HDRBrightness` rồi `HDRGamma` nếu lệch.
-- Ngoài ra ERSS có thể tự áp bước ánh xạ riêng sau lớp phủ của ta (người báo nói "lifted by the output mapping"); nếu vậy số 203 nit cần hệ số khác, chỉnh bằng `HDRBrightness`.
-- Mod khác dùng hudhook (SoulsTeleport, `common` overlay) cũng dùng bản chép nhưng không gọi `color::set` nên mặc định `Sdr`, vẽ y như trước.
+Reading `IsHDR` from ERSS-FG's config file: its file and key names can be changed by its author.
 
-## ERSS-FG 4.14.1: HDR của nó hoạt động thế nào (phân tích bản dump, 2026-11-02)
+## ERSS-FG's own HDR (static analysis of a dump of 4.14.1)
 
-`ERSS-FG.dll` bị pack nên không đọc tĩnh từ file được; dump từ game đang chạy bằng `scripts/dump_module.py ERSS-FG.dll --proc eldenring.exe --out tmp/scratchpad/erss` (bản dump nằm ở `tmp/scratchpad/erss/`, gitignore), rồi phân tích tĩnh. RVA là của bản 4.14.1, **đổi theo bản**. Dưới đây [XN] = xác nhận từ code, [SD] = suy đoán.
+The DLL is packed, so it was dumped from the running game and analysed statically. RVAs are of 4.14.1 and
+change per build. **Confirmed** = from code, **Inferred** = a guess.
 
-- ERSS là một ReShade addon, tự nhúng swap chain kiểu FidelityFX (log `InitSwapChain`, `UpdateSwapChainColorSpace`). Cấu hình là struct toàn cục: `OverrideColorSpace` (0x312c33), `Force10Bit` (0x312c36), `IsHDR` (0x312c39) [XN].
-- **Ô HDR của ERSS** (`IsHDR`) báo cho ERSS rằng tín hiệu là HDR; tooltip của nó nói cần bật HDR trong Windows. Khi bạn bấm ô này, hàm 0xbc930 dựng lại pipeline rồi gọi 0x192750, hàm này gọi `SetColorSpace1(12)` (G2084 P2020, tức HDR10) trên một đối tượng toàn cục (0x327268) [XN]. Khi tắt thì đặt lại colour space gốc.
-- `SetColorSpace1(12)` ở lúc khởi tạo swap chain (0x16ed30) chỉ chạy khi `OverrideColorSpace` bật [XN].
-- ERSS tự chuyển đổi tín hiệu HDR cho Frame Generation và tự vẽ UI/HUD vào swap chain của nó (`HDRBrightnessHUD`) [XN về tồn tại, chưa giải công thức]. Overlay của ta vẽ ngay trước `Present` thật nên nhiều khả năng nằm **sau** các pass này [SD].
+- ERSS-FG is a ReShade add-on with an embedded FidelityFX-style swap chain (log lines `InitSwapChain`,
+  `UpdateSwapChainColorSpace`). Its configuration is a global struct: `OverrideColorSpace` (0x312c33),
+  `Force10Bit` (0x312c36), `IsHDR` (0x312c39). Confirmed.
+- Its HDR checkbox (`IsHDR`) says the signal is HDR (its tooltip says Windows HDR must be on). Pressing it
+  rebuilds the pipeline through 0xbc930 and calls 0x192750, which calls `SetColorSpace1(12)` (G2084 P2020, i.e.
+  HDR10) on a global object (0x327268); unticking restores the original colour space. Confirmed.
+- `SetColorSpace1(12)` at swap chain creation (0x16ed30) runs only when `OverrideColorSpace` is on. Confirmed.
+- It converts the HDR signal for Frame Generation and draws the UI and HUD into its own swap chain
+  (`HDRBrightnessHUD`). Confirmed that this exists; the formula was not decoded. The overlay draws just before
+  the real `Present`, so it most likely lands **after** these passes. Inferred.
+- **Consequence**: the object 0x327268 is ERSS-FG's own swap chain (a Streamline proxy or a FidelityFX swap
+  chain), a different class from the one the `SetColorSpace1` hook sees, so no call is seen when its HDR box is
+  toggled, and no general DXGI signal gives its HDR state (the format is always `R10G10B10A2` because of
+  `Force10Bit`, Windows HDR stays off). The only way is to read its internal flag at a fixed RVA of one build,
+  which is fragile, so it is **not done**: with ERSS-FG set `HDRMode = HDR10` by hand when its HDR box is on.
 
-**Hệ quả:** đối tượng 0x327268 là swap chain của ERSS (proxy Streamline hoặc swap chain FidelityFX) [SD], khác lớp mà bản `SetColorSpace1` của ta vá, nên ta không thấy lời gọi nào khi bạn bật tắt ô HDR. Không có tín hiệu DXGI chung nào để suy ra HDR của ERSS (format luôn `R10G10B10A2` do `Force10Bit`, Windows HDR vẫn tắt). Cách duy nhất là đọc cờ nội bộ của ERSS (byte `IsHDR` ở RVA cố định của bản 4.14.1), mong manh và gắn với một bản; **không làm** (người dùng, 2026-11-02: tên và địa chỉ có thể bị tác giả đổi, để thủ công còn hơn). Vì vậy với ERSS đặt tay `HDRMode` (`HDR10` khi ô HDR của ERSS bật), `Auto` chỉ theo được game hoặc mod gọi `SetColorSpace1` qua lớp ta vá.
+## Open risks
 
-## Liên quan
+- ERSS-FG may apply its own output mapping after the overlay ("lifted by the output mapping" in a user
+  report); then the 203 nit constant needs another factor, tuned with `HDRBrightness` and `HDRGamma`.
+- Brightness and colour against the game's HUD were not compared with HDR screenshots.
 
-Cùng người báo, crash khi bật DLSS-G: nạp DLL mặc định chết tại `ERSS-FG.dll+0x13d87c` lúc ERSS tạo proxy Streamline cho `IDXGIFactory`; trì hoãn nạp khoảng 20 giây (`delay,20000` trong `.me3`) hết lỗi. Không tái hiện được ở máy ta; cùng họ với `questpath.md` và `overlay_swapchain.md` (hook DXGI/DX12 của hudhook đụng mod khác). Tạm thời dùng `delay` ở `.me3`.
+## Related
+
+Enabling DLSS-G crashed the default load order at `ERSS-FG.dll+0x13d87c` while ERSS-FG creates its Streamline
+proxy for `IDXGIFactory`; delaying the DLL by about 20 seconds (`delay,20000` in the `.me3` file) fixed it. Not
+reproduced here; same family as [questpath.md](questpath.md) (hudhook's DXGI and DX12 hooks meeting other
+mods).

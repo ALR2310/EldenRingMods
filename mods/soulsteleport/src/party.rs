@@ -7,11 +7,11 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use eldenring::cs::{CSSessionManager, ChrType, WorldChrMan};
-use common::logger;
 use fromsoftware_shared::FromStatic;
+use shared::logger;
 
 /// Last `chr_type` seen for each SteamID, so a member whose `PlayerIns` is
-/// gone for a while (loading screen, far away - co-op test 4, 2026-09-24)
+/// gone for a while (loading screen, far away)
 /// still shows their role instead of "Unknown".
 static KNOWN_ROLES: Mutex<Option<HashMap<u64, ChrType>>> = Mutex::new(None);
 
@@ -46,6 +46,7 @@ fn is_hostile_type(chr_type: ChrType) -> bool {
 /// Whether our own character is currently hostile (e.g. we're the invader) -
 /// then we may neither teleport nor answer anyone's `WHERE`.
 pub fn own_is_hostile() -> bool {
+    // SAFETY: the accessor returns `Err` while the singleton does not exist.
     let Ok(world_chr_man) = (unsafe { WorldChrMan::instance() }) else {
         return false;
     };
@@ -87,9 +88,9 @@ impl Member {
             Some(ChrType::WhitePhantom) => "Cooperator",
             Some(ChrType::Duelist) => "Invader",
             Some(ChrType::BluePhantom) => "Hunter",
-            Some(ChrType::BloodyFinger | ChrType::FesteringBloodyFinger | ChrType::BloodyFingerNpc) => {
-                "Bloody Finger"
-            }
+            Some(
+                ChrType::BloodyFinger | ChrType::FesteringBloodyFinger | ChrType::BloodyFingerNpc,
+            ) => "Bloody Finger",
             Some(ChrType::Recusant | ChrType::RecusantNpc) => "Recusant",
             Some(ChrType::Arena) => "Arena",
             Some(_) => "Other",
@@ -110,6 +111,7 @@ pub fn character_name(units: &[u16]) -> String {
 /// Everyone in `CSSessionManager.players` (empty outside a session), with
 /// character name/role filled in where the game has a `PlayerIns` for them.
 pub fn members() -> Vec<Member> {
+    // SAFETY: the accessor returns `Err` while the singleton does not exist.
     let Ok(session) = (unsafe { CSSessionManager::instance() }) else {
         return Vec::new();
     };
@@ -129,11 +131,14 @@ pub fn members() -> Vec<Member> {
 
     let mut known = KNOWN_ROLES.lock().unwrap();
     let known = known.get_or_insert_with(HashMap::new);
+    // SAFETY: the accessor returns `Err` while the singleton does not exist.
     if let Ok(world_chr_man) = unsafe { WorldChrMan::instance() } {
         for player in world_chr_man.player_chr_set.characters() {
             let steam_id = player.session_manager_player_entry.steam_id;
             if let Some(member) = members.iter_mut().find(|m| m.steam_id == steam_id) {
-                let name = character_name(&unsafe { player.player_game_data.as_ref() }.character_name);
+                let name =
+                    // SAFETY: the player's game data pointer is valid while the player is in the character set.
+                    character_name(&unsafe { player.player_game_data.as_ref() }.character_name);
                 let chr_type = player.chr_ins.chr_type;
                 if known.insert(steam_id, chr_type) != Some(chr_type) {
                     logger::log(&format!("Party: role of '{name}' {chr_type:?}"));

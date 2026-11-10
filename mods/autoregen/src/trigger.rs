@@ -1,38 +1,28 @@
-//! Player-state triggers for `Regen.PerTick.Trigger` (out of / in combat,
-//! idle, during a gesture) and the L2 "last attack was a Skill" latch behind
-//! `Regen.PerHit.ExcludeAow`. The gesture/idle logic is a state machine driven
-//! by an injected clock, so it is unit tested. Why gestures need a delayed
-//! confirmation, and the attempts that failed: `docs/gesture_trigger.md`.
+//! Player-state triggers for `[PerTick] Trigger` (out of or in combat, idle, during a gesture) and
+//! the L2 latch behind `[PerHit] ExcludeAow`. The gesture and idle logic is a state machine driven
+//! by an injected clock. Why a gesture needs a delayed confirmation: `docs/gesture_trigger.md`.
 
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 
-use common::anim::{current_anim_id, is_skill_tae};
-use common::config;
-use common::logger;
-use common::player::ActionSnapshot;
 use eldenring::cs::WorldChrMan;
 use fromsoftware_shared::FromStatic;
+use shared::anim::{current_anim_id, is_skill_tae};
+use shared::logger;
+use shared::player::ActionSnapshot;
 
-/// How long after the last hit landed or taken the player counts as "in
-/// combat". The game exposes no such flag, so this is a grace period.
+/// The game has no combat flag: "in combat" is a grace period after the last hit landed or taken.
 const COMBAT_TIMEOUT_MS: u64 = 15_000;
-/// How long the player must do nothing before `Trigger=3` (idle) applies.
+/// How long the player must do nothing before the idle trigger applies.
 const IDLE_GRACE_MS: u64 = 5_000;
 /// Floor before looking at a pending gesture, to skip a same-frame read.
 const GESTURE_CONFIRM_MIN_WAIT_MS: u64 = 200;
-/// How long the animation id must hold the same value before it is trusted:
-/// transitional animations change every ~0.5-1s, a real sit holds for seconds.
+/// How long the animation id must hold before it is trusted: transitional animations change every
+/// half second to a second, a real sit holds for seconds.
 const ANIM_STABLE_MS: u64 = 1_000;
 /// Give up on a pending gesture that never settles.
 const GESTURE_CONFIRM_TIMEOUT_MS: u64 = 6_000;
-
-/// `Regen.PerTick.GestureId` default: the sitting-family gestures. These are
-/// half the ids of The Grand Archives' CE table (`requested_gesture` reads
-/// back `id / 2`), and "Fetal Position" is left out on purpose. Editable in
-/// the ini so a new gesture needs no new DLL.
-const DEFAULT_GESTURE_IDS: &str = "80,90,91,92,93,94,95,97,100,101";
 
 /// Milliseconds since the first call: the clock every function here uses.
 pub fn now_ms() -> u64 {
@@ -40,51 +30,38 @@ pub fn now_ms() -> u64 {
     START.get_or_init(Instant::now).elapsed().as_millis() as u64
 }
 
-// Written by the hit hook and the tick on different threads, hence atomics.
+// Written by the hit hook and the tick, hence atomics.
 static LAST_COMBAT_ACTIVITY_MS: AtomicU64 = AtomicU64::new(0);
 
-/// Called whenever the player lands or takes a confirmed hit.
 pub fn mark_combat_activity() {
     LAST_COMBAT_ACTIVITY_MS.store(now_ms().max(1), Ordering::Relaxed);
 }
 
-/// Whether a hit was landed or taken within `COMBAT_TIMEOUT_MS`.
 pub fn is_in_combat() -> bool {
     let last = LAST_COMBAT_ACTIVITY_MS.load(Ordering::Relaxed);
     last != 0 && now_ms().saturating_sub(last) < COMBAT_TIMEOUT_MS
 }
 
-/// Whether the last attack-starting button was L2 (Skill), as opposed to
-/// R1/R2/L1. Latched on the press, not the held state: a multi-hit Ash of War
-/// lands hits long after L2 is released.
+/// Whether the last attack button was L2 (weapon art) rather than R1, R2 or L1. Latched on the
+/// press: a multi-hit art lands hits long after L2 is released.
 static LAST_ATTACK_WAS_SKILL: AtomicBool = AtomicBool::new(false);
 
 pub fn is_last_attack_skill() -> bool {
     LAST_ATTACK_WAS_SKILL.load(Ordering::Relaxed)
 }
 
-/// The main player's playing animation id, `None` if not resolved yet.
 pub fn main_player_anim_id() -> Option<i32> {
+    // SAFETY: called from game tasks; `instance` returns `Err` while the singleton does not exist.
     let world_chr_man = unsafe { WorldChrMan::instance() }.ok()?;
     Some(current_anim_id(&world_chr_man.main_player.as_ref()?.chr_ins))
 }
 
-/// Whether the player's current animation is an Ash of War one (TAE prefix
-/// 600..1000). Catches stance Ashes whose follow-up R1/R2 fools the latch.
+/// Whether the animation playing is a weapon art (TAE prefix 600..1000). Catches stance arts whose
+/// follow-up R1 or R2 would fool the latch.
 pub fn is_skill_anim() -> bool {
     main_player_anim_id().is_some_and(|id| is_skill_tae(id / 1_000_000))
 }
 
-/// `Regen.PerTick.GestureId` as a list of ids (bad entries are skipped).
-pub fn gesture_trigger_ids() -> Vec<i32> {
-    parse_gesture_ids(&config::get_string("Regen.PerTick.GestureId", DEFAULT_GESTURE_IDS))
-}
-
-fn parse_gesture_ids(text: &str) -> Vec<i32> {
-    text.split(',').filter_map(|id| id.trim().parse().ok()).collect()
-}
-
-/// A gesture press waiting to be confirmed by the animation settling.
 #[derive(Clone, Copy)]
 struct PendingGesture {
     since: u64,
@@ -92,7 +69,7 @@ struct PendingGesture {
     press_anim: i32,
 }
 
-/// Idle and gesture state, updated once per frame by the tick.
+/// Idle and gesture state, updated once per frame.
 #[derive(Default)]
 pub struct Triggers {
     /// When the player stopped doing anything; `None` while busy.
@@ -104,9 +81,15 @@ pub struct Triggers {
 }
 
 impl Triggers {
-    /// Feeds one frame: `now` in ms, this frame's input, the playing
-    /// animation id, and whether a gesture id is one `GestureId` lists.
-    pub fn update(&mut self, now: u64, input: &ActionSnapshot, anim: Option<i32>, is_trigger_gesture: impl Fn(i32) -> bool) {
+    /// Feeds one frame: `now`, the input, the animation playing, and whether a gesture id is one
+    /// of `[PerTick] GestureId`.
+    pub fn update(
+        &mut self,
+        now: u64,
+        input: &ActionSnapshot,
+        anim: Option<i32>,
+        is_trigger_gesture: impl Fn(i32) -> bool,
+    ) {
         if let Some(id) = anim
             && self.seen_anim.map(|(seen, _)| seen) != Some(id)
         {
@@ -122,15 +105,14 @@ impl Triggers {
         if input.new_gesture {
             let gesture = input.requested_gesture;
             if self.gesture_active {
-                // A second request while sitting always stands up first, and
-                // fires the same signal as starting one: context tells them
-                // apart. Standing up needs no confirmation.
+                // A second request while sitting stands up first and fires the same signal as
+                // starting one, so context tells them apart. Standing up needs no confirmation.
                 self.gesture_active = false;
                 self.pending = None;
                 logger::log(&format!("Gesture: {gesture} -> cancel"));
             } else if self.pending.is_some() {
-                // Not restarted: by now the animation may already be partway
-                // into the sit, which would make the baseline look "unchanged".
+                // Not restarted: the animation may already be partway into the sit, which would
+                // make the baseline look unchanged.
                 logger::log(&format!("Gesture: {gesture} -> ignored (pending)"));
             } else if is_trigger_gesture(gesture) {
                 let press_anim = anim.unwrap_or(0);
@@ -149,9 +131,8 @@ impl Triggers {
         }
     }
 
-    /// Resolves a pending gesture on a later frame: confirmed once the
-    /// animation id is non-zero, differs from the press-time one and held
-    /// steady for `ANIM_STABLE_MS`; dropped on any busy input or on timeout.
+    /// A pending gesture is confirmed once the animation id is non-zero, differs from the one at
+    /// the press and held for `ANIM_STABLE_MS`; it is dropped on any busy input or on timeout.
     fn confirm_pending(&mut self, now: u64, busy: bool) {
         let Some(pending) = self.pending else {
             return;
@@ -177,7 +158,6 @@ impl Triggers {
         }
     }
 
-    /// No movement and no held action for `IDLE_GRACE_MS`.
     pub fn is_idle(&self, now: u64) -> bool {
         self.idle_since.is_some_and(|since| now.saturating_sub(since) >= IDLE_GRACE_MS)
     }
@@ -186,8 +166,7 @@ impl Triggers {
         self.gesture_active
     }
 
-    /// Whether `Regen.PerTick.Trigger` lets this tick heal: 0 always, 1 out of
-    /// combat, 2 in combat, 3 idle, 4 during a configured gesture.
+    /// Whether `[PerTick] Trigger` lets this tick heal.
     pub fn condition_met(&self, trigger: i32, now: u64) -> bool {
         match trigger {
             1 => !is_in_combat(),
@@ -204,15 +183,22 @@ mod tests {
     use super::*;
 
     fn input(new_gesture: bool, busy: bool) -> ActionSnapshot {
-        ActionSnapshot { r1: false, r2: false, l1: false, l2: false, new_gesture, requested_gesture: 80, busy }
+        ActionSnapshot {
+            r1: false,
+            r2: false,
+            l1: false,
+            l2: false,
+            new_gesture,
+            requested_gesture: 80,
+            busy,
+        }
     }
 
     fn sitting_gestures(id: i32) -> bool {
         id == 80
     }
 
-    /// Runs frames every 100ms from `from` to `to` (exclusive) with the given
-    /// animation id, no input.
+    /// Frames every 100 ms from `from` to `to` with this animation id and no input.
     fn run(t: &mut Triggers, from: u64, to: u64, anim: i32) {
         for now in (from..to).step_by(100) {
             t.update(now, &input(false, false), Some(anim), sitting_gestures);
@@ -326,11 +312,5 @@ mod tests {
         r1.r1 = true;
         t.update(200, &r1, None, sitting_gestures);
         assert!(!is_last_attack_skill());
-    }
-
-    #[test]
-    fn gesture_ids_skip_bad_entries() {
-        assert_eq!(parse_gesture_ids("80, 90,x,,101"), vec![80, 90, 101]);
-        assert_eq!(parse_gesture_ids(DEFAULT_GESTURE_IDS).len(), 10);
     }
 }

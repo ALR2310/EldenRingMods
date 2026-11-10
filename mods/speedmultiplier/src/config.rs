@@ -1,25 +1,18 @@
-//! `SpeedMultiplier.toml`, loaded through `common::toml_config` so the
-//! per-SpEffect overrides can be a list of tables. Defaults live only in the
-//! embedded template: `Default` on these structs is the derived zero value the
-//! loader needs while parsing, never a config in use (see [template] and the
-//! test `template_sets_every_field`). `[[Override]]` entries apply top to
-//! bottom, so a later one wins on a key both set ([Config::effective_speed]).
-//! Layout, the file format version and the overrides: `docs/config_toml.md`.
+//! `SpeedMultiplier.toml`. Defaults live only in the embedded template; `Default` on these structs
+//! is the derived zero value the loader needs while parsing, never a config in use.
+//! `[[Override]]` entries apply top to bottom, so a later one wins on a key both set
+//! ([Config::effective_speed]).
 
 use std::sync::{Arc, OnceLock};
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-use common::toml_config::{LoadReport, Migration, Step, TomlConfig};
+use shared::toml_config::{LoadReport, Migration, Step, TomlConfig};
 
-/// Embedded verbatim at compile time - single source of truth for the
-/// default file.
 pub const TEMPLATE: &str = include_str!("../SpeedMultiplier.toml");
 
-/// Format migration steps for `General.ConfigVersion` (see
-/// `common::toml_config`): `STEPS[i]` takes a file from version `i + 1` to
-/// `i + 2`. Version 1 = the first released TOML format (1.1.0). Append
-/// only - a released step must never change.
+/// Migration steps for `General.ConfigVersion`: `STEPS[i]` takes a file from version `i + 1` to
+/// `i + 2`. A released step never changes.
 const STEPS: &[Step] = &[];
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
@@ -40,7 +33,7 @@ pub struct Config {
 pub struct General {
     /// File format version, managed by the mod.
     pub config_version: u32,
-    #[serde(deserialize_with = "common::toml_config::key_name")]
+    #[serde(deserialize_with = "shared::toml_config::key_name")]
     pub reload_key: String,
     pub reload_banner: bool,
 }
@@ -73,15 +66,14 @@ pub struct Torrent {
     pub other: f32,
 }
 
-/// `[Spirit]` (2026-10-07): the summoned spirit ashes - one speed for all
-/// their actions (not part of `[[Override]]`).
+/// The summoned spirits, one speed for all their actions (not part of `[[Override]]`).
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct Spirit {
     pub all: f32,
 }
 
-/// `[Enemy]` (2026-10-07): hostile enemies and bosses, one speed for all.
+/// Hostile enemies and bosses, one speed for all their actions.
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct Enemy {
@@ -97,16 +89,14 @@ pub struct Logging {
     pub enemy_probe: bool,
 }
 
-/// `[Player]` + `[Torrent]` after overrides - what `speed.rs` applies.
+/// `[Player]` and `[Torrent]` after the overrides: what `speed.rs` applies.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Speeds {
     pub player: Player,
     pub torrent: Torrent,
 }
 
-/// The player's equip load class (2026-10-06, user test: `ChrCtrl.weight_type`
-/// 1..4 went with the roll anims `027100`-`027130` as the gear got heavier;
-/// 0 = not loaded yet, treated as no class).
+/// The player's equip load class, from `ChrCtrl.weight_type` (1 to 4; 0 = not loaded yet).
 #[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoadClass {
     Light,
@@ -137,10 +127,8 @@ impl LoadClass {
     }
 }
 
-/// One `[[Override]]`: the keys it sets while its conditions hold - the
-/// player has any of `sp_effect` (when given) AND the equip load class is
-/// one of `equip_load` (when given). At least one condition is required: an
-/// override without any is an error, not one that is always on.
+/// One `[[Override]]`: the keys it sets while the player has any of `sp_effect` (when given) and
+/// the equip load class is one of `equip_load` (when given). At least one condition is required.
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(try_from = "RawOverride", rename_all = "PascalCase")]
 pub struct Override {
@@ -152,7 +140,7 @@ pub struct Override {
     pub torrent: TorrentOverride,
 }
 
-/// [Override] as written in the file, before the "needs a condition" check.
+/// As written in the file, before the "needs a condition" check.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "PascalCase")]
 struct RawOverride {
@@ -171,9 +159,8 @@ impl TryFrom<RawOverride> for Override {
 
     fn try_from(raw: RawOverride) -> Result<Self, String> {
         if raw.sp_effect.is_empty() && raw.equip_load.is_empty() {
-            return Err(
-                "an [[Override]] needs a condition: SpEffect = ... and/or EquipLoad = ...".to_string(),
-            );
+            return Err("an [[Override]] needs a condition: SpEffect = ... and/or EquipLoad = ..."
+                .to_string());
         }
         Ok(Override {
             sp_effect: raw.sp_effect,
@@ -213,7 +200,6 @@ pub struct TorrentOverride {
 }
 
 impl Override {
-    /// Writes every key this override sets into `speeds`.
     fn apply_to(&self, speeds: &mut Speeds) {
         let (o, p) = (&self.player, &mut speeds.player);
         let pairs = [
@@ -245,23 +231,20 @@ impl Override {
 }
 
 impl Config {
-    /// `[Player]` / `[Torrent]` with every override whose conditions hold
-    /// (`has_sp_effect` for `SpEffect`, `load` for `EquipLoad`; `None` = class
-    /// unknown, never matches an `EquipLoad`) applied on top, in file order, plus
-    /// the indices of those overrides.
+    /// `[Player]` and `[Torrent]` with every override whose conditions hold applied on top, in file
+    /// order, plus the indices of those overrides. `load` of `None` never matches an `EquipLoad`.
     pub fn effective_speed(
         &self,
         has_sp_effect: impl Fn(i32) -> bool,
         load: Option<LoadClass>,
     ) -> (Speeds, Vec<usize>) {
-        let mut speeds = Speeds {
-            player: self.player.clone(),
-            torrent: self.torrent.clone(),
-        };
+        let mut speeds = Speeds { player: self.player.clone(), torrent: self.torrent.clone() };
         let mut active = Vec::new();
         for (index, o) in self.overrides.iter().enumerate() {
-            let sp_effect_ok = o.sp_effect.is_empty() || o.sp_effect.iter().any(|&id| has_sp_effect(id));
-            let load_ok = o.equip_load.is_empty() || load.is_some_and(|class| o.equip_load.contains(&class));
+            let sp_effect_ok =
+                o.sp_effect.is_empty() || o.sp_effect.iter().any(|&id| has_sp_effect(id));
+            let load_ok =
+                o.equip_load.is_empty() || load.is_some_and(|class| o.equip_load.contains(&class));
             if sp_effect_ok && load_ok {
                 o.apply_to(&mut speeds);
                 active.push(index);
@@ -271,8 +254,7 @@ impl Config {
     }
 }
 
-/// `SpEffect = 1234`, `SpEffect = [1234, 1235]`; ids also accepted as
-/// strings (`"1234"`). An empty list is an error - it could never match.
+/// `SpEffect = 1234` or `[1234, 1235]`; ids may be strings too. An empty list is an error.
 fn sp_effect_ids<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<i32>, D::Error> {
     use serde::de::{Error, SeqAccess, Visitor};
 
@@ -325,9 +307,11 @@ fn sp_effect_ids<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<i32>,
     deserializer.deserialize_any(Ids)
 }
 
-/// `EquipLoad = "Heavy"` or `EquipLoad = ["Light", "Medium"]` (any case). An empty
-/// list or an unknown name is an error.
-fn equip_load_classes<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<LoadClass>, D::Error> {
+/// `EquipLoad = "Heavy"` or `["Light", "Medium"]`, any case. An empty list or an unknown name is
+/// an error.
+fn equip_load_classes<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<LoadClass>, D::Error> {
     use serde::de::Error;
 
     #[derive(Deserialize)]
@@ -355,28 +339,18 @@ fn equip_load_classes<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<
         .collect()
 }
 
-const MIGRATION: Migration = Migration {
-    version_key: "General.ConfigVersion",
-    steps: STEPS,
-    keep: &["Override"],
-};
+const MIGRATION: Migration =
+    Migration { version_key: "General.ConfigVersion", steps: STEPS, keep: &["Override"] };
 
 static CONFIG: OnceLock<TomlConfig<Config>> = OnceLock::new();
 
-/// Loads (creating / bringing in line with the template) `path`. Call
-/// once, first thing in `DllMain`'s thread; the report is for logging once
-/// the logger is up.
+/// The report is for the caller to log once the logger is up.
 pub fn init(path: &str) -> LoadReport {
-    let (config, report) = TomlConfig::load_or_create(
-        path,
-        TEMPLATE,
-        MIGRATION,
-    );
+    let (config, report) = TomlConfig::load_or_create(path, TEMPLATE, MIGRATION);
     let _ = CONFIG.set(config);
     report
 }
 
-/// The config in use - take it once per tick.
 pub fn get() -> Arc<Config> {
     match CONFIG.get() {
         Some(config) => config.get(),
@@ -384,9 +358,8 @@ pub fn get() -> Arc<Config> {
     }
 }
 
-/// The template's values - the defaults.
 pub fn template() -> Config {
-    common::toml_config::defaults(TEMPLATE)
+    shared::toml_config::defaults(TEMPLATE)
 }
 
 pub fn reload() -> Result<(), String> {
@@ -396,8 +369,7 @@ pub fn reload() -> Result<(), String> {
     }
 }
 
-/// Writes `("Section.Key", text)` pairs into the file (comments kept) and re-reads it;
-/// for the in-game menu. Returns whether it was saved.
+/// For the in-game menu: writes the pairs into the file and re-reads it.
 pub fn save(values: &[(&str, String)]) -> bool {
     match CONFIG.get() {
         Some(config) => config.save_values(values).is_ok(),
@@ -411,20 +383,23 @@ mod tests {
 
     #[test]
     fn template_sets_every_field() {
-        let missing = common::toml_config::template_missing_keys::<Config>(TEMPLATE, &["Override"]);
+        let missing = shared::toml_config::template_missing_keys::<Config>(TEMPLATE, &["Override"]);
         assert!(missing.is_empty(), "template lacks {missing:?}");
     }
 
     /// Parsed the way the loader does (two passes over the template).
     fn parse_cfg(text: &str) -> Result<Config, String> {
-        common::toml_config::parse(text, TEMPLATE)
+        shared::toml_config::parse(text, TEMPLATE)
     }
 
     #[test]
     fn spirit_all_is_read() {
-        let parsed: Config = parse_cfg("[Spirit]
+        let parsed: Config = parse_cfg(
+            "[Spirit]
 All = 1.5
-").unwrap();
+",
+        )
+        .unwrap();
         assert_eq!(parsed.spirit.all, 1.5);
         assert_eq!(parse_cfg("").unwrap().spirit.all, template().spirit.all);
     }
@@ -451,9 +426,9 @@ All = 1.5
         assert_eq!(parsed.general.reload_key, "0x74");
         let parsed: Config = parse_cfg("[General]\nReloadKey = 116\n").unwrap();
         assert_eq!(parsed.general.reload_key, "116");
-        // A TOML hex literal is an integer too (user test, 2026-10-02).
+        // A TOML hex literal is an integer too.
         let parsed: Config = parse_cfg("[General]\nReloadKey = 0x75\n").unwrap();
-        assert_eq!(common::input::parse_virtual_key(&parsed.general.reload_key, 0x74), 0x75);
+        assert_eq!(shared::input::parse_virtual_key(&parsed.general.reload_key, 0x74), 0x75);
     }
 
     fn has(ids: &'static [i32]) -> impl Fn(i32) -> bool {
@@ -504,13 +479,15 @@ Torrent.All = 2.5
 
     #[test]
     fn override_as_sub_tables_works_too() {
-        let config: Config = parse_cfg("[[Override]]\nSpEffect = 1\n[Override.Player]\nRun = 3\n").unwrap();
+        let config: Config =
+            parse_cfg("[[Override]]\nSpEffect = 1\n[Override.Player]\nRun = 3\n").unwrap();
         assert_eq!(config.overrides[0].player.run, Some(3.0));
     }
 
     #[test]
     fn sp_effect_ids_as_strings_are_accepted() {
-        let config: Config = parse_cfg("[[Override]]\nSpEffect = [\"1111\", 2222]\nTorrent.All = 2\n").unwrap();
+        let config: Config =
+            parse_cfg("[[Override]]\nSpEffect = [\"1111\", 2222]\nTorrent.All = 2\n").unwrap();
         assert_eq!(config.overrides[0].sp_effect, vec![1111, 2222]);
         assert_eq!(config.overrides[0].torrent.all, Some(2.0));
     }
@@ -589,8 +566,7 @@ Player.Roll = 0.8
 
     #[test]
     fn steps_cover_every_version() {
-        // The template's ConfigVersion is the current version: one step per
-        // version after 1.
+        // One step per version after 1.
         let doc: toml::Value = toml::from_str(TEMPLATE).unwrap();
         let current = doc["General"]["ConfigVersion"].as_integer().unwrap();
         assert_eq!(STEPS.len() as i64, current - 1);
@@ -600,11 +576,19 @@ Player.Roll = 0.8
     /// template (own-line and trailing) is still in the file afterwards.
     #[test]
     fn menu_save_keeps_every_comment() {
-        let path = std::env::temp_dir().join(format!("speedmultiplier_menu_save_{}.toml", std::process::id()));
+        let path = std::env::temp_dir()
+            .join(format!("speedmultiplier_menu_save_{}.toml", std::process::id()));
         let path_text = path.to_string_lossy().to_string();
         let _ = std::fs::remove_file(&path);
         init(&path_text);
-        assert!(save(&[("Player.All", "1.0".to_string()), ("Player.Run", "1.5".to_string()), ("Player.Walk", "2.0".to_string()), ("Torrent.Walk", "2.0".to_string()), ("Enemy.All", "0.8".to_string()), ("Logging.LogFile", "false".to_string())]));
+        assert!(save(&[
+            ("Player.All", "1.0".to_string()),
+            ("Player.Run", "1.5".to_string()),
+            ("Player.Walk", "2.0".to_string()),
+            ("Torrent.Walk", "2.0".to_string()),
+            ("Enemy.All", "0.8".to_string()),
+            ("Logging.LogFile", "false".to_string())
+        ]));
         let config = get();
         assert_eq!(config.player.run, 1.5);
         assert_eq!(config.enemy.all, 0.8);
@@ -612,9 +596,14 @@ Player.Roll = 0.8
         assert!(!config.logging.log_file);
         let text = std::fs::read_to_string(&path).unwrap();
         let comments = |text: &str| -> Vec<String> {
-            text.lines().filter_map(|line| line.find('#').map(|i| line[i..].trim_end().to_string())).collect()
+            text.lines()
+                .filter_map(|line| line.find('#').map(|i| line[i..].trim_end().to_string()))
+                .collect()
         };
-        assert!(text.lines().any(|l| l.trim_start().starts_with("Walk") && l.contains("2.0")), "whole number keeps its decimal point");
+        assert!(
+            text.lines().any(|l| l.trim_start().starts_with("Walk") && l.contains("2.0")),
+            "whole number keeps its decimal point"
+        );
         assert_eq!(comments(&text), comments(TEMPLATE));
         assert_eq!(text.lines().count(), TEMPLATE.lines().count());
         let _ = std::fs::remove_file(&path);

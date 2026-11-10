@@ -12,7 +12,9 @@ use eldenring::ChainingMapBucketEntry;
 use eldenring::cs::{BuddyParam, CSTaskGroupIndex, SoloParamRepository, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
-use common::{config, logger};
+use shared::logger;
+
+use crate::config;
 
 const TICK_INTERVAL_MS: f64 = 1000.0;
 
@@ -33,15 +35,16 @@ pub(crate) fn transient_buddies() -> HashSet<i32> {
     if let Some(set) = guard.as_ref() {
         return set.clone();
     }
+    // SAFETY: called from a game task; the accessor returns `Err` while the singleton does not exist.
     let Ok(repo) = (unsafe { SoloParamRepository::instance_mut() }) else {
         return HashSet::new();
     };
-    let Some(ids) = common::params::row_ids::<BuddyParam>(repo) else {
+    let Some(ids) = shared::params::row_ids::<BuddyParam>(repo) else {
         logger::warn("Chain: BuddyParam row ids unreadable, Amount counts every chain entry");
         return HashSet::new();
     };
     let mut set = HashSet::new();
-    common::params::for_each_row_mut::<BuddyParam>(repo, |index, row| {
+    shared::params::for_each_row_mut::<BuddyParam>(repo, |index, row| {
         if TRANSIENT_NPCS.contains(&row.npc_param_id())
             && let Some(&id) = ids.get(index)
         {
@@ -60,11 +63,11 @@ enum Mode {
 }
 
 fn read_mode() -> Option<Mode> {
-    let amount = config::get_int("Amount", 0);
+    let amount = config::get().spirit.amount;
     if amount > 0 {
         return Some(Mode::Fixed(amount as usize));
     }
-    let multiplier = config::get_double("Multiplier", 1.0);
+    let multiplier = config::get().spirit.multiplier;
     if multiplier > 0.0 && (multiplier - 1.0).abs() > f64::EPSILON {
         return Some(Mode::Multiplier(multiplier));
     }
@@ -74,14 +77,21 @@ fn read_mode() -> Option<Mode> {
 /// Chain length for one Ash. `mode == None` is vanilla length, except for a
 /// Mimic Tear chain once `InstantMimic` made its Blob a Mimic (`mimic.rs`):
 /// then one link is one Mimic and the chain shrinks to its real entries.
-fn target_count(mode: Option<&Mode>, original_ids: &[i32], transient: &HashSet<i32>, blob_replaced: bool) -> usize {
+fn target_count(
+    mode: Option<&Mode>,
+    original_ids: &[i32],
+    transient: &HashSet<i32>,
+    blob_replaced: bool,
+) -> usize {
     // The Blob's ID must stay first: the game tests it to copy the build.
     let blob_first = blob_replaced && transient.contains(&original_ids[0]);
     let raw = match (mode, blob_first) {
         (None, false) => original_ids.len(),
         (None, true) => real_count(original_ids, transient),
         (Some(Mode::Fixed(amount)), true) => *amount,
-        (Some(Mode::Multiplier(factor)), true) => ((real_count(original_ids, transient) as f64) * factor).round() as usize,
+        (Some(Mode::Multiplier(factor)), true) => {
+            ((real_count(original_ids, transient) as f64) * factor).round() as usize
+        }
         (Some(mode), false) => raw_count(mode, original_ids, transient),
     };
     raw.clamp(1, crate::band::band_len() as usize)
@@ -106,24 +116,26 @@ fn raw_count(mode: &Mode, original_ids: &[i32], transient: &HashSet<i32>) -> usi
 
 /// Builds a `target_len - 1` node extension cycling through `original_ids`
 /// (index 0 is the game's own head node, left untouched).
-fn build_extension(original_ids: &[i32], target_len: usize) -> Option<*mut ChainingMapBucketEntry<i32>> {
+fn build_extension(
+    original_ids: &[i32],
+    target_len: usize,
+) -> Option<*mut ChainingMapBucketEntry<i32>> {
     if target_len <= 1 {
         return None;
     }
     let nodes: Vec<ChainingMapBucketEntry<i32>> = (1..target_len)
-        .map(|i| ChainingMapBucketEntry {
-            data: original_ids[i % original_ids.len()],
-            next: None,
-        })
+        .map(|i| ChainingMapBucketEntry { data: original_ids[i % original_ids.len()], next: None })
         .collect();
     let leaked = Box::leak(nodes.into_boxed_slice());
     let base = leaked.as_mut_ptr();
     for i in 0..leaked.len() {
         let next = if i + 1 < leaked.len() {
+            // SAFETY: the offset stays inside the matched game code or the structure it belongs to.
             std::ptr::NonNull::new(unsafe { base.add(i + 1) })
         } else {
             None
         };
+        // SAFETY: `i` is below the length of the leaked slice that `base` points to.
         unsafe {
             (*base.add(i)).next = next;
         }
@@ -137,10 +149,11 @@ fn build_extension(original_ids: &[i32], target_len: usize) -> Option<*mut Chain
 /// length. Returns the number of chains changed.
 fn apply(mode: Option<&Mode>) -> usize {
     // `summon_buddy_manager`'s storage isn't populated until the player is
-    // actually in the world - see `summon_count.rs` (crash 2026-08-29).
-    if common::player::main_player_chr_ins_ptr().is_none() {
+    // actually in the world.
+    if shared::player::main_player_chr_ins_ptr().is_none() {
         return 0;
     }
+    // SAFETY: called from a game task; the accessor returns `Err` while the singleton does not exist.
     let Ok(world_chr_man) = (unsafe { WorldChrMan::instance_mut() }) else {
         return 0;
     };
@@ -150,13 +163,16 @@ fn apply(mode: Option<&Mode>) -> usize {
     let snapshot = snapshot_guard.get_or_insert_with(HashMap::new);
 
     let blob_replaced = crate::mimic::blob_replaced();
-    let transient = if blob_replaced || matches!(mode, Some(Mode::Fixed(_))) { transient_buddies() } else { HashSet::new() };
+    let transient = if blob_replaced || matches!(mode, Some(Mode::Fixed(_))) {
+        transient_buddies()
+    } else {
+        HashSet::new()
+    };
 
     let mut changed = 0;
     for (speffect_id, head) in manager.trigger_speffect_to_buddy_map.iter_chains_mut() {
-        let original_ids = snapshot
-            .entry(*speffect_id)
-            .or_insert_with(|| head.iter().copied().collect());
+        let original_ids =
+            snapshot.entry(*speffect_id).or_insert_with(|| head.iter().copied().collect());
         if original_ids.is_empty() {
             continue;
         }
@@ -173,11 +189,11 @@ fn apply(mode: Option<&Mode>) -> usize {
 /// Registers the chain check on `FrameBegin` (the game's main thread - the
 /// only safe place to mutate `WorldChrMan`). Never returns.
 pub fn run() {
-    let cs_task = common::task::wait_for_cs_task();
+    let cs_task = shared::task::wait_for_cs_task();
 
     let mut elapsed_ms: f64 = 0.0;
 
-    let _handle = common::task::run_recurring_safe(
+    let _handle = shared::task::run_recurring_safe(
         cs_task,
         "Chain",
         CSTaskGroupIndex::FrameBegin,

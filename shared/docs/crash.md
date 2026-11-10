@@ -1,31 +1,47 @@
-# crash: ghi lỗi nghiêm trọng vào log mod
+# Crash logging
 
-**Status 2026-11-02: stack unwind bằng `.pdata`, byte lệnh, chú thích thanh ghi, dòng `outermost:` cho stack overflow; đã thử bằng crash cố ý và crash thật trong game (ME2 và ME3). Bản đầu 2026-10-16. Code ở `shared/src/crash.rs`, cài tự động bởi `logger::install_panic_hook`.**
+Status: **Confirmed** in game: it logged the faulting addresses and stacks used in the research notes (for
+example [heap corruption](../../mods/journeyhud/docs/heap_corruption.md), the QuestPath clash). Unit tests cover
+the exception names and a fake access violation with an unreadable stack. Conventions:
+[research notes](../../docs/research/README.md). Code: `shared/src/crash.rs`, installed by
+`logger::install_panic_hook`.
 
-## Vì sao có
+## Question
 
-Crash của game khi gọi nhiều Mimic Tear trong Seamless (2026-10-16) không để lại dump WER, không có sự kiện `Application Error`, và log mod dừng giữa chừng (không có `PANIC`). Game tự thoát nên không có gì để phân tích. Cần ghi địa chỉ lỗi ngay trong log mod.
+The game swallows some crashes, so a mod's log ends with no hint. How can a mod leave the faulting address, the
+registers and a stack in its own log, without interfering with the game or with other mods?
 
-## Cách hoạt động
+## Mechanism
 
-Vectored exception handler (`AddVectoredExceptionHandler`, đứng đầu danh sách) chỉ **ghi log rồi trả `EXCEPTION_CONTINUE_SEARCH`**, nên không đổi hành vi game. Chỉ ghi các mã lỗi nghiêm trọng: access violation, stack overflow, illegal / privileged instruction, chia 0, fast fail, heap corruption. Mỗi (mã, địa chỉ) ghi một lần, tối đa 16 mục mỗi tiến trình. Mỗi mục là 4 dòng (stack overflow thêm dòng `outermost:`):
+`crash::install()` (called once through `logger::install_panic_hook`) adds a **vectored exception handler** that
+only logs and returns `EXCEPTION_CONTINUE_SEARCH`; it never handles anything. These are first-chance exceptions,
+so the **last `Exception:` line before the log ends is the crash**. A top-level exception filter does not work:
+the game's CRT replaces it.
 
-```
-Exception: access violation, read 0x30, at eldenring.exe+0x1E92100 (thread 1234)
-  code: 48 8B 01 ... (16 byte tại địa chỉ lỗi)
-  rax=... rcx=0x7FF...(eldenring.exe+0x...) ... (8 thanh ghi), 1 dòng nữa r8-r15
-  stack: eldenring.exe+0x1E92100 < eldenring.exe+0x... < SpiritMultiplier.dll+0x... < ...
-```
+Logged exceptions: access violation (with read, write or execute and the target address), stack overflow,
+illegal instruction, integer divide by zero, privileged instruction, fast fail and heap corruption
+(`0xC0000374`). Other codes (C++ exceptions, breakpoints) are ignored. At most 16 distinct `(code, address)`
+pairs are logged per process, and a re-entrant exception inside the handler is skipped.
 
-Địa chỉ in dạng `module+RVA`, tra thẳng trên IDA database của phiên bản game (xem `reference_ida_database`). Thanh ghi trỏ vào một module được chú thích `(module+RVA)`.
+Each entry has:
 
-**Stack** được unwind bằng bảng `.pdata` (`RtlLookupFunctionEntry` + `RtlVirtualUnwind`), frame đầu là chính chỗ lỗi; dừng khi rsp ra ngoài stack của luồng (TEB) hoặc không tăng. Với stack overflow (không unwind được vì stack đã cạn), hoặc khi unwind ra dưới 2 frame, dùng cách cũ: quét 0x400 byte đầu của stack lấy giá trị nằm trong một module và đứng sau lệnh `call` (kém chính xác hơn). Với stack overflow, innermost toàn là vòng đệ quy nên có thêm dòng `outermost:` quét 0x1000 byte trên cùng của stack (từ ngoài vào trong: thread start, ..., chỗ vào vòng lặp).
+- `Exception: <name> at <module>+0xRVA (thread N)`;
+- `code:` the 16 bytes at the faulting address;
+- two lines of registers, with `module+0xRVA` shown for values that point into a loaded module;
+- the **stack**, in one of two ways: unwinding with `RtlLookupFunctionEntry` / `RtlVirtualUnwind` over a copy of
+  the `CONTEXT` (up to 12 frames, stopping when `rsp` leaves the thread's stack bounds read from the TEB;
+  functions without unwind data fall back to reading the return address at `rsp`), or, when it gives fewer than 2 frames,
+  a scan of the top 0x400 bytes of the stack for values that are inside a module and right after a `call`
+  (`E8 rel32`, `FF D0..D7`, `FF 10..17`, `FF 15 rel32`, `FF 50..57 disp8`);
+- for a **stack overflow** the innermost frames are all the same loop, so the unwinder is skipped and an
+  `outermost:` line scans the first 0x1000 bytes of the stack from the top, which shows who entered the loop.
 
-**Không dùng unhandled-exception filter** (đã thử 2026-11-02 rồi bỏ): để đánh dấu "lỗi làm chết tiến trình" bằng `SetUnhandledExceptionFilter` thì trên ModEngine2 nó bị thay sau vài giây bằng `_scrt_unhandled_exception_filter` của CRT MSVC trong `eldenring.exe` (RVA `0x24FFD78` ở 2.7.2.0; hàm này chỉ gọi `terminate()` cho vài loại C++ exception, trả `EXCEPTION_CONTINUE_SEARCH` cho phần còn lại, không gọi filter trước nó, không ghi dump), nên không ra. Trên ModEngine3 thì ra, nhưng khối `FATAL` chỉ lặp lại địa chỉ của dòng `Exception:` ngay trên nó. Dòng `Exception:` cuối cùng trước khi log dừng đã đủ để điều tra.
+All memory reads go through `ReadProcessMemory`, so an unreadable address makes the read fail instead of
+faulting inside the handler.
 
-## Lưu ý
+## Limits
 
-- Đây là exception **first-chance**: game có thể tự bắt và bỏ qua một số, nên dòng `Exception:` cuối cùng trước khi log dừng mới là lỗi làm chết tiến trình, không phải mọi dòng. Ví dụ `QuestPath.dll+0x18108` luôn hiện lúc khởi động: một hàm đọc thử bộ nhớ có bắt lỗi (`mov eax,[rcx]` ... `xor al,al`), vô hại.
-- Mỗi DLL mod có một bản handler riêng nên cùng một lỗi có thể hiện ở log của nhiều mod.
-- Không ghi C++ exception (`0xE06D7363`) và breakpoint.
-- Chưa có: minidump, bắt hang / `TerminateProcess`, ghi mod hay tính năng nào đang chạy.
+- Offsets are RVAs of the module named in the log; resolve them against the matching executable build.
+- A copy of the handler lives in every DLL that links `shared`, so several mods log the same crash; each writes
+  to its own log.
+- A crash on a thread whose stack bounds cannot be read gives only the registers.

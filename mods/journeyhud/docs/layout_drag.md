@@ -1,56 +1,87 @@
-# JourneyHUD: kéo thả minimap và panel mục tiêu
+# Dragging the minimap and the target bar with the mouse
 
-**Status 2026-11-03: đã viết hướng B (kéo thả có bắt chuột) và thử qua MCP: kéo minimap và thanh mục tiêu chạy, camera đứng yên, ghi file khi nhả chuột (chưa thử cùng ERSS, và `MousePoll` của bản sao hook trong JourneyHUD báo false khi Toolbox đã hook trước, DirectInput vẫn chặn được). `General.DragKey` (F7) bật chế độ: cài lười các hook con trỏ và chặn chuột của `common::overlay` ở lần bấm đầu, đặt `overlay::MENU_OPEN` để game không thấy chuột, vẽ khung quanh minimap và thanh mục tiêu, kéo thì đổi offset ngay và ghi file khi nhả chuột. Mã: `src/drag.rs`, `src/ui.rs`, `shared/src/overlay/mod.rs` (mở `feed_mouse`, `blocks_window_message`). Các mục bên dưới là nghiên cứu trước khi làm.**
+Status: **Confirmed** in game: the minimap and the target bar drag, the camera stays still and the file is
+written when the button is released. Not tried together with ERSS-FG. Conventions:
+[research notes](../../../docs/research/README.md). Code: `src/drag.rs`, `src/ui.rs`,
+`shared/src/overlay/` ([overlay](../../../shared/docs/overlay.md)).
 
-## Hiện trạng
+## Question
 
-- **Một cột, một neo.** Minimap và thanh mục tiêu nằm trong cùng một cột, neo ở góc trên phải của khung 16:9 (`Placement.area`): `Layout.OffsetX` (cách mép phải, âm thì dịch ra ngoài, hợp với màn ultrawide) và `Layout.OffsetY` (cách mép trên), tính theo đơn vị 1080p nhân `res = area.h / 1080`. Minimap: `radar_ui.rs` (`center = [area.x + area.w - offset_x * res - radius, area.y + offset_y * res + radius]`). Thanh mục tiêu: `ui.rs::draw_target`, đặt ngay dưới minimap bằng `y = top + offset_y * res + radar_ui::column_height(res)` (`column_height` co lại khi minimap ẩn nên thanh trượt lên).
-- **Đã có đường sửa và lưu offset:** hai hàng slider `Layout.OffsetX/OffsetY` trong menu ERNativeUI (`menu.rs`) gọi `settings::set_offset_x/y` và `config::save(&[("Layout.OffsetX", ..)])` (giữ nguyên mọi comment của template), phím reload nạp lại. Kéo thả chỉ là một cách nhập khác cho hai số này.
-- **Chưa có chuột:** `ui.rs` không đọc chuột, không dùng `before_wnd_proc`/`message_filter` của hudhook, và JourneyHUD link `common` **không có feature `overlay`** (tự dùng hudhook, không dùng `shared/src/overlay`).
+How can the player move the minimap and the target bar with the mouse, when the game hides the cursor, keeps
+it pinned to the window centre and reads relative mouse input for the camera?
 
-## Vì sao chuột là phần khó
+## Layout before the drag mode
 
-Trong chơi bình thường game ẩn con trỏ, giữ nó ở giữa cửa sổ (`SetCursorPos`, `ClipCursor`) và đọc chuột tương đối (`WM_INPUT`, DirectInput, `DLUID::MouseDevice::Poll`) cho camera. Muốn kéo thả cần: (1) thả con trỏ, (2) đọc toạ độ tuyệt đối, (3) chặn chuột khỏi game để camera không xoay và nhát chuột không thành đòn đánh. `shared/src/overlay` (dùng ở `soulsteleport`, `toolbox`) đã giải đủ ba việc (xem `shared/docs/overlay.md` mục 3 và `mods/soulsteleport/docs/menu_ui.md` về các lỗi gặp phải: mất con trỏ ở cửa sổ nhỏ, raw input ghi đè toạ độ, DirectInput), nhưng chúng gắn với khung menu của overlay đó (`MENU_OPEN`, `feed_mouse` là hàm private) nên JourneyHUD chưa dùng lại được ngay.
+- **One column, one anchor.** The minimap and the target bar share one column anchored at the top right of
+  the 16:9 frame (`Placement.area`): `Minimap.OffsetX` (from the right edge; negative moves it outside, which
+  suits ultrawide) and `Minimap.OffsetY` (from the top), in 1080p units times `res = area.h / 1080`. Minimap:
+  `radar/ui.rs` (`center = [area.x + area.w - offset_x * res - radius, area.y + offset_y * res + radius]`).
+  Target bar: `ui.rs::draw_target`, just under the minimap at
+  `y = top + offset_y * res + radar_ui::column_height(res)`.
+- **A way to change and save the offsets already existed**: the `Minimap.OffsetX/OffsetY` sliders of the
+  ERNativeUI menu call `settings::set_offset_x/y` and `config::save`, which keeps every comment of the
+  template. Dragging is another way to enter the same two numbers.
 
-## Các hướng
+## Why the mouse is the hard part
 
-| Hướng | Cách làm | Ưu | Nhược |
+In normal play the game hides the cursor, holds it at the window centre (`SetCursorPos`, `ClipCursor`) and
+reads relative mouse input (`WM_INPUT`, DirectInput, `DLUID::MouseDevice::Poll`). Dragging needs: (1) the
+cursor released, (2) absolute coordinates, (3) the mouse kept from the game so the camera does not turn and a
+click is not an attack. `shared::overlay` does all three (input hooks and `feed_mouse`).
+
+## Options considered
+
+| Option | How | For | Against |
 |---|---|---|---|
-| **A. Phím mũi tên (giai đoạn 1)** | Một phím vào chế độ chỉnh (vd. `General.EditKey`); vẽ khung quanh minimap và thanh mục tiêu; Tab chọn khung, mũi tên dịch 1 px, Shift dịch 10 px; phím chỉnh lần nữa thoát và lưu | Không hook gì thêm, không đụng DLL khác (ERSS, Toolbox), chạy mọi bản game | Không phải kéo thả |
-| **B. Kéo thả chuột có hook (giai đoạn 2)** | Chế độ chỉnh bật "bắt chuột": thả con trỏ, vẽ con trỏ ImGui, đọc chuột bằng `GetCursorPos` + `ScreenToClient`, chặn chuột khỏi game; kéo khung, nhả chuột thì `config::save` | Đúng ý muốn | Cần các hook của overlay chung, xem rủi ro bên dưới |
-| **C. Kéo khi menu game mở** | Chế độ chỉnh vẽ khung trong cả lúc menu game mở (khi đó con trỏ của game hiện); ImGui nhận chuột khi con trỏ trên khung | Không hook thêm, không chặn chuột game; `souls_vision` làm đúng kiểu này (xem dưới) | Người chơi phải tự mở một menu (vd. Equipment) để có con trỏ; cú nhấp vẫn tới menu game bên dưới; minimap đang ẩn ở menu nên chế độ chỉnh phải vẽ khung dù HUD ẩn |
+| A. Arrow keys | A key enters an edit mode; Tab picks a frame, arrows move 1 px, Shift 10 px | No extra hook, no clash with other DLLs | Not a drag |
+| **B. Mouse drag with hooks (chosen)** | The edit mode captures the mouse: cursor released, ImGui cursor drawn, absolute position from `GetCursorPos` + `ScreenToClient`, mouse hidden from the game | What was wanted | Needs the overlay's input hooks; other DLLs hook the same functions |
+| C. Drag while a game menu is open | Frames are drawn while the game's own cursor is visible | No extra hook | The player must open a menu first; the click still reaches the menu below; the minimap is hidden in menus |
 
-## Tham khảo: souls_vision (`tmp/repos/souls_vision`, C++, commit `6443cac`)
+A third-party HUD mod that offers a drag option works as C: its config key (`false` by default, no hotkey)
+removes the `NoInputs` flags of its ImGui window, the game still receives every click, and it saves the
+position at every frame of the drag. Lessons: save only when the button is released, and beware of adding and
+subtracting the offset every frame when switching between window coordinates and the config offset (that mod
+once drifted left).
 
-Mod này có kéo thả (hướng C), đã đọc `overlay.cpp`, `config.cpp`, `README.MD`:
+## Mechanism (option B)
 
-- Khoá cấu hình `general.dragOverlay` (mặc định `false`, **không có phím**: sửa file rồi tải lại); bật thì cửa sổ ImGui "Stat Window" bỏ cờ `NoInputs`, `NoDecoration`, `NoBackground` (còn `NoTitleBar`, `NoResize`) nên ImGui tự lo việc kéo cửa sổ.
-- **Không bắt chuột:** `WndProc` chỉ chuyển thông điệp cho `ImGui_ImplWin32_WndProcHandler` rồi gọi `WndProc` gốc, game vẫn nhận mọi cú nhấp. README (v0.2.0) khuyên "vào một menu (như Equipment) để hiện con trỏ cho dễ kéo (đang tìm cách tốt hơn)", tức tác giả chưa giải việc con trỏ.
-- **Lưu:** mỗi khi vị trí cửa sổ đổi (mỗi frame lúc kéo) gọi `Config::SaveConfig`, ghi đĩa liên tục; nên chỉ lưu khi nhả chuột (như `shared/overlay` làm với `MenuX/MenuY`).
-- Từng có lỗi cửa sổ trôi dần sang trái khi bật `dragOverlay` (sửa ở bản sau): coi chừng cộng và trừ độ lệch lặp mỗi frame khi đổi giữa toạ độ cửa sổ và độ lệch cấu hình.
+- `General.DragKey` (default F7) switches the mode. The cursor and mouse-block hooks
+  (`ClipCursor`, `SetCursorPos`, the game's mouse poll, DirectInput reads) are installed **lazily** the first
+  time the mode starts, so a player who never uses it has no extra hook in the game.
+- While the mode is on `overlay::MENU_OPEN` is set so the game sees no mouse; a frame is drawn around the
+  minimap and the target bar. Dragging changes the offsets at once (`settings::set_offset_*`) and
+  `config::save` writes them when the button is released.
+- Position model: dragging the column adds the mouse delta (px) divided by `res` to `Minimap.OffsetX/OffsetY`
+  (the sign of X is reversed because it is measured from the right edge), clamped to the frame; a negative X
+  reaches the side areas of an ultrawide screen. The target bar can also be dragged on its own through
+  `Target.OffsetX/OffsetY` (default 0, added to its default place under the minimap) so old
+  configs do not change.
+- **The target bar slides up when the minimap is hidden** (in caves, in boss fights) only while both
+  `Target.OffsetX/Y` are 0; a bar that was dragged stays put, and in the drag mode it always sits where it
+  would with the minimap (`radar_ui::column_height(res, slides)`).
 
-Kết luận: hướng C chạy được với chi phí rất thấp nhưng chỉ là giải pháp tạm; nó xác nhận rằng con trỏ tự do là phần mà `souls_vision` chưa giải.
+## Risks
 
-## Thiết kế đề xuất cho B
+1. **Two DLLs hooking one function.** Each DLL has its own copy of MinHook and a function can be hooked once
+   per DLL; two `hudhook` DLLs hooking DX12 at the same moment have overwritten each other before. `ClipCursor`,
+   `SetCursorPos` and DirectInput are hooked by several mods. In a test with another mod that had hooked the
+   mouse poll first, the poll hook of this mod reported `false` but the DirectInput hooks still blocked the
+   mouse. Not tried together with ERSS-FG, which logs "Installing overlay input hooks".
+2. The `DLUID::MouseDevice::Poll` pattern depends on the executable build; it is unique on 2.6.2 to 2.7.2
+   (`scripts/ida/run.ps1 aob -Version all`).
+3. `LoadDelay` does not matter: the hooks are installed lazily at the key press.
 
-- **Vào chế độ chỉnh bằng phím** (như `ToggleKey`), không bật mặc định. **Cài hook lười**: chỉ cài `ClipCursor`/`SetCursorPos`/chuột game lần đầu bấm phím chỉnh, để người không dùng tính năng không phải chịu hook nào (mod này public, nhiều người dùng ERSS có overlay riêng).
-- **Mô hình vị trí:**
-  - Kéo cả cột: độ dời chuột (px) chia `res` cộng vào `Layout.OffsetX/OffsetY` (dấu của X ngược chiều vì tính từ mép phải), kẹp trong khung hình; X âm cho phép kéo ra vùng hai bên của màn ultrawide (đã hỗ trợ từ 1.1.0).
-  - Kéo riêng thanh mục tiêu: thêm khoá cộng thêm (vd. `Target.OffsetX/OffsetY`, mặc định 0, tính từ chỗ mặc định dưới minimap) để cấu hình cũ không đổi; khi minimap ẩn, thanh vẫn giữ độ lệch tương đối khi trượt lên.
-- **Giao diện chỉnh:** khung viền quanh từng phần, tên ("Minimap", "Target"), dòng gợi ý phím; nhấp đúp vào khung để về mặc định; gần mép màn hình thì hít vào mép.
-- **Lưu:** khi nhả chuột gọi `config::save` như menu (giữ comment), và `settings::set_offset_*` để áp dụng ngay; đây là chỗ giống hệt đường slider.
+## Reset, reach and the rune counter
 
-- **Trượt lên khi minimap ẩn (người dùng chốt 2026-11-03):** thanh mục tiêu chỉ trượt lên chiếm chỗ minimap (ẩn trong hang, khi đánh boss) khi `TargetOffsetX/Y` đều 0; thanh đã kéo đi thì đứng yên, và trong chế độ kéo luôn đứng ở chỗ có minimap (`radar_ui::column_height(res, slides)`).
+- **Reset**: in the drag mode a right click on the minimap, the target bar or the rune counter sets its offsets back to the
+  config template's (`drag::reset`) and saves them at once. A part dragged back by hand is not affected.
 
-## Rủi ro cần kiểm trước khi viết
+- The offsets used to be clamped to -400..400 (the top to 0..400), so the minimap could not be dragged from the right
+  side to the left. They now reach -400..1700 across and 0..900 down (the target bar's own offsets -1700..1700 and
+  -900..900), which covers the whole picture.
+- The rune counter (`HUD.RuneCounter.Enabled`) is a third part with its own offsets `HUD.RuneCounter.OffsetX/Y`, saved with
+  the others (`docs/rune_counter.md`).
 
-1. **Hai DLL cùng hook một hàm.** Mỗi DLL link bản `common` và MinHook riêng; `shared/docs/overlay.md` mục 7 nói một hàm chỉ hook được một lần mỗi DLL, và mục 6 nói hai DLL `hudhook` cùng móc DX12 một lúc từng ghi đè nhau. `ClipCursor`/`SetCursorPos`/DirectInput bị hook bởi nhiều DLL (Toolbox, soulsteleport, và ERSS: `ERSS.log` có "Installing overlay input hooks", "Hooking WNDPROC"). Phải thử chạy chung với ERSS 5.1.0 và với Toolbox.
-2. **AOB của `DLUID::MouseDevice::Poll`** phụ thuộc bản exe: theo quy tắc dự án phải kiểm duy nhất trên mọi bản (`scripts/ida/run.ps1 aob -Version all`); `shared` đã có, JourneyHUD dùng lại thì thừa hưởng.
-3. **`LoadDelay`:** hook chuột cài muộn theo `LoadDelay`; vì cài lười lúc bấm phím nên không ảnh hưởng.
-4. **Nhánh git:** phần trích "bắt chuột" thành API dùng chung (`overlay::capture_mouse(bool)` + đọc toạ độ tuyệt đối) đụng `shared/` và ảnh hưởng `soulsteleport`, `toolbox`, nên theo quy tắc nhiều mod làm trên nhánh `shared/overlay-mouse-capture` (từ `main`), JourneyHUD chỉ dùng API đó.
-
-## Việc tiếp theo đề xuất
-
-1. Giai đoạn 1 (hướng A) trên `mod/journeyhud`: phím chỉnh, vẽ khung, mũi tên, lưu; thêm `Target.OffsetX/OffsetY` nếu muốn kéo riêng thanh mục tiêu.
-2. Thử nghiệm nhỏ cho giai đoạn 2: bật `shared::overlay::install_input_hooks()` trong một bản dựng thử của JourneyHUD cùng ERSS 5.1.0 để xem con trỏ có thả ra và camera có đứng yên không, trước khi trích API.
-3. Giai đoạn 2 (hướng B) sau khi thử nghiệm đạt.
+The `[Layout]` section is gone: the minimap's offsets are `Minimap.OffsetX/OffsetY`, the panel's `Target.OffsetX/OffsetY`
+(still added to the minimap's, so the panel follows the minimap until it is moved apart on purpose). Config format 2
+migrates a version 1 file (`config::v1_to_v2`).

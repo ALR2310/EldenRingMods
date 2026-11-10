@@ -1,7 +1,5 @@
-//! Ties the pieces together: installs the hook, applies the config (which
-//! groups are on, their `Range`) and follows reloads, and every frame tells
-//! the hook whether the player is in combat. `common::reload` owns the reload
-//! key; this only follows `RELOAD_GENERATION`.
+//! Installs the hook, applies the config (enabled groups, `Range`) and follows reloads, and tells
+//! the hook every frame whether the player is in combat.
 
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -9,7 +7,7 @@ use std::time::Duration;
 use eldenring::cs::{CSTaskGroupIndex, SoloParamRepository};
 use fromsoftware_shared::FromStatic;
 
-use common::logger;
+use shared::logger;
 
 use crate::config::{self, Config};
 use crate::groups::Group;
@@ -25,13 +23,14 @@ fn group_config(config: &Config, group: Group) -> config::Group {
     }
 }
 
-/// Bit mask of the groups switched on.
 fn enabled_mask(config: &Config) -> u8 {
-    Group::ALL.into_iter().filter(|&group| group_config(config, group).enabled).fold(0, |mask, group| mask | group.bit())
+    Group::ALL
+        .into_iter()
+        .filter(|&group| group_config(config, group).enabled)
+        .fold(0, |mask, group| mask | group.bit())
 }
 
-/// The scale to write per group: the configured `Range` while the group is on,
-/// 1.0 (the game's own distance) while it is off.
+/// The scale per group: the configured `Range` while it is on, 1.0 (the game's own) while off.
 fn ranges(config: &Config) -> Vec<(Group, f32)> {
     Group::ALL
         .into_iter()
@@ -60,43 +59,44 @@ fn apply_animation(repo: &mut SoloParamRepository, config: &Config) {
 }
 
 /// Never returns: run it on its own worker thread.
-pub fn run() {
-    let mut last_seen_generation = common::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
+pub fn run(name: &str) {
+    let mut last_seen_generation = shared::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
 
     let config = config::get();
     hook::set_enabled(enabled_mask(&config));
-    hook::install();
+    hook::install(name);
 
-    let repo = common::player::wait_for_solo_param_repository();
+    let repo = shared::player::wait_for_solo_param_repository();
     apply_ranges(repo, &config, "");
     apply_animation(repo, &config);
 
     let mut waiting_logged = false;
     let mut ranges_pending = false;
     let mut probe_drainer = probe::Drainer::default();
-    let cs_task = common::task::wait_for_cs_task();
-    common::task::run_recurring_safe(
+    let cs_task = shared::task::wait_for_cs_task();
+    shared::task::run_recurring_safe(
         cs_task,
         "AutoPickup",
         CSTaskGroupIndex::FrameBegin,
         move |_data: &eldenring::fd4::FD4TaskData| {
             let config = config::get();
 
-            let generation = common::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
+            let generation = shared::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
             if generation != last_seen_generation {
                 last_seen_generation = generation;
                 hook::set_enabled(enabled_mask(&config));
                 ranges_pending = true;
                 crate::menu::sync_from_config();
             }
-            // Not in the world (a change made from the title screen's menu):
-            // keep the request and apply it once the world is loaded.
+            // Not in the world yet (a change made from the title screen's menu): keep the request
+            // and apply it once the world is loaded.
             if ranges_pending {
-                if common::player::main_player_chr_ins_ptr().is_none() {
+                if shared::player::main_player_chr_ins_ptr().is_none() {
                     if !waiting_logged {
                         logger::warn("Reload: deferred, not in world");
                         waiting_logged = true;
                     }
+                // SAFETY: runs on a game task; `instance_mut` is `Err` until the singleton exists.
                 } else if let Ok(repo) = unsafe { SoloParamRepository::instance_mut() } {
                     waiting_logged = false;
                     ranges_pending = false;
@@ -105,7 +105,9 @@ pub fn run() {
                 }
             }
 
-            hook::set_paused(config.general.pause_in_combat && combat::in_combat().unwrap_or(false));
+            hook::set_paused(
+                config.general.pause_in_combat && combat::in_combat().unwrap_or(false),
+            );
             probe::set_enabled(config.logging.pickup_probe);
             probe_drainer.tick();
         },

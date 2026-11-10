@@ -1,131 +1,107 @@
 <#
 .SYNOPSIS
-    Builds one mod's release DLL and copies it next to its config file
-    (<Mod>.toml, or <Mod>.ini for mods still on the ini config) into
-    builds/<crate>/ (<crate> = the lowercased Cargo package name, e.g.
-    builds/autoregen/), so each mod's output sits in its own easy-to-find
-    folder instead of buried among the many other files cargo puts in
-    target/release/. Optionally also zips the pair for uploading (e.g. to
-    Nexus) into the same folder.
+    Builds one mod in release mode and copies what a release ships to builds/<crate>/.
+
+    The DLL is always shipped. What goes next to it is `files` under [package.metadata.archive]
+    in the mod's Cargo.toml, which every mod must declare: paths relative to the mod folder,
+    wildcards allowed, a folder meaning everything below it. Each file keeps its relative path in
+    the output and the zip. `files = []` ships the DLL alone.
 
 .PARAMETER Mod
-    The mod's PascalCase name, matching both its [lib] name in Cargo.toml
-    (the built DLL's filename) and its config filename - e.g. "AutoRegen" for
-    AutoRegen.dll/AutoRegen.ini, "SpeedMultiplier" for SpeedMultiplier.dll/
-    SpeedMultiplier.toml. The crate/package name is derived by
-    lowercasing this (AutoRegen -> autoregen), which matches how every mod
-    crate in this workspace is named.
+    PascalCase mod name, the same as its [lib] name in Cargo.toml (for example AutoPickup).
+    The crate and folder name is this value in lowercase.
 
 .PARAMETER Zip
-    When set, also packages builds\<crate>\<Mod>.dll + its config
-    file into builds\<crate>\<Mod>-<version>.zip. No zip is created unless this switch is
-    passed - most local test builds don't need one.
+    Also create builds/<crate>/<Mod>-<version>.zip with the shipped files.
 
 .PARAMETER Version
-    Version string to use for the zip's filename (only meaningful with
-    -Zip). Defaults to the crate's own Cargo.toml (`[package] version`) if
-    omitted - but that is NOT necessarily the same as the version published
-    on Nexus (this workspace's crates don't keep those in sync). The
-    publish-nexus-mod skill always passes the release version it confirmed
-    with the user explicitly, rather than relying on this default.
+    Version used in the zip name. Defaults to the version in the mod's Cargo.toml.
 
 .EXAMPLE
-    pwsh -File scripts/build-mod.ps1 -Mod AutoRegen
-
-.EXAMPLE
-    pwsh -File scripts/build-mod.ps1 -Mod AutoRegen -Zip -Version 2.5.0
+    pwsh scripts/build-mod.ps1 -Mod AutoPickup -Zip
 #>
 param(
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory)]
     [string]$Mod,
-
     [switch]$Zip,
-
     [string]$Version
 )
 
 $ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-$RepoRoot = Split-Path -Parent $PSScriptRoot
-$Crate = $Mod.ToLower()
-$CrateDir = Join-Path $RepoRoot "mods\$Crate"
+$root = Split-Path -Parent $PSScriptRoot
+$crate = $Mod.ToLower()
+$crateDir = Join-Path $root "mods/$crate"
+$config = "$Mod.toml"
 
-if (-not (Test-Path $CrateDir)) {
-    throw "No crate directory found at '$CrateDir' - is '$Mod' spelled the same as its Cargo package (lowercased)?"
-}
-# Config file: <Mod>.toml (common::toml_config, 2026-10-02) or <Mod>.ini.
-$ConfigName = $null
-foreach ($Ext in @("toml", "ini")) {
-    if (Test-Path (Join-Path $CrateDir "$Mod.$Ext")) {
-        $ConfigName = "$Mod.$Ext"
-        break
-    }
-}
-# A config named differently from the mod (AnimCancelV1.toml for AnimCancel, renamed on purpose, see
-# mods/animcancel/docs/antivirus.md): the one <Mod>*.toml next to Cargo.toml.
-if (-not $ConfigName) {
-    $Candidates = @(Get-ChildItem -Path $CrateDir -Filter "$Mod*.toml" -File)
-    if ($Candidates.Count -eq 1) {
-        $ConfigName = $Candidates[0].Name
-    }
-}
-if (-not $ConfigName) {
-    throw "No config found in '$CrateDir' - expected '$Mod.toml' or '$Mod.ini' next to the crate's Cargo.toml."
-}
-$ConfigPath = Join-Path $CrateDir $ConfigName
+if (-not (Test-Path $crateDir)) { throw "No crate at '$crateDir'." }
+if (-not (Test-Path (Join-Path $crateDir $config))) { throw "Missing '$config' in '$crateDir'." }
 
-Write-Host "==> Building $Mod (release)..." -ForegroundColor Cyan
-& cargo build --release -p $Crate --manifest-path (Join-Path $RepoRoot "Cargo.toml")
-if ($LASTEXITCODE -ne 0) {
-    throw "cargo build failed for '$Crate' (exit code $LASTEXITCODE)."
+# Cargo parses the manifest, so `files` can be written any way TOML allows.
+$package = (cargo metadata --no-deps --format-version 1 --manifest-path (Join-Path $root "Cargo.toml") |
+    ConvertFrom-Json).packages | Where-Object name -eq $crate
+if (-not $package) { throw "Cargo does not know a package named '$crate'." }
+$archive = $package.metadata.archive
+if (-not ($archive -and $archive.PSObject.Properties.Name -contains "files")) {
+    throw "'$crate' has no 'files' list under [package.metadata.archive] in its Cargo.toml."
 }
 
-$DllPath = Join-Path $RepoRoot "target\release\$Mod.dll"
-if (-not (Test-Path $DllPath)) {
-    throw "Build succeeded but '$DllPath' wasn't produced - check the crate's [lib] name in Cargo.toml matches '$Mod'."
+# Paths of the files to ship next to the DLL, relative to the mod folder.
+function Resolve-Shipped {
+    $found = @(foreach ($pattern in @($archive.files)) {
+        if ([IO.Path]::IsPathRooted($pattern) -or $pattern -match '(^|[\\/])\.\.([\\/]|$)') {
+            throw "files entry '$pattern' must be inside the mod folder."
+        }
+        $items = @(Get-ChildItem -Path (Join-Path $crateDir $pattern) -ErrorAction SilentlyContinue)
+        if (-not $items) { throw "files entry '$pattern' matches nothing in '$crateDir'." }
+        foreach ($item in $items) {
+            if ($item.PSIsContainer) { Get-ChildItem $item.FullName -Recurse -File } else { $item }
+        }
+    })
+    $found | ForEach-Object { [IO.Path]::GetRelativePath($crateDir, $_.FullName).Replace('\', '/') } | Sort-Object -Unique
+}
+$shipped = @(Resolve-Shipped)
+
+# Panic locations of this repo and of the dependencies would otherwise embed the build
+# machine's paths (including the user name) in the DLL.
+$cargoHome = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE ".cargo" }
+$sysroot = (rustc --print sysroot).Trim()
+$env:RUSTFLAGS = "--remap-path-prefix=$root=. --remap-path-prefix=$cargoHome=.cargo --remap-path-prefix=$sysroot=.rustup"
+try {
+    cargo build --release -p $crate --manifest-path (Join-Path $root "Cargo.toml")
+    if ($LASTEXITCODE -ne 0) { throw "cargo build failed for '$crate'." }
+} finally {
+    Remove-Item Env:RUSTFLAGS -ErrorAction SilentlyContinue
 }
 
-# One folder per mod (named after the Cargo package): builds/autoregen/,
-# builds/sometweaks/, ... so each mod's dll/config/zip stay together.
-$BuildDir = Join-Path $RepoRoot "builds\$Crate"
-New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
+$dll = Join-Path $root "target/release/$Mod.dll"
+if (-not (Test-Path $dll)) { throw "'$dll' was not produced; check [lib] name in Cargo.toml." }
 
-$BuildDllPath = Join-Path $BuildDir "$Mod.dll"
-$BuildConfigPath = Join-Path $BuildDir $ConfigName
-Copy-Item $DllPath -Destination $BuildDllPath -Force
-Copy-Item $ConfigPath -Destination $BuildConfigPath -Force
-
-Write-Host "==> builds\$Crate\$Mod.dll + builds\$Crate\$ConfigName ready" -ForegroundColor Green
+$out = Join-Path $root "builds/$crate"
+New-Item -ItemType Directory -Force $out | Out-Null
+Get-ChildItem $out -Exclude *.zip | Remove-Item -Recurse -Force
+Copy-Item $dll -Destination $out
+foreach ($file in $shipped) {
+    $target = Join-Path $out $file
+    New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
+    Copy-Item (Join-Path $crateDir $file) -Destination $target
+}
+Write-Host "Built $out/$Mod.dll (+ $($shipped.Count) file(s))"
 
 if ($Zip) {
-    $ZipVersion = $Version
-    if (-not $ZipVersion) {
-        $CargoTomlPath = Join-Path $CrateDir "Cargo.toml"
-        $CargoToml = Get-Content $CargoTomlPath -Raw
-        if ($CargoToml -notmatch '(?ms)^\[package\](.*?)(\r?\n\[|\z)') {
-            throw "Could not find a [package] section in '$CargoTomlPath'."
-        }
-        $PackageSection = $Matches[1]
-        if ($PackageSection -notmatch 'version\s*=\s*"([^"]+)"') {
-            throw "Could not find a 'version' key in '$CargoTomlPath''s [package] section."
-        }
-        $ZipVersion = $Matches[1]
+    if (-not $Version) {
+        $Version = $package.version
     }
-
-    $ZipPath = Join-Path $BuildDir "$Mod-$ZipVersion.zip"
-    if (Test-Path $ZipPath) {
-        Remove-Item $ZipPath -Force
-    }
-    # License/notice files that must ship with the mod (e.g. JourneyHUD's
-    # THIRD-PARTY-NOTICES.txt at the crate root, or any *.txt in the crate's
-    # assets/ folder) go into the zip.
-    $ZipItems = @($BuildDllPath, $BuildConfigPath)
-    foreach ($Dir in @($CrateDir, (Join-Path $CrateDir "assets"))) {
-        if (Test-Path $Dir) {
-            $ZipItems += Get-ChildItem -Path $Dir -Filter "*.txt" -File | ForEach-Object { $_.FullName }
+    $zipPath = Join-Path $out "$Mod-$Version.zip"
+    Remove-Item $zipPath -ErrorAction SilentlyContinue
+    $zipFile = [IO.Compression.ZipFile]::Open($zipPath, "Create")
+    try {
+        foreach ($name in @("$Mod.dll") + $shipped) {
+            $null = [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipFile, (Join-Path $out $name), $name)
         }
+    } finally {
+        $zipFile.Dispose()
     }
-    Compress-Archive -Path $ZipItems -DestinationPath $ZipPath -Force
-
-    Write-Host "==> $ZipPath ready" -ForegroundColor Green
+    Write-Host "Created $zipPath"
 }

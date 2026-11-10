@@ -1,13 +1,14 @@
-"""Helpers dùng chung cho các script IDAPython trong scripts/ida/.
+"""Helpers shared by the IDAPython scripts in scripts/ida/.
 
-Các script chạy headless qua `run.ps1` (idat -A -S"<script> <args>"). Mỗi script
-`import common` rồi gọi `common.init()` đầu tiên, `common.finish()` cuối cùng.
+The scripts run headless through `run.ps1` (idat -A -S"<script> <args>"). Each script does
+`import common`, calls `common.init()` first and `common.finish()` last.
 
-- Tham số dòng lệnh: `common.ARGS` (đã bỏ tên script), tách cờ bằng `parse_args`.
-- Output: `common.OUT_DIR` (run.ps1 đặt biến môi trường ER_OUT; mặc định là
-  thư mục `out/` cạnh file .i64). Script chỉ đọc database, không đổi tên/type.
-- Địa chỉ nhập dạng RVA (`1e92100`, `0x1e92100`), VA (`0x141e92100`) hoặc tên
-  symbol; xem `parse_ea`.
+- Command-line arguments: `common.ARGS` (script name removed); split flags with `parse_args`.
+- Output: `common.OUT_DIR` (run.ps1 sets the ER_OUT environment variable; the default is an
+  `out/` folder next to the .i64 file). Scripts only read the database; they never rename
+  or retype anything.
+- Addresses are accepted as RVA (`1e92100`, `0x1e92100`), VA (`0x141e92100`) or a symbol
+  name; see `parse_ea`.
 """
 import os
 import sys
@@ -30,7 +31,7 @@ _HEXRAYS = False
 
 
 def init():
-    """Chờ auto-analysis xong, bật Hex-Rays, tạo thư mục output."""
+    """Wait for auto-analysis, enable Hex-Rays, create the output folder."""
     global _HEXRAYS
     ida_auto.auto_wait()
     _HEXRAYS = bool(ida_hexrays.init_hexrays_plugin())
@@ -47,9 +48,9 @@ def die(msg):
 
 
 def parse_args(args=None):
-    """Tách `--cờ` / `--khóa=giá-trị` khỏi tham số vị trí.
+    """Split `--flag` / `--key=value` from the positional arguments.
 
-    Trả về (positional, flags); `--x` -> flags['x'] = True, `--x=3` -> '3'.
+    Returns (positional, flags); `--x` gives flags['x'] = True, `--x=3` gives '3'.
     """
     pos, flags = [], {}
     for a in args if args is not None else ARGS:
@@ -62,7 +63,7 @@ def parse_args(args=None):
 
 
 def parse_ea(tok):
-    """RVA / VA / tên symbol -> địa chỉ ảo. Giá trị < image base coi là RVA."""
+    """RVA / VA / symbol name -> virtual address. A value below the image base is an RVA."""
     t = tok.strip()
     if t.lower().startswith("0x"):
         t = t[2:]
@@ -74,7 +75,7 @@ def parse_ea(tok):
         pass
     ea = idc.get_name_ea_simple(tok)
     if ea == BADADDR:
-        die("không hiểu địa chỉ/tên: %r" % tok)
+        die("cannot resolve address or name: %r" % tok)
     return ea
 
 
@@ -93,17 +94,17 @@ def func_start(ea):
 
 
 def decompile(ea):
-    """Pseudocode (str) hoặc dòng chú thích lỗi; không bao giờ ném exception."""
+    """Pseudocode (str), or a comment line on failure; never raises."""
     if not _HEXRAYS:
-        return "// Hex-Rays không khả dụng"
+        return "// Hex-Rays is not available"
     try:
         return str(ida_hexrays.decompile(ea))
-    except Exception as e:  # DecompilationFailure, hoặc thiếu func
-        return "// decompile thất bại @%X: %s" % (ea, e)
+    except Exception as e:  # DecompilationFailure, or no function at ea
+        return "// decompile failed @%X: %s" % (ea, e)
 
 
 def callees(func_ea):
-    """Tập địa chỉ đầu hàm được gọi trực tiếp từ hàm tại func_ea."""
+    """Entry addresses of the functions called directly from the function at func_ea."""
     f = ida_funcs.get_func(func_ea)
     res = set()
     if not f:
@@ -117,7 +118,7 @@ def callees(func_ea):
 
 
 def callers(ea):
-    """Danh sách (nơi gọi, đầu hàm chứa hoặc None) tới ea qua code xref."""
+    """List of (call site, entry of the containing function or None) reaching ea by code xref."""
     out = []
     for x in idautils.CodeRefsTo(ea, False):
         out.append((x, func_start(x)))

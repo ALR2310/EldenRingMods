@@ -1,46 +1,44 @@
-//! Adjusts enemy drop chances in `ItemLotParam_enemy`, in one of two ways
-//! picked by `Mode`: `Multiplier` scales every real item's weight, or
-//! `Percentage` forces a row's combined "any real item" chance to a fixed
-//! percent. The lottery model, the algebra and the edge cases:
-//! `docs/drop_rate.md`.
+//! Adjusts enemy drop chances in `ItemLotParam_enemy`, in one of two ways picked by `Mode`:
+//! `Multiplier` scales every real item's weight, or `Percentage` forces a row's combined "any real
+//! item" chance to a fixed percent. The lottery model and the edge cases: `docs/drop_rate.md`.
 
 use std::sync::Mutex;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use eldenring::cs::{CSTaskGroupIndex, ItemLotParam_enemy, SoloParamRepository};
 use fromsoftware_shared::FromStatic;
 
-use common::{config, logger};
+use shared::logger;
 
+use crate::config;
 use crate::lot::{self, ItemIds, Points};
 
-/// The game's own original weights by row index (see `common::params` for why
-/// not by ID), captured once before any edit, so every reload rescales from the
-/// true baseline instead of compounding.
+/// The game's own weights by row index, captured once before any edit, so every reload rescales
+/// from the true baseline instead of compounding. By index because looking rows up by ID panics on
+/// some regulations (`shared/docs/params.md`).
 static ORIGINAL_BASE_POINTS: Mutex<Option<Vec<Points>>> = Mutex::new(None);
 
 fn clamp_u16(value: f64) -> u16 {
     value.round().clamp(0.0, u16::MAX as f64) as u16
 }
 
-/// The two mutually exclusive adjustments, selected by `Mode`.
 enum Mode {
-    /// `Mode=0`: scale every real item's weight by this factor.
+    /// `Mode = 0`: scale every real item's weight by this factor.
     Multiplier(f64),
-    /// `Mode=1`: force each row's combined real-item chance to this percent
-    /// (`0..=100`), keeping each item's share against its row-mates.
+    /// `Mode = 1`: force each row's combined real-item chance to this percent, keeping each item's
+    /// share against its row-mates.
     FixedPercent(f64),
 }
 
 fn build_mode() -> Mode {
-    match config::get_int("Mode", 0) {
-        1 => Mode::FixedPercent(config::get_double("Percentage", 50.0).max(0.0)),
-        _ => Mode::Multiplier(config::get_double("Multiplier", 2.0).max(0.0)),
+    let drop = &config::get().drop;
+    match drop.mode {
+        1 => Mode::FixedPercent(drop.percentage.max(0.0)),
+        _ => Mode::Multiplier(drop.multiplier.max(0.0)),
     }
 }
 
-/// `original` with every real item's weight (slot id != 0) scaled by `factor`.
 fn scale_items(original: &Points, item_ids: &ItemIds, factor: f64) -> Points {
     let mut scaled = *original;
     for i in 0..8 {
@@ -51,8 +49,7 @@ fn scale_items(original: &Points, item_ids: &ItemIds, factor: f64) -> Points {
     scaled
 }
 
-/// One row's new weights for `mode`, always derived from `original` (never
-/// from an already-scaled value), so reloading with another mode is safe.
+/// One row's new weights, always derived from `original` so reloading with another mode is safe.
 fn scale_row(original: &Points, item_ids: &ItemIds, mode: &Mode) -> Points {
     match *mode {
         Mode::Multiplier(factor) => scale_items(original, item_ids, factor),
@@ -78,32 +75,39 @@ fn scale_row(original: &Points, item_ids: &ItemIds, mode: &Mode) -> Points {
             if other_sum == 0 {
                 return *original; // no "nothing" slot to shrink: already drops every time
             }
-            scale_items(original, item_ids, target * other_sum as f64 / ((1.0 - target) * item_sum as f64))
+            scale_items(
+                original,
+                item_ids,
+                target * other_sum as f64 / ((1.0 - target) * item_sum as f64),
+            )
         }
     }
 }
 
-/// Applies `mode` to every `ItemLotParam_enemy` row from the snapshot of the
-/// original weights (taken on the first call). Returns the number of rows
-/// touched, or `None` if the param slot isn't what we expect (nothing written).
+/// Applies `mode` to every `ItemLotParam_enemy` row from the snapshot of the original weights,
+/// taken on the first call. Returns the rows touched, or `None` (nothing written) if the param slot
+/// is not what we expect.
 fn apply(repo: &mut SoloParamRepository, mode: &Mode) -> Option<usize> {
-    if let Err(reason) = common::params::check::<ItemLotParam_enemy>(repo) {
-        logger::error(&format!("{reason} - drop rates left unchanged"));
+    if let Err(reason) = shared::params::check::<ItemLotParam_enemy>(repo) {
+        logger::error(&format!("Drops: {reason}, rates left unchanged"));
         return None;
     }
 
-    // A poisoned lock is recovered: one panic must not break every reload.
-    let mut snapshot_guard = ORIGINAL_BASE_POINTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    // A poisoned lock is still used: one panic must not break every reload.
+    let mut snapshot_guard =
+        ORIGINAL_BASE_POINTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if snapshot_guard.is_none() {
-        logger::log(&format!("Snapshot: {}", common::params::describe::<ItemLotParam_enemy>(repo)));
+        logger::log(&format!("Drops: {}", shared::params::describe::<ItemLotParam_enemy>(repo)));
         let mut points = Vec::new();
-        common::params::for_each_row_mut::<ItemLotParam_enemy>(repo, |_, row| points.push(lot::base_points(row)));
+        shared::params::for_each_row_mut::<ItemLotParam_enemy>(repo, |_, row| {
+            points.push(lot::base_points(row))
+        });
         *snapshot_guard = Some(points);
     }
     let snapshot = snapshot_guard.as_ref()?;
 
     let mut changed = 0;
-    common::params::for_each_row_mut::<ItemLotParam_enemy>(repo, |index, row| {
+    shared::params::for_each_row_mut::<ItemLotParam_enemy>(repo, |index, row| {
         let Some(original) = snapshot.get(index) else {
             return;
         };
@@ -121,13 +125,17 @@ fn log_mode(mode: &Mode, changed: usize, suffix: &str) {
     logger::log(&format!("Drops: {setting} -> {changed} row(s){suffix}"));
 }
 
-/// Applies the config once the world is loaded, then follows
-/// `RELOAD_GENERATION` for the rest of the DLL's life (`common::reload` owns
-/// the reload key). Run it on its own worker thread; never returns.
-pub fn run() {
-    let mut last_seen_generation = common::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
+/// Set by a reload or a menu save; the tick applies it once the player is in the world.
+static APPLY_REQUESTED: AtomicBool = AtomicBool::new(false);
 
-    let repo = common::player::wait_for_solo_param_repository();
+pub fn request_apply() {
+    APPLY_REQUESTED.store(true, Ordering::Relaxed);
+}
+
+/// Applies the config once the world is loaded, then again on every [request_apply]. Run it on its
+/// own worker thread; never returns.
+pub fn run() {
+    let repo = shared::player::wait_for_solo_param_repository();
     let mode = build_mode();
     if let Some(changed) = apply(repo, &mode) {
         log_mode(&mode, changed, "");
@@ -135,37 +143,35 @@ pub fn run() {
     crate::materials::apply(repo, "");
 
     let mut waiting_logged = false;
-    let cs_task = common::task::wait_for_cs_task();
-    common::task::run_recurring_safe(
+    let cs_task = shared::task::wait_for_cs_task();
+    shared::task::run_recurring_safe(
         cs_task,
         "DropMultiplier",
         CSTaskGroupIndex::FrameBegin,
         move |_data: &eldenring::fd4::FD4TaskData| {
-            let generation = common::reload::RELOAD_GENERATION.load(Ordering::Relaxed);
-            if generation == last_seen_generation {
+            if !APPLY_REQUESTED.load(Ordering::Relaxed) {
                 return;
             }
-            // Not in the world (a change made from the title screen's menu):
-            // keep the request and apply it once the world is loaded.
-            if common::player::main_player_chr_ins_ptr().is_none() {
+            // A change made from the title screen's menu waits for the world.
+            if shared::player::main_player_chr_ins_ptr().is_none() {
                 if !waiting_logged {
-                    logger::warn("Reload: deferred, not in world");
+                    logger::warn("Drops: change deferred, not in world");
                     waiting_logged = true;
                 }
                 return;
             }
             waiting_logged = false;
-            last_seen_generation = generation;
-            crate::menu::sync_from_config();
+            APPLY_REQUESTED.store(false, Ordering::Relaxed);
+            // SAFETY: called from a game task; `instance_mut` returns `Err` while the singleton does not exist.
             let Ok(repo) = (unsafe { SoloParamRepository::instance_mut() }) else {
-                logger::warn("Reload: SoloParamRepository unavailable, skipped");
+                logger::warn("Drops: SoloParamRepository unavailable, change skipped");
                 return;
             };
             let mode = build_mode();
             if let Some(changed) = apply(repo, &mode) {
-                log_mode(&mode, changed, " (reload)");
+                log_mode(&mode, changed, " (changed)");
             }
-            crate::materials::apply(repo, " (reload)");
+            crate::materials::apply(repo, " (changed)");
         },
     );
 

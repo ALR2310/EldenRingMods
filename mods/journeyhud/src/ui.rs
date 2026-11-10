@@ -10,15 +10,15 @@ use hudhook::imgui::{Context, DrawListMut, Io, Ui};
 use hudhook::windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use hudhook::{BeforeWndProc, Hudhook, ImguiRenderLoop, MessageFilter, RenderContext};
 
-use common::{input, logger};
+use shared::{input, logger};
 
 use crate::config;
 use crate::drag::Drag;
 use crate::map::layer::{Icon, MapLayer};
+use crate::radar::ui::{self as radar_ui, Placement, Radar};
 use crate::radar::{self, Snapshot as RadarSnapshot};
-use crate::radar_ui::{self, Placement, Radar};
 use crate::settings;
-use crate::target::{self, Buildup, Effect, Target};
+use crate::target::{self, Boss, Buildup, Effect, Target};
 use crate::text;
 use crate::textures::{self, Textures};
 
@@ -74,6 +74,22 @@ const GAME_ICONS_ROW_PITCH: f32 = 41.0;
 const GAME_ICONS_BOTTOM: f32 = 146.0;
 /// Space between the times under the game's icons and the player's buildup gauge.
 const GAUGE_UNDER_ICONS_GAP: f32 = 6.0;
+/// The game's boss health bar, in 1080p pixels of its picture (measured on screenshots): the fill
+/// with the line under it runs from x 466 to 1465 and ends at y 876. The boss's bars go right under it (`boss_rect`).
+const BOSS_BAR_LEFT: f32 = 466.0;
+const BOSS_BAR_WIDTH: f32 = 999.0;
+const BOSS_BAR_BOTTOM: f32 = 876.0;
+const BOSS_BAR_GAP: f32 = 3.0;
+/// The fill of the game's boss bar is this high; the line it has under it is this far above the
+/// posture bar.
+const BOSS_BAR_HEIGHT: f32 = 9.0;
+const BOSS_LINE_ABOVE: f32 = 1.5;
+/// Each further boss bar stacks this far above the one before (more when `boss_list` spreads them).
+const BOSS_BAR_PITCH: f32 = 55.0;
+/// The game's boss health bars at most.
+const BOSS_SLOTS: usize = 3;
+/// Scale of the textures of the game's boss bar line: its cap (art 39 texels wide) is about 18 px.
+const BOSS_DECO_SCALE: f32 = 0.46;
 /// The icon fades over its last seconds.
 const EFFECT_FADE_SECONDS: f32 = 5.0;
 /// One color per status, in the order of `target::BUILDUP`.
@@ -109,12 +125,7 @@ fn fade_by([r, g, b, a]: [f32; 4], alpha: f32) -> [f32; 4] {
 }
 
 fn fade([r, g, b, a]: [f32; 4]) -> [f32; 4] {
-    [
-        r,
-        g,
-        b,
-        a * f32::from_bits(PANEL_ALPHA.load(Ordering::Relaxed)),
-    ]
+    [r, g, b, a * f32::from_bits(PANEL_ALPHA.load(Ordering::Relaxed))]
 }
 
 const TRAIL_HOLD: f32 = 0.9;
@@ -152,6 +163,8 @@ struct HudRenderLoop {
     trail: Trail,
     /// The same for the posture bar.
     poise_trail: Trail,
+    /// The posture trail of each boss bar, by slot.
+    boss_trails: [Trail; BOSS_SLOTS],
     /// 0 to 1: follows whether the game is in normal play, so the panel goes with its menus.
     panel_alpha: f32,
     /// 0 to 1: follows whether the game shows its row of status icons, for the times under it.
@@ -190,12 +203,7 @@ impl Trail {
     /// time in seconds.
     fn update(&mut self, id: usize, value: f32, max: f32, dt: f32) {
         if self.id != id {
-            *self = Trail {
-                id,
-                value,
-                from: value,
-                hold: 0.0,
-            };
+            *self = Trail { id, value, from: value, hold: 0.0 };
             return;
         }
         if value < self.value {
@@ -243,9 +251,8 @@ impl ImguiRenderLoop for HudRenderLoop {
             // Started only now, not at launch: reading the archives takes a few hundred MB and some
             // seconds of disk and CPU, which the game does not need to compete with while it starts.
             if self.map.is_none() {
-                self.map = std::env::current_exe()
-                    .ok()
-                    .and_then(|exe| exe.parent().map(MapLayer::new));
+                self.map =
+                    std::env::current_exe().ok().and_then(|exe| exe.parent().map(MapLayer::new));
             }
             if let Some(map) = self.map.as_mut() {
                 map.upload(render_context);
@@ -276,14 +283,10 @@ impl ImguiRenderLoop for HudRenderLoop {
         // The drag mode shows the minimap and the bar whatever the toggle key did.
         let hidden = settings::hidden() && !self.drag.on();
         if settings::minimap_enabled() && !hidden {
-            for (keys, zoom_in) in [
-                (settings::zoom_in_keys(), true),
-                (settings::zoom_out_keys(), false),
-            ] {
-                if keys
-                    .into_iter()
-                    .any(|key| key != 0 && input::is_key_pressed(key))
-                {
+            for (keys, zoom_in) in
+                [(settings::zoom_in_keys(), true), (settings::zoom_out_keys(), false)]
+            {
+                if keys.into_iter().any(|key| key != 0 && input::is_key_pressed(key)) {
                     settings::zoom(zoom_in);
                 }
             }
@@ -291,16 +294,10 @@ impl ImguiRenderLoop for HudRenderLoop {
         let snapshot: Option<RadarSnapshot> = radar::current();
         let show_map = settings::minimap_map();
         if let (Some(map), Some(snapshot), true) = (self.map.as_mut(), snapshot.as_ref(), show_map)
+            && let Some(id) = snapshot.map
         {
-            if let Some(id) = snapshot.map {
-                // The window must stay ahead of the widest view, within what it can hold.
-                map.follow(
-                    id,
-                    snapshot.position,
-                    settings::minimap_range() + 20.0,
-                    snapshot.fragments,
-                );
-            }
+            // The window must stay ahead of the widest view, within what it can hold.
+            map.follow(id, snapshot.position, settings::minimap_range() + 20.0, snapshot.fragments);
         }
         if !hidden {
             self.radar.draw(
@@ -315,11 +312,7 @@ impl ImguiRenderLoop for HudRenderLoop {
         let wanted = if radar::in_control() { 1.0 } else { 0.0 };
         self.panel_alpha += (wanted - self.panel_alpha) * (dt * FADE_RATE).min(1.0);
         PANEL_ALPHA.store(self.panel_alpha.to_bits(), Ordering::Relaxed);
-        let icons_wanted = if crate::state_icons::shown() {
-            1.0
-        } else {
-            0.0
-        };
+        let icons_wanted = if crate::state_icons::shown() { 1.0 } else { 0.0 };
         self.icons_alpha += (icons_wanted - self.icons_alpha) * (dt * FADE_RATE).min(1.0);
         let layout = Layout {
             area: self.area,
@@ -335,14 +328,28 @@ impl ImguiRenderLoop for HudRenderLoop {
         if self.drag.on() {
             self.drag.render(ui, self.area, target_rect(&self.area, self.s, layout.width));
         }
+        // The posture of each boss bar, locked on or not.
+        let bosses =
+            if self.panel_alpha > 0.01 && !hidden { target::bosses_now() } else { Vec::new() };
+        for (slot, trail) in self.boss_trails.iter_mut().enumerate() {
+            match bosses.iter().find(|boss| boss.slot == slot) {
+                Some(boss) => {
+                    match boss.poise {
+                        Some((poise, max)) => trail.update(boss.id, poise, max, dt),
+                        None => trail.id = 0,
+                    }
+                    draw_boss(ui, boss, trail, &layout);
+                }
+                None => trail.id = 0,
+            }
+        }
         let Some(target) = target::current() else {
             self.trail.id = 0;
             self.poise_trail.id = 0;
             anchor_gauges();
             return;
         };
-        self.trail
-            .update(target.id, target.hp as f32, target.max_hp as f32, dt);
+        self.trail.update(target.id, target.hp as f32, target.max_hp as f32, dt);
         match target.poise {
             Some((poise, max)) => self.poise_trail.update(target.id, poise, max, dt),
             None => self.poise_trail.id = 0,
@@ -352,8 +359,14 @@ impl ImguiRenderLoop for HudRenderLoop {
         }
     }
 
-    fn before_wnd_proc(&self, _hwnd: HWND, umsg: u32, _wparam: WPARAM, _lparam: LPARAM) -> BeforeWndProc {
-        if common::overlay::blocks_window_message(umsg) {
+    fn before_wnd_proc(
+        &self,
+        _hwnd: HWND,
+        umsg: u32,
+        _wparam: WPARAM,
+        _lparam: LPARAM,
+    ) -> BeforeWndProc {
+        if shared::overlay::blocks_window_message(umsg) {
             BeforeWndProc::Break
         } else {
             BeforeWndProc::Continue
@@ -361,11 +374,7 @@ impl ImguiRenderLoop for HudRenderLoop {
     }
 
     fn message_filter(&self, _io: &Io) -> MessageFilter {
-        if common::overlay::is_open() {
-            MessageFilter::InputAll
-        } else {
-            MessageFilter::empty()
-        }
+        if shared::overlay::is_open() { MessageFilter::InputAll } else { MessageFilter::empty() }
     }
 }
 
@@ -375,12 +384,32 @@ impl ImguiRenderLoop for HudRenderLoop {
 /// resizes the bar, not where it sits.
 fn target_rect(area: &[f32; 4], s: f32, width: f32) -> [f32; 4] {
     let res = area[3] / BASE_HEIGHT;
-    let [offset_x, offset_y] = settings::offset();
+    let [offset_x, offset_y] = settings::column_offset();
     let [target_x, target_y] = settings::target_offset();
     let right = area[0] + area[2] - (offset_x + target_x) * res;
     // It only takes the minimap's room when the minimap hides while the bar is where it started.
-    let y = area[1] + (offset_y + target_y) * res + radar_ui::column_height(res, target_x == 0.0 && target_y == 0.0);
+    let y = area[1]
+        + (offset_y + target_y) * res
+        + radar_ui::column_height(res, target_x == 0.0 && target_y == 0.0);
     [right - width * s, y, width * s, (HP_HEIGHT + BAR_GAP + POISE_HEIGHT) * s]
+}
+
+fn boss_pitch() -> f32 {
+    BOSS_BAR_PITCH + crate::boss_list::extra_px()
+}
+
+/// Where the bars of the boss in slot `slot` start, under its game health bar: `[x, y, w]`. The place
+/// follows the screen only, like the game's bar; `s` sizes the bars, not where they sit.
+fn boss_rect(area: &[f32; 4], slot: usize) -> [f32; 3] {
+    let res = area[3] / BASE_HEIGHT;
+    [
+        area[0] + BOSS_BAR_LEFT * res,
+        area[1]
+            + (BOSS_BAR_BOTTOM + crate::boss_list::drop_px() - slot as f32 * boss_pitch()
+                + BOSS_BAR_GAP)
+                * res,
+        BOSS_BAR_WIDTH * res,
+    ]
 }
 
 /// The largest 16:9 rectangle centered in a `w` x `h` display: `[x, y, w, h]`.
@@ -430,9 +459,50 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
     let right = left + width;
 
     let draw = ui.get_foreground_draw_list();
-    let label = format!("{} / {}", target.hp, target.max_hp);
+    // A boss has the game's own health bar, and its posture and effects under it (`draw_boss`): the
+    // panel keeps the buildup. Otherwise: the bars, the effects, then the buildup.
+    let boss = target.boss.filter(|_| settings::boss_bar());
+    let mut row_top = y;
+    if boss.is_none() {
+        let bottom = draw_bars(ui, &draw, target, [trail, poise_trail], [left, y, width], layout);
+        // Under the tan line.
+        row_top = bottom + (LINE + BUILDUP_GAP) * s;
+        if settings::effects_target() && !target.effects.is_empty() {
+            let size = s * TARGET_EFFECTS_SCALE;
+            let per_row = (((right - left) / (EFFECT_CELL * size)).floor() as usize)
+                .clamp(1, PLAYER_EFFECTS_PER_ROW);
+            let cells = Cells {
+                origin: [right, row_top],
+                right_aligned: true,
+                s: size,
+                text: EFFECT_TIME_TARGET * s,
+                per_row,
+            };
+            draw_effects(ui, &draw, &target.effects, cells, layout);
+            let rows = target.effects.len().div_ceil(per_row).min(EFFECT_ROWS);
+            row_top += rows as f32 * EFFECT_ROW * size + EFFECTS_GAP * s;
+        }
+    }
+    for buildup in &target.buildup {
+        draw_buildup(ui, &draw, buildup, [left, row_top, right], layout);
+        row_top += BUILDUP_ROW * s;
+    }
+    anchor_gauges();
+}
 
-    let top = y;
+/// The health and posture bars of the panel with their frames, from `[left, y, width]`; returns
+/// the bottom of the last bar.
+fn draw_bars(
+    ui: &Ui,
+    draw: &DrawListMut<'_>,
+    target: &Target,
+    [trail, poise_trail]: [&Trail; 2],
+    [left, y, width]: [f32; 3],
+    layout: &Layout,
+) -> f32 {
+    let s = layout.s;
+    let right = left + width;
+    let label = format!("{} / {}", target.hp, target.max_hp);
     let max_hp = target.max_hp as f32;
     let trail_fraction = (trail.from > target.hp as f32).then(|| trail.from / max_hp);
     let hp_bottom = y + HP_HEIGHT * s;
@@ -449,68 +519,122 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
         s,
         textures: layout.textures,
     };
-    draw_bar(&draw, &hp_bar);
+    draw_bar(draw, &hp_bar);
     if layout.show_numbers {
         draw_bar_number(ui, &label, [left, right, y, hp_bottom], BAR_NUMBER * s, s);
     }
 
     let mut bottom = hp_bottom;
     let mut poise_top = None;
-    if let Some((poise, max)) = target.poise {
+    if let Some(poise) = target.poise {
         let poise_from = hp_bottom + BAR_GAP * s;
         poise_top = Some(poise_from);
         bottom = poise_from + POISE_HEIGHT * s;
-        let poise_bar = Bar {
-            from: [left, poise_from],
-            to: [right, bottom],
-            fraction: poise / max,
-            trail: (poise_trail.from > poise).then(|| poise_trail.from / max),
-            trail_tint: TRAIL_TINT,
-            trail_color: TRAIL_COLOR,
-            glow: poise_trail.glow(),
-            core: POISE_CORE,
-            edge: POISE_EDGE,
-            s,
-            textures: layout.textures,
-        };
-        draw_bar(&draw, &poise_bar);
-        if layout.show_numbers {
-            let label = format!("{poise:.0} / {max:.0}");
-            draw_bar_number(
-                ui,
-                &label,
-                [left, right, poise_from, bottom],
-                BAR_NUMBER * s,
-                s,
-            );
-        }
+        draw_poise_bar(ui, draw, poise, poise_trail, [left, right, poise_from, bottom], layout);
     }
     // A frame for each bar, drawn over both so one bar's does not hide the other's.
-    frame(&draw, left, right, top, hp_bottom, s, layout.textures);
+    frame(draw, left, right, y, hp_bottom, s, layout.textures);
     if let Some(poise_from) = poise_top {
-        frame(&draw, left, right, poise_from, bottom, s, layout.textures);
+        frame(draw, left, right, poise_from, bottom, s, layout.textures);
     }
+    bottom
+}
 
-    // Under the tan line.
-    let mut row_top = bottom + (LINE + BUILDUP_GAP) * s;
-    for buildup in &target.buildup {
-        draw_buildup(ui, &draw, buildup, [left, row_top, right], layout);
-        row_top += BUILDUP_ROW * s;
+/// The posture bar in `[left, right, top, bottom]`, with its number when shown.
+fn draw_poise_bar(
+    ui: &Ui,
+    draw: &DrawListMut<'_>,
+    (poise, max): (f32, f32),
+    poise_trail: &Trail,
+    [left, right, top, bottom]: [f32; 4],
+    layout: &Layout,
+) {
+    let s = layout.s;
+    let poise_bar = Bar {
+        from: [left, top],
+        to: [right, bottom],
+        fraction: poise / max,
+        trail: (poise_trail.from > poise).then(|| poise_trail.from / max),
+        trail_tint: TRAIL_TINT,
+        trail_color: TRAIL_COLOR,
+        glow: poise_trail.glow(),
+        core: POISE_CORE,
+        edge: POISE_EDGE,
+        s,
+        textures: layout.textures,
+    };
+    draw_bar(draw, &poise_bar);
+    if layout.show_numbers {
+        let label = format!("{poise:.0} / {max:.0}");
+        draw_bar_number(ui, &label, [left, right, top, bottom], BAR_NUMBER * s, s);
     }
-    if settings::effects_target() && !target.effects.is_empty() {
+}
+
+/// A boss, on the game's health bar of its slot: its numbers on the bar, and its posture bar under
+/// the line the game draws under it. The game's cap at the left end of that line rises from it
+/// (`MENU_FL_BarDeco_L`) and so does its round ornament at the right end (`MENU_FL_BarDeco`); the
+/// same pieces turned upside down hang from the line over the posture bar, making a mirror image.
+fn draw_boss(ui: &Ui, boss: &Boss, trail: &Trail, layout: &Layout) {
+    let draw = ui.get_foreground_draw_list();
+    let s = layout.s;
+    let res = layout.area[3] / BASE_HEIGHT;
+    let [left, top, width] = boss_rect(&layout.area, boss.slot);
+    let right = left + width;
+    if layout.show_numbers {
+        let label = format!("{} / {}", boss.hp, boss.max_hp);
+        // The fill of the game's bar is 9 px high and ends where the posture bar's gap starts.
+        let bar = [top - (BOSS_BAR_GAP + BOSS_BAR_HEIGHT) * res, top - BOSS_BAR_GAP * res];
+        draw_bar_number(ui, &label, [left, right, bar[0], bar[1]], BAR_NUMBER * s, s);
+    }
+    // The effects, right to left from the end of the bar, under the posture bar.
+    if !boss.effects.is_empty() {
         let size = s * TARGET_EFFECTS_SCALE;
-        let per_row = (((right - left) / (EFFECT_CELL * size)).floor() as usize)
-            .clamp(1, PLAYER_EFFECTS_PER_ROW);
+        let poise_height = if boss.poise.is_some() { POISE_HEIGHT * s } else { 0.0 };
         let cells = Cells {
-            origin: [right, row_top + EFFECTS_GAP * s],
+            origin: [right, top + poise_height + EFFECTS_GAP * s],
             right_aligned: true,
             s: size,
             text: EFFECT_TIME_TARGET * s,
-            per_row,
+            per_row: (((right - left) / (EFFECT_CELL * size)).floor() as usize)
+                .clamp(1, PLAYER_EFFECTS_PER_ROW * EFFECT_ROWS),
         };
-        draw_effects(ui, &draw, &target.effects, cells, layout);
+        draw_effects(ui, &draw, &boss.effects, cells, layout);
     }
-    anchor_gauges();
+    let Some(poise) = boss.poise else {
+        return;
+    };
+    let bottom = top + POISE_HEIGHT * s;
+    draw_poise_bar(ui, &draw, poise, trail, [left, right, top, bottom], layout);
+    let Some(textures) = layout.textures else {
+        return;
+    };
+    let k = BOSS_DECO_SCALE * res;
+    let [cap_w, cap_h] = textures::DECO_LEFT_SIZE;
+    let [_, art_right, _, art_bottom] = textures::DECO_ART;
+    // The game's line is a little above the bar. Upside down, the cap's base (its old bottom row)
+    // is at the top and goes on it.
+    let line_y = top - BOSS_LINE_ABOVE * res;
+    let y0 = line_y - (cap_h - art_bottom) * k;
+    // The game's cap ends a little inside its bar.
+    let x0 = left + 2.5 * res - art_right * k;
+    let white = fade([1.0, 1.0, 1.0, 1.0]);
+    draw.add_image(textures.deco_left, [x0, y0], [x0 + cap_w * k, y0 + cap_h * k])
+        .uv_min([0.0, 1.0])
+        .uv_max([1.0, 0.0])
+        .col(white)
+        .build();
+    // The end of the line with its ornament, upside down with the line on the game's: the part of
+    // the texture that spans from the cap to the right end of the bar.
+    let [line_w, line_h] = textures::DECO_SIZE;
+    let x_end = right + (line_w - textures::DECO_ART_END) * k;
+    let x_start = left;
+    let u0 = 1.0 - (x_end - x_start) / k / line_w;
+    let y1 = line_y - (line_h - textures::DECO_LINE_ROW) * k;
+    draw.add_image(textures.deco, [x_start, y1], [x_end, y1 + line_h * k])
+        .uv_min([u0, 1.0])
+        .uv_max([1.0, 0.0])
+        .col(white)
+        .build();
 }
 
 /// Tells the game's buildup gauge of the player where it goes: at the left, under the game's row of
@@ -522,10 +646,13 @@ fn anchor_gauges() {
     let scale = crate::settings::player_scale();
     let left = GAME_ICONS_CENTER_X - GAME_ICONS_PITCH / 2.0;
     // Under the last row the game's icons fill (and the time text below it, when shown).
-    let used = (0..crate::state_icons::SLOTS).take_while(|&slot| crate::state_icons::icon(slot).is_some()).count();
+    let used = (0..crate::state_icons::SLOTS)
+        .take_while(|&slot| crate::state_icons::icon(slot).is_some())
+        .count();
     let last_row = used.saturating_sub(1) / GAME_ICONS_PER_ROW;
     let times = if crate::settings::effects_player() { GAME_ICON_TIME * 1.5 } else { 0.0 };
-    let top = GAME_ICONS_BOTTOM + last_row as f32 * GAME_ICONS_ROW_PITCH + times + GAUGE_UNDER_ICONS_GAP;
+    let top =
+        GAME_ICONS_BOTTOM + last_row as f32 * GAME_ICONS_ROW_PITCH + times + GAUGE_UNDER_ICONS_GAP;
     crate::state_icons::place_gauges(left + crate::state_icons::GAUGE_WIDTH * scale, top, scale);
 }
 
@@ -547,13 +674,15 @@ fn draw_icon_times(ui: &Ui, effects: &[Effect], alpha: f32, layout: &Layout) {
     let res = layout.area[3] / BASE_HEIGHT;
     let em = GAME_ICON_TIME * res;
     let centered = |slot: usize| {
-        layout.area[0] + (GAME_ICONS_CENTER_X + (slot % GAME_ICONS_PER_ROW) as f32 * GAME_ICONS_PITCH) * res
+        layout.area[0]
+            + (GAME_ICONS_CENTER_X + (slot % GAME_ICONS_PER_ROW) as f32 * GAME_ICONS_PITCH) * res
     };
     let time_below = |label: &str, center: f32, row: usize, alpha: f32| {
         let size = text::measure(ui, label, em);
         let pos = [
             (center - size[0] / 2.0).round(),
-            (layout.area[1] + (GAME_ICONS_BOTTOM + row as f32 * GAME_ICONS_ROW_PITCH) * res).round(),
+            (layout.area[1] + (GAME_ICONS_BOTTOM + row as f32 * GAME_ICONS_ROW_PITCH) * res)
+                .round(),
         ];
         text::add_shadowed(
             label,
@@ -621,10 +750,8 @@ fn draw_effects(
         let height = EFFECT_ICON * s;
         let center = (x0 + x1) / 2.0;
         let icon_top = y + (2.0 * s).round();
-        if let Some(icon) = effect
-            .kind
-            .and_then(Icon::buildup)
-            .and_then(|icon| layout.icons?.icon(icon))
+        if let Some(icon) =
+            effect.kind.and_then(Icon::buildup).and_then(|icon| layout.icons?.icon(icon))
         {
             let width = (height * icon.size[0] / icon.size[1]).min(EFFECT_CELL * s);
             draw.add_image(
@@ -651,17 +778,14 @@ fn draw_effects(
             let label = effect_time(effect.left);
             let em = cells.text;
             let size = text::measure(ui, &label, em);
-            let pos = [
-                (center - size[0] / 2.0).round(),
-                (icon_top + height + 1.0 * s).round(),
-            ];
+            let pos = [(center - size[0] / 2.0).round(), (icon_top + height + 1.0 * s).round()];
             text::add_shadowed(&label, pos, em, fade(TEXT), fade(TEXT_SHADOW), s.max(1.0));
         }
     }
 }
 
-/// One buildup bar: the game's icon of the status, then a bar filled with what has built up, with
-/// `built / max` in it when the numbers are shown.
+/// One buildup bar filled with what has built up, with `built / max` in it when the numbers are
+/// shown, and the game's icon of the status at its right end.
 fn draw_buildup(
     ui: &Ui,
     draw: &DrawListMut<'_>,
@@ -671,27 +795,26 @@ fn draw_buildup(
 ) {
     let s = layout.s;
     let middle = top + BUILDUP_ROW * s / 2.0;
-    let mut bar_left = left;
-    if let Some(icon) = layout
-        .icons
-        .and_then(|map| Icon::buildup(buildup.kind).and_then(|icon| map.icon(icon)))
+    let mut bar_right = right;
+    if let Some(icon) =
+        layout.icons.and_then(|map| Icon::buildup(buildup.kind).and_then(|icon| map.icon(icon)))
     {
         let height = BUILDUP_ICON * s;
         let width = height * icon.size[0] / icon.size[1];
         draw.add_image(
             icon.texture,
-            [left, middle - height / 2.0],
-            [left + width, middle + height / 2.0],
+            [right - width, middle - height / 2.0],
+            [right, middle + height / 2.0],
         )
         .col(fade([1.0, 1.0, 1.0, 1.0]))
         .build();
-        bar_left = left + width + BUILDUP_ICON_GAP * s;
+        bar_right = right - width - BUILDUP_ICON_GAP * s;
     }
     let color = BUILDUP_COLORS[buildup.kind];
     let half = BUILDUP_BAR * s / 2.0;
     let bar = Bar {
-        from: [bar_left, middle - half],
-        to: [right, middle + half],
+        from: [left, middle - half],
+        to: [bar_right, middle + half],
         fraction: buildup.built as f32 / buildup.max as f32,
         trail: None,
         trail_tint: TRAIL_TINT,
@@ -708,7 +831,7 @@ fn draw_buildup(
         draw_bar_number(
             ui,
             &label,
-            [bar_left, right, middle - half, middle + half],
+            [left, bar_right, middle - half, middle + half],
             BAR_NUMBER * s,
             s,
         );
@@ -719,17 +842,12 @@ fn draw_buildup(
 /// stays inside the bar, with a shadow so it reads over both the bar and the track.
 fn draw_bar_number(ui: &Ui, text: &str, [left, right, top, bottom]: [f32; 4], em: f32, s: f32) {
     let size = text::measure(ui, text, em);
-    let pos = [
-        ((left + right - size[0]) / 2.0).round(),
-        ((top + bottom - size[1]) / 2.0).round(),
-    ];
+    let pos = [((left + right - size[0]) / 2.0).round(), ((top + bottom - size[1]) / 2.0).round()];
     text::add_shadowed(text, pos, em, fade(TEXT), fade(TEXT_SHADOW), s.max(1.0));
 }
 
 fn draw_bar(draw: &DrawListMut<'_>, bar: &Bar<'_>) {
-    draw.add_rect(bar.from, bar.to, fade(TRACK))
-        .filled(true)
-        .build();
+    draw.add_rect(bar.from, bar.to, fade(TRACK)).filled(true).build();
     match bar.textures {
         Some(textures) => textured_bar(draw, bar, textures),
         None => flat_bar(draw, bar),
@@ -847,9 +965,7 @@ fn frame(
     let line = LINE * s.max(0.85);
     let under = bottom + line;
     let color = fade(LINE_COLOR);
-    draw.add_rect([left, bottom], [right, under], color)
-        .filled(true)
-        .build();
+    draw.add_rect([left, bottom], [right, under], color).filled(true).build();
     draw.add_triangle(
         [left - 3.0 * s, under],
         [left + 2.0 * s, under],
@@ -881,10 +997,9 @@ fn textured_frame(
     let [width, height] = textures::WAKU_SIZE;
     let kx = 0.5 * s;
     let thick = WAKU_LINE_TEXEL * s;
-    for ([from, to, center], y) in [
-        (textures::WAKU_TOP_LINE, top),
-        (textures::WAKU_BOTTOM_LINE, bottom),
-    ] {
+    for ([from, to, center], y) in
+        [(textures::WAKU_TOP_LINE, top), (textures::WAKU_BOTTOM_LINE, bottom)]
+    {
         draw.add_image(
             textures.waku,
             [left, y - (center - from) * thick],
@@ -902,9 +1017,7 @@ fn textured_frame(
     let y1 = y0 + height * ky;
     let [left_w, _] = textures::WAKU_LEFT_SIZE;
     let x1 = left + 1.0 * s;
-    draw.add_image(textures.waku_left, [x1 - left_w * kx, y0], [x1, y1])
-        .col(white)
-        .build();
+    draw.add_image(textures.waku_left, [x1 - left_w * kx, y0], [x1, y1]).col(white).build();
     let from = textures::WAKU_CAP_FROM;
     let x0 = right + 1.0 * s - (textures::WAKU_CAP_ART_END - from) * kx;
     draw.add_image(textures.waku, [x0, y0], [x0 + (width - from) * kx, y1])
@@ -924,7 +1037,9 @@ fn hdr_settings(rendering: &config::Rendering) -> hudhook::color::Settings {
         "hdr10" => Mode::Hdr10,
         "scrgb" => Mode::ScRgb,
         other => {
-            logger::error(&format!("Rendering.HDRMode \"{other}\" is not Auto, SDR, HDR10 or scRGB, using Auto"));
+            logger::error(&format!(
+                "Rendering.HDRMode \"{other}\" is not Auto, SDR, HDR10 or scRGB, using Auto"
+            ));
             Mode::Auto
         }
     };
@@ -952,15 +1067,11 @@ pub fn install() {
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
     });
-    match Hudhook::builder()
-        .with::<ImguiDx12Hooks>(HudRenderLoop::default())
-        .build()
-        .apply()
-    {
+    match Hudhook::builder().with::<ImguiDx12Hooks>(HudRenderLoop::default()).build().apply() {
         Ok(()) => logger::log("Overlay: DX12 hooks applied"),
-        Err(e) => logger::error(&format!(
-            "Overlay: DX12 hooks failed ({e:?}), overlay unavailable"
-        )),
+        Err(e) => {
+            logger::error(&format!("Overlay: DX12 hooks failed ({e:?}), overlay unavailable"))
+        }
     }
 }
 
@@ -988,6 +1099,7 @@ mod tests {
         {
             let src = pixel_shader();
             let (mut code, mut err): (Option<ID3DBlob>, Option<ID3DBlob>) = (None, None);
+            // SAFETY: the source and entry-point strings are NUL-terminated and the out pointers are valid.
             let result = unsafe {
                 D3DCompile(
                     src.as_ptr() as _,
@@ -995,8 +1107,8 @@ mod tests {
                     None,
                     None,
                     None::<&ID3DInclude>,
-                    s!("main "),
-                    s!("ps_5_0 "),
+                    s!("main\0"),
+                    s!("ps_5_0\0"),
                     0,
                     0,
                     &mut code,
@@ -1004,13 +1116,20 @@ mod tests {
                 )
             };
             let message = err
+                // SAFETY: the blob owns `GetBufferSize()` readable bytes at `GetBufferPointer()`.
                 .map(|e| unsafe {
-                    String::from_utf8_lossy(std::slice::from_raw_parts(e.GetBufferPointer() as *const u8, e.GetBufferSize()))
-                        .into_owned()
+                    String::from_utf8_lossy(std::slice::from_raw_parts(
+                        e.GetBufferPointer() as *const u8,
+                        e.GetBufferSize(),
+                    ))
+                    .into_owned()
                 })
                 .unwrap_or_default();
-            assert!(result.is_ok(), "{message}
-{src}");
+            assert!(
+                result.is_ok(),
+                "{message}
+{src}"
+            );
         }
     }
 

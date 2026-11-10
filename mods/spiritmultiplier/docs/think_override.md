@@ -1,113 +1,100 @@
-# SpiritThinkParam.ini / SpiritParam.ini: chỉnh param spirit khi đang chơi (thử nghiệm)
+# Spirit AI: `ImproveSenses`, `ImproveAggression`, `ImproveFollow`
 
-**Status 2026-10-08: đã viết, đang test in-game. Chưa có trong ini mặc định và chưa nói trong CHANGELOG (công cụ để nghiên cứu độ hung hăng của spirit).**
+Status: **Confirmed** in game: the three bundles together improve spirit behaviour (the groups were not
+tested one by one); the shared-row restriction below was reproduced and confirmed fixed alongside a
+third-party Ashes overhaul. Conventions:
+[research notes](../../../docs/research/README.md). Code: `src/think/mod.rs`, `src/think/fields.rs`.
 
-## Cách dùng
+## Question
 
-File `SpiritThinkParam.ini` (AI) và `SpiritParam.ini` (NpcParam) cạnh DLL, chỉ đọc nếu tồn tại. Mỗi dòng `Tên=giá trị`; tên như trong ngoặc của Smithbox (`TeamAttackEffectivity`, `isGuard_Act`) hoặc tên Rust (`team_attack_effectivity`), không phân biệt hoa thường và dấu `_`. Lưu file lúc đang chơi: tối đa 1 giây sau mod áp lại (không cần F5), rồi triệu hồi lại spirit. Bỏ dòng hoặc xoá file thì về giá trị gốc của game.
+Which `NpcThinkParam` fields make spirits notice enemies, engage together and keep up with the player, and
+how can they be tuned live without shipping a regulation?
 
-## Cách hoạt động
+## Mechanism
 
-- Hàng đích: mọi `npcThinkParamId` / `npcThinkParamId_ridden` của `BuddyParam`, chọn theo index (không qua bảng tra runtime).
-- Lần đầu chụp nguyên 228 byte của mỗi hàng, mỗi lần áp bắt đầu từ bản chụp rồi ghi các field trong file (cùng mẫu baseline với `ghost_color.rs`).
-- Bảng field (`src/think_fields.rs`) sinh từ `NPC_THINK_PARAM_ST` của fromsoftware-rs (85 field số + 12 cờ bit đơn (`enableNaviFlg_*`, `isNoAvoidHugeEnemy`...; giá trị 0/1)); test `offsets_match_struct` đối chiếu offset với setter của thư viện.
+- Target rows: every `npcThinkParamId` and `npcThinkParamId_ridden` of `BuddyParam`, addressed by index
+  (never through the runtime lookup table).
+- The first time, the whole 228 bytes of each row are saved; every apply starts from that snapshot and
+  writes the chosen fields (the baseline pattern of [ghost_color.md](ghost_color.md)). Spirits already out
+  keep the old values: summon them again.
+- `think/fields.rs` was generated from `NPC_THINK_PARAM_ST` of fromsoftware-rs: 85 numeric fields and 12
+  single-bit flags (`enableNaviFlg_*`, `isNoAvoidHugeEnemy`, ...; value 0 or 1); the test `offsets_match_struct`
+  checks the offsets against the library's setters.
 
-## Dữ liệu để thử (từ Age of Spirit, regulation.bin của họ so với gốc, dòng Lone Wolf)
+### Built-in bundles (on by default, hot reload)
 
-| Field | Age of Spirit | Gốc |
+The values come from the regulation of a third-party spirit overhaul (compared with the base game, the
+Lone Wolf row) and were tried in game.
+
+| Field | Overhaul | Base |
 |---|---|---|
-| TeamAttackEffectivity | 100 | 34 (spirit đầu bảng: 50) |
-| BattleStartDist | 15 | 2 |
-| eye_dist / searchEye_dist | 15 | 2 / 0 |
-| nose_dist | 5 | 0 |
-| searchTarget_LV1/2_forgetTime | 5.0 | 1 |
+| `TeamAttackEffectivity` | 100 | 34 (first spirit: 50) |
+| `BattleStartDist` | 15 | 2 |
+| `eye_dist` / `searchEye_dist` | 15 | 2 / 0 |
+| `nose_dist` | 5 | 0 |
+| `searchTarget_LV1/2_forgetTime` | 5.0 | 1 |
 
-Tooltip Smithbox của TeamAttackEffectivity nói "tăng thì ít người tấn công cùng lúc", ngược với mô tả của tác giả Age of Spirit; chưa biết bên nào đúng, cần test.
+- `ImproveSenses`: sight, smell, hearing, how long a target is remembered, sight in combat.
+- `ImproveAggression`: `TeamAttackEffectivity`, `BattleStartDist`, calling for help (Platoon), `isGuard_Act`,
+  `thinkAttr_doAdmirer`, jumping.
+- `ImproveFollow`: return to the owner when farther than about 30 m (base 9999) and permission to use
+  ladders, holes, navmesh walls and edges. Lava is left out on purpose.
 
-## Nhóm Navigation và Retreat (Age of Spirit)
+Each entry has a mode: `Max` only raises the original, `Min` only lowers it, `Set` always writes, so that
+regulations that already tuned these fields (for example the overhaul gives healers their own values) are not
+broken. Not in the bundles:
+`isBuddyAI`, `disableDark` (already 1), `enableNaviFlg_Lava`, the `goalAction_*` group (decided against) and
+`fallDamageDump` (no effect).
 
-- `enableNaviFlg_Ladder/Hole/InSideWall/Lava/Edge_Ordinary` = 1 (gốc 0): quyền đi qua thang, hố, tường navmesh, dung nham, mép vực khi tìm đường. Theo đoán: giúp spirit bám theo qua mép cao thay vì kẹt; Lava = 1 có thể cho spirit đi vào dung nham. Có thể liên quan đến chuyện rơi/lạc map (TODO).
-- Retreat: `maxBackhomeDist`/`backhomeDist` 30 (gốc 9999/9979), `backhomeBattleDist` 60 (gốc 10), `BackHome_LookTargetTime/Dist` 15, `backToHomeStuckAct` 1 (gốc 0), `BackHomeLifeOnHitEneWal` 0.1 (gốc 5.0). Theo đoán: "home" là chỗ người chơi; gốc spirit đuổi địch gần như vô hạn, còn 30 m thì bị kéo về khi đi quá xa. Giá trị cũ của `Warp` (đã gỡ) gần giống bộ này.
+- Navigation group of the overhaul: `enableNaviFlg_Ladder/Hole/InSideWall/Lava/Edge_Ordinary` = 1 (base 0):
+  permission to path over ladders, holes, navmesh walls, lava and edges. **Hypothesis**: lets spirits follow
+  over ledges instead of getting stuck; lava = 1 could let them walk into lava.
+- Retreat group: `maxBackhomeDist` / `backhomeDist` 30 (base 9999 / 9979), `backhomeBattleDist` 60 (base 10),
+  `BackHome_LookTargetTime/Dist` 15, `backToHomeStuckAct` 1 (base 0), `BackHomeLifeOnHitEneWal` 0.1 (base 5.0).
+  **Hypothesis**: "home" is the owner; by default a spirit chases enemies almost without limit, with 30 m it
+  is pulled back when it goes too far.
+- The tooltip of `TeamAttackEffectivity` in a param editor says a higher value means fewer attackers at once,
+  opposite to the overhaul author's description. Which one is right was not tested.
 
-## Phân tích bảng NpcThinkParam của Age of Spirit (200 dòng, export 2026-10-09)
+## What the overhaul's `NpcThinkParam` shows (200 rows)
 
-- Gần như mọi field là hằng số cho cả 200 dòng (BattleStartDist 15, tầm nhìn, nhóm Navigation, Retreat...). Chỉ vài field khác nhau giữa các dòng: nhóm `goalAction_*`, `TeamAttackEffectivity` (100 ở 179 dòng; 0/30/50/60/80 ở số ít, thường là healer/phụ trợ), `useFall_onNormalCaution` (0 hoặc 2, chia đôi), `actTypeOnFailedPath`, `eye_BeginDist`.
-- `goalAction_*` (ToCaution / ToCautionImportant / ToSearchLv1 / ToSearchLv2 / ToDisappear): 116 dòng cận chiến = 3/3/3/3/3 (chạy tới nguồn). 41 dòng pháp sư/cung thủ (Noble Sorcerer, Rennala, Page, Oracle Envoy, các Archer, cả Spirit Jellyfish) = 2/3/1/1/2: tiến lại gần / chỉ nhìn, không lao vào. Còn lại là biến thể nhỏ (healer có ToDisappear 0, hiệp sĩ lửa...). Nên đặt 3 cho tất cả sẽ làm pháp sư chạy vào cận chiến.
-- Vì vậy `SpiritThinkParam.ini` có thêm phần `[Row id, id, ...]`: áp lên đúng dòng NpcThinkParam có ID đó, sau các dòng chung. File ini mẫu sinh sẵn 12 phần Row từ bảng này.
+- Almost every field is constant over the 200 rows (`BattleStartDist` 15, the sight values, the Navigation
+  and Retreat groups). Only a few vary: the `goalAction_*` group, `TeamAttackEffectivity` (100 in 179 rows;
+  0, 30, 50, 60, 80 in a few, usually healers and support), `useFall_onNormalCaution` (0 or 2, split),
+  `actTypeOnFailedPath`, `eye_BeginDist`.
+- `goalAction_*` (ToCaution, ToCautionImportant, ToSearchLv1, ToSearchLv2, ToDisappear): 116 melee rows =
+  3/3/3/3/3 (run to the source). 41 sorcerer and archer rows (Noble Sorcerer, Rennala, Page, Oracle Envoy,
+  the Archers, even Spirit Jellyfish) = 2/3/1/1/2: approach or only look, do not charge. The rest are small
+  variants (healers with ToDisappear 0, fire knights, ...). Setting 3 everywhere would send sorcerers into
+  melee, which is why the group is not in the bundles.
 
-## Sát thương rơi (thử 2026-10-09)
+## Rejected: fall damage
 
-**Kết quả: `NpcParam.fallDamageDump = 100` không giúp spirit sống sót khi rơi (người dùng thử trong Convergence, cùng ngày). Bỏ hướng này.**
+`NpcParam.fallDamageDump = 100` did **not** make spirits survive a fall (tried under Convergence). The field
+is 0 on every `[Spirit Summon]`, 100 on dummies, Bonfire, Maliketh and Gurranq, 90 on dragons and Giant
+Crow; **inferred** to be a percent fall-damage reduction, but spirits still died with 100: either it does
+not apply to spirits or that fall is a hard-coded kill. Untried: a SpEffect with `fall_damage_rate` (f32) put into the `spEffectID0..31` slots of the spirit's NpcParam.
+`HitMtrlParam.disable_fall_damage` is per ground material and cannot be used for spirits only. Falling out
+of the map belongs to [warp_research.md](warp_research.md).
 
-`NpcParam.fallDamageDump` (u8) là 0 ở mọi `[Spirit Summon]`, 100 ở dummy/Bonfire/Maliketh/Gurranq, 90 ở rồng và Giant Crow; ta đoán là % giảm sát thương rơi nhưng spirit vẫn chết với 100 (có thể field này không áp dụng cho spirit, hoặc cú rơi đó là chết ngay viết cứng trong code). Phần `hp=1` để làm tín hiệu rõ hơn chưa từng được bật trong lần test này (dòng bị comment).
+## Shared rows with enemies (a fix)
 
-Hướng còn lại: SpEffect có `fall_damage_rate` (f32); `SpiritParam.ini` có thể gắn nó vào slot `spEffectID0..31` của NpcParam spirit mà không cần code. Khi module chạy lần đầu nó ghi log các SpEffect có `fallDamageRate` khác 1.0 (dòng `SpEffect fallDamageRate=...`) để chọn ID. `HitMtrlParam.disable_fall_damage` là theo chất liệu nền nên không dùng riêng cho spirit được. Rơi ra khỏi map vẫn thuộc việc warp đang hoãn.
+A user running the mod together with a third-party Ashes overhaul reported that enemies and bosses chased a
+short distance, then teleported back to their spawn and stopped chasing (some bosses sank into the floor and
+could not be killed). Reproduced with both mods; with one of them it was normal; with `ImproveFollow = false`
+it stopped.
 
-## Bộ giá trị tích hợp: ImproveSenses / ImproveAggression / ImproveFollow (2026-10-09)
-
-**Status 2026-10-09: viết xong, mặc định `true`; từng giá trị đã thử trong game (bật cả bộ, hành vi spirit được cải thiện), chưa tách từng nhóm để biết nhóm nào quyết định.**
-
-Ba key ini bật/tắt (hot reload bằng F5) nạp sẵn các field của Age of Spirit vào `NpcThinkParam` của spirit (`SENSES`, `AGGRESSION`, `FOLLOW` trong `think_override.rs`):
-
-- `ImproveSenses`: tầm nhìn / khứu giác / thính giác, thời gian nhớ mục tiêu, tầm nhìn khi chiến đấu.
-- `ImproveAggression`: `TeamAttackEffectivity`, `BattleStartDist`, kêu gọi đồng đội (Platoon), `isGuard_Act`, `thinkAttr_doAdmirer`, nhảy.
-- `ImproveFollow`: quay về chỗ chủ khi xa hơn ~30 m (gốc 9999), quyền đi thang / hố / tường navmesh / mép vực. Bỏ Lava có chủ ý.
-
-Mỗi mục có chế độ: `Max` chỉ nâng giá trị gốc lên, `Min` chỉ hạ xuống, `Set` luôn ghi, để không làm hỏng các mod đã chỉnh sẵn các field này (vd. Age of Spirit đặt giá trị riêng cho healer). Các bộ được ghi trước, `SpiritThinkParam.ini` / `SpiritParam.ini` ghi sau nên thắng. Không đưa vào bộ: `isBuddyAI`, `disableDark` (gốc đã là 1), `enableNaviFlg_Lava`, nhóm `goalAction_*` (người dùng quyết định bỏ), `fallDamageDump` (không có tác dụng).
-
-## Dòng dùng chung với kẻ địch (2026-10-28)
-
-**Status 2026-10-28: đã sửa trong code (3 bộ `Improve*` chỉ ghi dòng có `isBuddyAI = 1`), đã thử trong game cùng LoA_Ashmaker: kẻ địch không còn bị kéo về. Nguyên nhân đã tái hiện và xác nhận bằng cách tắt `ImproveFollow`.**
-
-Báo cáo Nexus (loltem154, 1.5.0): chạy cùng LoA_Ashmaker, kẻ địch và boss đuổi một đoạn rồi dịch chuyển về điểm spawn và không đuổi nữa (một số boss lún xuống đất, không đánh chết được). Tái hiện được khi bật cả hai mod; chỉ một trong hai thì bình thường; `ImproveFollow=false` thì hết.
-
-- Spirit không chỉ dùng dòng AI riêng: `BuddyParam.npcThinkParamId` có thể trỏ tới dòng của kẻ địch. Vanilla: 98 dòng, 7 dòng có `isBuddyAI=0` và tên kẻ địch (Demi-Human 1-5 `141000000`..., Land Squirt `144400000`, Miranda Sprout `144810000`); 91 dòng còn lại `isBuddyAI=1`. Trong toàn bộ `NpcThinkParam` vanilla, `isBuddyAI=1` còn có thêm 10 dòng không do `BuddyParam` tham chiếu (ID `100000000`, `1500000xx`, `199999999`, không tên).
-- LoA_Ashmaker (dữ liệu export `tmp/csv/LoA_Ashmaker/`): 640 dòng think do spirit dùng, 429 dòng `isBuddyAI=1`, **210 dòng `isBuddyAI=0`** dùng chung với kẻ địch. Dòng kẻ địch của LoA có `maxBackhomeDist` thường 85 (leash); `ImproveFollow` (`Min 30`) hạ xuống 30 nên kẻ địch bỏ đuổi sớm.
-- Cả `ImproveSenses` và `ImproveAggression` cũng ghi lên các dòng đó (tầm nhìn, `BattleStartDist`...), nên kẻ địch dùng chung đổi hành vi theo; vanilla đã bị từ trước ở 7 dòng kể trên.
-- Sửa: `apply` chỉ ghi các bộ lên dòng `isBuddyAI=1` (đọc từ bản chụp gốc); dòng khác bị bỏ qua và log `bundles skipped N shared row(s)`. File `SpiritThinkParam.ini` (global và `[Row ...]`) vẫn ghi mọi dòng của spirit vì người dùng tự chọn. Cái giá: 7 spirit vanilla kể trên (và spirit mượn dòng kẻ địch ở mod khác) không còn được cải thiện AI.
-- Đã test 2026-10-28 (loltem154 báo lỗi, người dùng tái hiện và xác nhận hết lỗi sau sửa).
-
-## Ghi chú kỹ thuật chuyển từ code: `think_override.rs` (2026-10-22)
-
-Nội dung này trước đây là doc đầu file `.rs`; chuyển sang đây nguyên văn (tiếng Anh) để doc code chỉ còn vài dòng.
-
-Spirit AI tweaks, on the `NpcThinkParam` rows spirits use (the AI:
-aggressiveness, sight, battle start distance, ...). Hot reload, no F5 for
-the files below:
-
-- `ImproveSenses` / `ImproveAggression` / `ImproveFollow` (ini keys,
-  default `true`): built-in bundles of those fields, see [SENSES],
-  [AGGRESSION] and [FOLLOW]. Values were taken from the Age of Spirit
-  mod's regulation (its spirits notice enemies from farther away, engage
-  together and keep up with the player) and tried in game 2026-10-09.
-- `SpiritThinkParam.ini` and `SpiritParam.ini` (optional, experimental):
-  set any scalar field / bit flag of the `NpcThinkParam` / `NpcParam` rows
-  spirits use, so tweaks can be tried in-game without rebuilding the DLL.
-  They are written after the bundles and win over them.
-
-The files live next to the DLL, are never created and are only read if they exist. One
-`Name=value` per line, `;`/`#` comments. `Name` is the
-field name as in Smithbox's parentheses (`TeamAttackEffectivity`,
-`BattleStartDist`, `isGuard_Act`) or the Rust one
-(`team_attack_effectivity`) - case and underscores are ignored when
-matching. The file is checked once a second; saving it re-applies it.
-Spirits already out keep the old values: re-summon them.
-
-Which rows: every `npcThinkParamId` / `npcThinkParamId_ridden` of
-`BuddyParam` (the rows a spirit spawns with). Rows are addressed by index
-(`common::params`), never through the runtime lookup table.
-
-`SpiritParam.ini` (NpcParam: fields as in Smithbox, e.g. `fallDamageDump`)
-hits the `NpcParam` rows of the same spirits (`npcParamId` /
-`npcParamId_ridden`). In `SpiritThinkParam.ini` a `[Row id, ...]` section
-applies to the listed `NpcThinkParam` row IDs only; any other section header
-goes back to the global lines. Same snapshot / restore logic for both.
-
-The first time it runs, each target row's bytes are saved; every later
-apply starts from that snapshot and writes the listed fields, so a line
-removed from the file goes back to the game's value (same baseline
-pattern as `ghost_color.rs`).
-
-The field table in `think_fields.rs` was generated from
-`NPC_THINK_PARAM_ST` (fromsoftware-rs): scalar fields and single-bit flags
-(`enableNaviFlg_*`, `isNoAvoidHugeEnemy`, ...; value 0 or 1).
+- A spirit does not only use AI rows of its own: `BuddyParam.npcThinkParamId` may point at an enemy's row.
+  Vanilla has 98 rows, 7 with `isBuddyAI = 0` and enemy names (Demi-Human 1 to 5 `141000000` and so on, Land
+  Squirt `144400000`, Miranda Sprout `144810000`); the other 91 have `isBuddyAI = 1`. In the whole vanilla
+  `NpcThinkParam`, 10 more `isBuddyAI = 1` rows are not referenced by `BuddyParam` (IDs `100000000`,
+  `1500000xx`, `199999999`, unnamed).
+- In the overhaul: 640 think rows used by spirits, 429 with `isBuddyAI = 1` and **210 with `isBuddyAI = 0`**
+  shared with enemies. The enemies' rows there have a typical `maxBackhomeDist` of 85 (a leash); `ImproveFollow`
+  (`Min 30`) lowered it to 30, so enemies gave up the chase early.
+- `ImproveSenses` and `ImproveAggression` also wrote to those rows (sight, `BattleStartDist`, ...), changing
+  the shared enemies' behaviour too; vanilla had always been affected on the 7 rows above.
+- **Fix**: `apply` writes the bundles only to rows with `isBuddyAI = 1` (read from the original snapshot);
+  other rows are skipped and logged as `skipped N shared with enemies`. Cost: the 7 vanilla spirits above (and
+  spirits borrowing an enemy row in another mod) no longer get the AI improvements.
+- Confirmed in game that the enemies are no longer pulled back.

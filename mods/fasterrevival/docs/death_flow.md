@@ -1,119 +1,98 @@
-# FasterRevival: luồng chết của game và cách kéo mốc "chết" lên sớm
+# How the game kills the player, and moving that earlier
 
-**Status 2026-09-28: HOÀN THÀNH, test ổn trong game** (chết thường, chết giữa
-lúc đang tấn công, đòn tóm, rơi vực, chết gần Stake of Marika). Hồi sinh sau
-chết thường từ 12.2-14.4s (vanilla) còn ~4.2-4.7s. Code:
-`mods/fasterrevival/src/death.rs`. Phần bỏ khoảng dừng sau "YOU DIED" nằm ở
-`respawn_fade.md`.
+Status: **Confirmed** in game on 2.7.1.0: a normal death, a death in the middle of an attack, a grab, a
+fall and a death near a Stake of Marika. Respawning after a normal death goes from 12.2 to 14.4 s in
+vanilla to about 4.2 to 4.7 s together with [respawn_fade.md](respawn_fade.md). Conventions:
+[research notes](../../../docs/research/README.md). Code: `src/death.rs`.
 
-## Nguồn ý tưởng
+## Question
 
-**FasterDeathAnimation** của 0-F (trên Nexus là 0R4X,
-[Nexus 3367](https://www.nexusmods.com/eldenring/mods/3367),
-[GitHub](https://github.com/0-F/FasterDeathAnimation); repo không có LICENSE
-nên chỉ tham khảo ý tưởng, không copy code). Mod gốc là tool console .NET 7
-chạy offline: đọc `c0000.anibnd.dcx`, mở `a00.tae`, với mỗi animation có cả 2
-event TAE type 0 (`ChrActionFlag`):
+The game registers a death only through an event near the end of the death animation, so "YOU DIED"
+appears late. Can the registration move to the start of the animation without editing animation files?
 
-- action **12 = Kill Character** (event đầu tiên có `StartTime != 0`);
-- action **20 = Send Ghost Info**.
+## Where the idea comes from
 
-thì dời cả 2 lên đầu animation (event 12 về `t=0`), giữ nguyên thời lượng;
-`EndTime >= 100` coi là "tới hết animation", không đụng. Animation ngã vẫn
-phát bình thường, chỉ mốc logic "chết" được kéo lên sớm.
+A third-party mod does this offline: a console tool reads `c0000.anibnd.dcx`, opens `a00.tae` and, for
+every animation that has both TAE events of type 0 (`ChrActionFlag`) **action 12 (Kill Character)**, the
+first one with `StartTime != 0`, and **action 20 (Send Ghost Info)**, moves both to the start of the
+animation, keeping its length. The animation still plays in full; only the logic point of "dead" moves.
+Its repository has no license, so only the idea was taken, no code.
 
-Vì sao làm bản DLL thay vì patch file: mod gốc thay nguyên `c0000.anibnd.dcx`,
-file mà rất nhiều mod animation khác cũng thay, nên xung đột và người dùng
-phải tự chạy lại tool trên bản đã mod. (Bản build mod gốc trên Nexus lúc tải
-về, 2023-04-15, còn cũ hơn commit sửa lỗi đường dẫn output `8b49722`.)
+Doing it as a DLL avoids replacing `c0000.anibnd.dcx`, a file that many animation mods replace as well:
+those conflict, and players would have to run the tool again on an already modded file.
 
-## Luồng chết của game (IDA, exe 2.7.1.0)
+## The game's death flow (IDA, 2.7.1.0)
 
-1. HP về 0: bật `ChrIns+0x1C5` bit 7 (`chr_flags1c5.death_flag`).
-   `sub_1403F84C0` mỗi frame hoặc yêu cầu phát animation chết, hoặc (chết
-   không có animation) gọi kill ngay.
-2. Event TAE type 0 được `CSChrTaeAnimEvent` (vtable `0x142A372B0`) chia cho 2
-   handler: `sub_140427B30` (switch 143 case; action 20 bật
-   `ChrCtrlModifier+0x18` bit 1 = `send_ghost_info`, khớp fromsoftware-rs) và
-   `sub_140428DE0`, **chỗ xử lý action 12**: nếu cờ byte `event+0x18` bật và
-   `sub_14041BA80(behavior module, 0)` (thunk vào vùng Arxan, chưa rõ) trả
-   false thì gọi **`sub_1403EDA70(ChrIns*)` = hàm kill**. Action 47 ("Kill
-   Character (No Item Drop)") gọi bản gần giống `sub_1403EDB60`.
-3. Hàm kill **idempotent**: thoát ngay nếu `ChrCtrl(+0x58)->modifier(+0xC8)
-   +0x24` bit 0 đã bật, và chính nó bật bit đó đầu tiên (`sub_1403FCD90`),
-   nên gọi sớm thì lần gọi sau của event TAE thành no-op. Bỏ qua `ChrType` 3
-   (Ghost) và 10 (BloodstainGhost).
+1. HP reaching 0 sets bit 7 of `ChrIns + 0x1C5` (`chr_flags1c5.death_flag`). Every frame,
+   `sub_1403F84C0` either requests the death animation or, for a death without one, kills at once.
+2. TAE events of type 0 are split by `CSChrTaeAnimEvent` (vtable `0x142A372B0`) between two handlers:
+   `sub_140427B30` (a 143-case switch; action 20 sets bit 1 of `ChrCtrlModifier + 0x18`, which is
+   `send_ghost_info`) and `sub_140428DE0`, **the handler of action 12**: if the byte at `event + 0x18` is
+   set and `sub_14041BA80(behavior module, 0)` (a thunk into packed code, not understood) returns false,
+   it calls the kill function **`sub_1403EDA70(ChrIns*)`**. Action 47 ("Kill Character (No Item Drop)")
+   calls the near twin `sub_1403EDB60`.
+3. The kill function is **idempotent**: it returns at once if bit 0 of `ChrCtrl (+0x58) -> modifier (+0xC8)
+   + 0x24` is set, and it sets that bit first thing, so calling it early makes the later call from the
+   TAE event a no-op. It skips `ChrType` 3 (Ghost) and 10 (BloodstainGhost).
 
-Vì vậy không cần sửa TAE trong RAM hay hook: mod tự gọi hàm kill.
+So there is nothing to patch in memory and nothing to hook: the mod calls the kill function itself.
 
-## Cách mod kích hoạt
+## What the mod does
 
-- Tìm hàm kill bằng AOB `KILL_CHR_PATTERN`, duy nhất trên cả 2.7.1.0
-  (`0x1403EDA70`) lẫn 2.6.2.0 (`0x1403ED840`), nên không cần RVA theo phiên
-  bản. Không tìm thấy thì log lỗi "game version not supported" và tắt phần kill
-  sớm.
-- Task lặp trên `FrameBegin`. Điều kiện "đang chết" là **`hp <= 0`**
-  (`CSChrDataModule.hp`), vì `death_flag` không đọc được: game bật rồi xử lý và
-  xoá cờ trong cùng lượt cập nhật nhân vật của frame đó, nên task đầu frame
-  không bao giờ thấy nó (test đầu tiên không ra dòng log nào).
-- Chỉ kill khi animation đang phát nằm trong tập có event action 12
-  (`has_kill_event`: `a000_017xxx`, `070xxx`, `075003`, `117xxx`, `000150`, lấy
-  từ output của tool gốc trên `c0000.anibnd.dcx`: 91 animation). Anim ID trong
-  `CSChrTimeActModule` có dạng `category * 1_000_000 + id`.
-- Mỗi lần chết luôn log: `Died`, `Killed early`, `Death registered by the game:
-  +X ms`, `Respawned: X ms after HP hit 0`. `Debug.DeathProbe=true` thêm vết
-  animation (anim ID, play time, độ dài) cứ 100ms.
+- **Finding the function.** An AOB (`KILL_CHR_PATTERN`) unique on both 2.7.1.0 (`0x1403EDA70`) and 2.6.2.0
+  (`0x1403ED840`). If it is not found the mod logs an error and the early kill is off.
+- **Detecting death.** A task on `FrameBegin` tests `hp <= 0` (`CSChrDataModule.hp`), because `death_flag`
+  cannot be read: the game sets it and clears it in the character update of the same frame, so a task at the
+  start of the frame never sees it (the first test produced no log line).
+- **Which deaths.** Only when the animation playing is one with the action-12 event (`has_kill_event`:
+  `a000_017xxx`, `070xxx`, `075003`, `117xxx` and `000150`, taken from the tool's output on
+  `c0000.anibnd.dcx`: 91 animations). Animation ids in `CSChrTimeActModule` are
+  `category * 1_000_000 + id`.
+- **Log.** Every death logs `Death: died`, `killed early`, `registered` and `respawned` with times; the
+  `[Debug] DeathProbe` key adds the animation trace (id, play time, length) every 100 ms.
 
-## Hướng đã cân nhắc và bỏ
+## Rejected paths
 
-1. Patch TAE trong RAM sau khi game nạp `c0000` (port 1:1 thuật toán gốc): rủi
-   ro event trỏ vào bảng thời gian dùng chung, sửa thẳng float có thể làm lệch
-   event khác.
-2. Hook chỗ game duyệt event TAE / xử lý action 12/20: không cần vì hàm kill
-   idempotent.
-3. Tua `play_time` hoặc tăng tốc độ phát animation: không cần reverse nhưng
-   khác mod gốc (animation cũng nhanh theo).
+1. **Patching the TAE in memory** after the game loads `c0000` (a 1:1 port of the tool): the events may
+   point into shared time tables, so editing a float in place could shift other events.
+2. **Hooking the TAE event walk or the handlers of actions 12 and 20:** not needed, since the kill function
+   is idempotent.
+3. **Seeking `play_time` or speeding up the animation:** no reverse engineering, but it differs from the
+   mod it follows (the animation would also look faster).
+4. **The first trigger**, "the animation changed since HP hit 0, or after 300 ms": wrong, because after HP 0
+   the animation can still change (`10020113` to `10020110`, an attack in progress) one frame **before**
+   `17002`, so it killed before the death animation had started.
 
-Điều kiện kích hoạt cũ cũng đã bỏ: "anim đổi so với lúc HP về 0, hoặc sau
-300ms" sai, vì sau HP 0 anim còn đổi (`10020113` → `10020110`, đòn đánh đang
-dở) 1 frame **trước khi** sang `17002`, nên ở trạng thái ON đã kill trước khi
-animation chết bắt đầu.
+## Verification (2.7.1.0)
 
-## Kết quả test (2.7.1.0)
+Time from HP 0, before the pause after "YOU DIED" was removed:
 
-Thời gian từ HP 0, trước khi bỏ khoảng dừng "YOU DIED" (xem `respawn_fade.md`):
-
-| Kiểu chết | Anim | Game ghi nhận chết (ON / OFF) | Hồi sinh (ON / OFF) |
+| Death | Animation | Registered by the game (on / off) | Respawn (on / off) |
 |---|---|---|---|
-| Rơi vực | `4100` → `4101` | ngay frame đầu / ngay frame đầu | 8063 ms / 8128 ms (không đổi) |
-| Bị quái đánh | `17002` (6.667s) | +53 ms / +5997 ms | 8379 ms / 14392 ms |
-| Bị quái đánh giữa đòn tấn công | `17022` (4.0s) | +49-50 ms / +3827 ms | 8411-8421 ms / 12227 ms |
-| Đòn tóm | `70440` → `70441` → `70442` | kill ngay frame đó | 8395 ms |
+| A fall | `4100`, `4101` | first frame / first frame | 8063 ms / 8128 ms (unchanged) |
+| Hit by an enemy | `17002` (6.667 s) | +53 ms / +5997 ms | 8379 ms / 14392 ms |
+| Hit in the middle of an attack | `17022` (4.0 s) | +49 to 50 ms / +3827 ms | 8411 to 8421 ms / 12227 ms |
+| A grab | `70440`, `70441`, `70442` | the same frame | 8395 ms |
 
-- Mức tiết kiệm bằng gần trọn độ dài animation chết (~6s với `17002`, ~3.8s với
-  `17022`); khi ON hồi sinh luôn ~8.4s bất kể animation, phần còn lại là màn
-  "YOU DIED", fade và load (xem `respawn_fade.md`).
-- Rơi vực không đổi: game kill ngay frame đầu, và `4100/4101` không có trong
-  91 animation có event kill. Vậy mod gốc cũng chỉ có tác dụng với các kiểu chết
-  trong `has_kill_event`.
-- Đòn tóm: đòn vẫn diễn đủ `70440` → `70441` → `70442` (tư thế nằm cuối giữ tới
-  lúc hồi sinh), không kẹt. Tool gốc chỉ có event kill ở `70441`, không ở
-  `70440`, nên dải `70_000..=70_999` kill sớm hơn mod gốc ~0.7s ở trường hợp
-  này. Giữ cả dải (không đổi sang danh sách ID chính xác) vì chạy ổn và bắt
-  được cả animation tóm do mod animation khác thêm.
-- `17032` (4.8s) và `17012` (4.667s) kill ở +33 ms như mong đợi.
-- Sau animation chết game luôn chuyển sang anim `18xxx` tương ứng (`17022` →
-  `18022`).
+- The saving is close to the whole length of the death animation (about 6 s for `17002`, 3.8 s for
+  `17022`). With the mod on, the respawn is always about 8.4 s whatever the animation; the rest is the
+  "YOU DIED" screen, the fade and loading.
+- A fall does not change: the game kills on the first frame, and `4100`/`4101` are not among the 91
+  animations with the event, so the mod it follows has no effect there either.
+- A grab still plays `70440`, `70441`, `70442` in full (the lying pose at the end is held until the
+  respawn), nothing gets stuck. The tool has the kill event only at `70441`, so the range
+  `70_000..=70_999` kills about 0.7 s earlier than it does here. The whole range is kept because it ran
+  well and also catches grab animations that animation mods add.
+- `17032` (4.8 s) and `17012` (4.667 s) kill at +33 ms as expected. After the death animation the game
+  always moves to the matching `18xxx` (`17022` to `18022`).
 
-## Khác mod gốc / giới hạn
+## Open risks
 
-- Mod **không kiểm tra** điều kiện `sub_14041BA80` của game trước khi kill (chưa
-  gọi vì là thunk vào vùng Arxan). Nếu điều kiện đó từng chặn kill trong một
-  trường hợp nào đó, mod sẽ kill sai lúc đó.
-- **Không dời action 20 "Send Ghost Info"** (handler còn 1 điều kiện
-  `sub_1404C8730` chưa hiểu). Bỏ khỏi danh sách việc cần làm: chơi có mod DLL
-  thì phải tắt EAC, không vào được online chính thức, nên không có
-  bloodstain/ghost nào để gửi cho người khác.
-- Gọi hàm kill từ task `FrameBegin`, không phải từ trong lượt cập nhật nhân vật
-  như game; chạy ổn trong các lần test.
-- **Chưa test khi đang cưỡi Torrent.**
+- The mod does not test `sub_14041BA80` before killing (it is a thunk into packed code). If that condition
+  ever blocks a kill in some case, the mod would kill at the wrong moment there.
+- Action 20 "Send Ghost Info" is not moved: its handler has one more condition (`sub_1404C8730`) that is
+  not understood, and with a DLL mod installed the player is offline, so no bloodstain or ghost would be
+  sent anyway.
+- The kill function is called from a `FrameBegin` task, not from inside the character update as the game
+  does; it ran well in every test.
+- Not tested while riding Torrent.

@@ -1,62 +1,89 @@
-# JourneyHUD: thiết kế và nguồn tham khảo
+# Design of the HUD: target panel, layout and game textures
 
-**Status 2026-10-27: giai đoạn 1 (thanh máu/poise) xong và đã thử; giai đoạn 3 (minimap, lớp chấm) có code, chưa thử ([radar.md](radar.md)); giai đoạn 4 (nền bản đồ) có code, chưa thử trong game ([map.md](map.md)).** Nhánh `mod/journeyhud`. Kiểm chứng offset theo bản exe: [offsets.md](offsets.md).
+Status: **Confirmed** in game for the target panel (health and posture); the minimap and its map layer are in
+[radar.md](radar.md) and [map.md](map.md). Offsets per executable build: [offsets.md](offsets.md). Conventions:
+[research notes](../../../docs/research/README.md).
 
-## Mục tiêu
+## Goal
 
-HUD overlay (DX12, ImGui qua hudhook, cùng nền với SoulsTeleport) ở góc phải màn hình:
+A DX12 overlay (Dear ImGui through hudhook) at the right of the screen:
 
-1. **Giai đoạn 1, panel mục tiêu:** tên, HP và Poise của kẻ địch đang khoá. Không stamina, không FP, không thanh tích lũy trạng thái, không bảng sát thương (đã chốt với người dùng).
-2. **Giai đoạn 2, khung HUD:** neo bố cục để panel nằm ngay dưới ô minimap, không có minimap thì lên góc.
-3. **Giai đoạn 3, radar:** chấm người chơi, đồng đội, spirit, mục tiêu khoá, xoay theo camera.
-4. **Giai đoạn 4, nền bản đồ:** tuỳ chọn, làm sau cùng.
+1. **Target panel**: health and posture of the locked enemy. No stamina, no FP, no damage table.
+2. **HUD frame**: a layout anchor so the panel sits right under the minimap, or in the corner without one.
+3. **Minimap**: the player, partners, spirits and the locked target, turning with the camera.
+4. **Map layer**: optional, drawn under the minimap dots.
 
-## Nguồn tham khảo (chỉ lấy ý tưởng, tự viết lại)
+## Sources of ideas
 
-| Repo | Giấy phép | Dùng cho |
-| --- | --- | --- |
-| `tmp/repos/souls_vision` (C++, samjviana) | **GPL-3.0** | Cách tìm mục tiêu, nơi đọc HP/stagger. Không copy code, không dịch từng dòng. |
-| `tmp/repos/kubilaiswf-minimap` (Rust, kubilaiswf) | MIT | Đổi toạ độ ô sang bản đồ, đọc tile bản đồ từ bản cài game, camera, vẽ khung. Được tham khảo và dùng lại có ghi nguồn. |
+| Project | Licence | Used for |
+|---|---|---|
+| A third-party target-HUD mod (C++) | **GPL-3.0** | Where to find the target and where health and stagger are read. Nothing is copied or translated line by line. |
+| An MIT-licensed minimap mod (Rust) | MIT | Block-to-map coordinates, reading the map tiles from the game install, the camera, the frame. Reused with attribution, see `THIRD-PARTY-NOTICES.txt`. |
 
-Vì souls_vision là GPL-3.0 nên phần panel mục tiêu phải viết độc lập: dựa vào kết quả dịch ngược và kiểu Rust của `fromsoftware-rs`, không nhìn code C++ khi viết.
+Because the first is GPL-3.0 the target panel is written independently, from reverse-engineering results and
+the Rust types of fromsoftware-rs.
 
-## Bố cục và màu
+## Layout and colour
 
-- **Khu vực vẽ:** game vẽ HUD trong khung 16:9 vừa khít cửa sổ (dải đen ở trục còn lại; màn 2560x1600 có dải đen 80 px trên và dưới). Overlay neo vào khung đó, không vào cả màn hình, và co giãn theo độ cao của nó (thử game 2026-10-26: tính theo cả màn hình làm panel to và đè dải đen). Siêu rộng (21:9) coi như viền đen hai bên; bản mod mở rộng HUD sẽ khác.
-- **Cỡ:** thanh HP của người chơi đo từ ảnh 2560x1440: dài khoảng 949 px (khoảng 712 ở 1080p, đổi theo máu tối đa của nhân vật), dày khoảng 16 px (thanh máu 13 px từ 2026-10-30, posture 12 px, khe 4 px), mép trên cách đỉnh khung 63 px (47 ở 1080p). Thanh mục tiêu dày 12 (posture 12 từ 2026-10-27, trước là 6 rồi 8), cùng độ dày với thanh người chơi, nhưng ngắn (mặc định 250 từ 2026-10-29, trước là 220; khoá `Width`): thử game cho thấy dài bằng thanh người chơi (700) quá to, người dùng chọn cắt ngắn.
-- **Kiểu thanh:** đo từ ảnh game 2560x1440: lõi đỏ sậm phẳng (khoảng RGB 92,23,20) cao khoảng 8 px, mép dưới ngả hồng nhạt (110,67,55), viền be mảnh (135,128,95) có nắp hai đầu, nền gần đen. Thanh boss (cùng ngày): lõi đỏ phẳng (76,0,0), khối vàng (143,117,23) cho máu vừa mất kèm vạch kem (226,228,191) ở chỗ ngăn, chỉ một đường be (150,143,114) dưới đáy và nắp nhỏ hai đầu, không có viền quanh. Không hộp nền và không số (game không có). Thử game 2026-10-26: bản đầu vẽ hộp, đỏ tươi và chữ trong thanh nên bị chê lạc quẻ.
+- **Drawing area.** The game draws its HUD in a 16:9 frame that fits the window (black bands on the other
+  axis; a 2560x1600 screen has 80 px bands top and bottom). The overlay anchors to that frame, not to the
+  whole screen, and scales with its height (anchoring to the whole screen made the panel large and cover the
+  bands). Ultrawide (21:9) counts as black side bands.
+- **Size.** The player's health bar measured on a 2560x1440 screenshot: about 949 px long (about 712 at
+  1080p, varying with the character's maximum HP), about 16 px thick (health 13 px, posture 12 px, 4 px gap),
+  its top edge 63 px below the frame top (47 at 1080p). The target bar is as thick as the player's but shorter
+  (`Width`, default 250): the full 700 was too large in a test.
+- **Bar style** (measured on game screenshots): a flat dark-red core (about RGB 92,23,20) about 8 px high, a
+  pinkish lower edge (110,67,55), a thin beige outline (135,128,95) with caps at both ends, a nearly black
+  background. The boss bar: a flat red core (76,0,0), a yellow block (143,117,23) for recently lost health with
+  a cream line (226,228,191) where it is split, one beige line (150,143,114) at the bottom and small caps, no
+  outline. No background box and no numbers, as the game has none. A first version drew a box, bright red and
+  text inside the bar, which looked out of place.
 
-## Texture của game
+## Textures of the game
 
-`assets/Bar.png`, `BarBG.png`, `BarEdge.png`, `BarEdge2.png` là texture thanh máu trích từ HUD gốc của game (cùng bản có trong `tmp/repos/souls_vision/sv_assets/` và `tmp/repos/Elden_Ring_game_tools/Resources/OverlayAssets/`, trùng hash), nhúng vào DLL bằng `include_bytes!` và nạp một lần qua `RenderContext::load_texture` (`src/textures.rs`). Người dùng quyết định dùng lại (2026-10-26).
+`assets/Bar.png`, `BarBG.png`, `BarEdge.png`, `BarEdge2.png` are the health-bar textures taken from the game's
+own HUD, embedded with `include_bytes!` and loaded once through `RenderContext::load_texture`
+(`src/textures.rs`).
 
-- `Bar.png` (820x26, xám, 24 hàng thấy được): tô màu bằng vertex color rồi cắt theo UV theo tỉ lệ máu; cũng dùng cho khối máu vừa mất (vàng) và poise (vàng nâu). Màu chia cho độ sáng trung bình 0,86 của texture để ra đúng màu đã đo.
-- `BarBG.png`: nền trong mờ, tô tối, đặt trên nền đen.
-- `BarEdge.png` (6x36): vạch ngăn ở đầu máu khi có khối vàng.
-- `BarEdge2.png` (98x40): vệt sáng ở đầu máu, mờ dần trong lúc giữ khối vàng.
-- **Khung (2026-10-30):** `BarWaku.png` (840x48, `MENU_FL_ConditionWaku` của sheet `SB_FE`) và `BarWakuL.png` (12x48, `MENU_FL_ConditionWaku_L`) là cái hộp mà game vẽ quanh thanh buildup của người chơi: đường mảnh ở hàng 6 đến 12 (tâm 9,2) và hàng 35 đến 41 (tâm 37,7), cap phải ở cột 820 đến 840, cap trái là ảnh riêng. `ui::textured_frame` vẽ mỗi thanh một khung: hai đường dày `0,4 x s` mỗi hàng texel (2,4 px, bằng đường của game) tâm ngay mép trên và dưới của thanh, hai cap kéo dọc để nối hai đường, texel rộng `s / 2` như thanh. Khung máu và posture vẽ sau cả hai thanh. Khe giữa hai thanh là 4 px vì mỗi đường lấn 1,2 px vào khe. `BarDeco` (`MENU_FL_BarDeco`, `_L`) là đường be dưới thanh máu của người chơi, thử rồi bỏ vì người dùng muốn khung của thanh buildup. Hai sprite xuất bằng test `hud_bar_sprites_from_the_installed_game` trong `map/sprites.rs` (`ER_SPRITE_OUT`).
-- Texture tải lỗi: log `Overlay: textures failed (...)` rồi vẽ thanh phẳng như bản trước.
+- `Bar.png` (820x26, grey, 24 visible rows): tinted by the vertex colour and cut by UV to the health ratio; also
+  used for the block of recently lost health (yellow) and posture (yellow-brown). The colour is divided by the
+  texture's mean brightness 0.86 to get the measured colour.
+- `BarBG.png`: a translucent inner background, tinted dark, on a black base.
+- `BarEdge.png` (6x36): the dividing line at the head of the health when there is a yellow block.
+- `BarEdge2.png` (98x40): the glow at the head of the health, fading while the yellow block is held.
+- **Frame**: `BarWaku.png` (840x48, `MENU_FL_ConditionWaku` of the `SB_FE` sheet) and `BarWakuL.png` (12x48,
+  `MENU_FL_ConditionWaku_L`) are the box the game draws around the player's buildup bar: thin lines at rows 6 to
+  12 (centre 9.2) and 35 to 41 (centre 37.7), a right cap at columns 820 to 840, the left cap its own image.
+  `ui::textured_frame` draws one frame per bar: two thick lines of `0.4 * s` per texel row (2.4 px, as the
+  game's) centred on the top and bottom edge of the bar, two caps stretched vertically to join them, texels
+  `s / 2` wide like the bar. The health and posture frames are drawn after both bars. The gap between the bars
+  is 4 px because each line takes 1.2 px of it. `BarDeco` (`MENU_FL_BarDeco`) is the beige line under the
+  player's health bar; it was tried and dropped in favour of the buildup frame.
+- A failed texture load logs `Overlay: textures failed (...)` and draws flat bars.
 
-## Ý tưởng triển khai rút ra từ souls_vision
+## Implementation notes
 
-- **Mục tiêu khoá = một handle trên người chơi**, không phải suy luận theo vị trí. souls_vision đọc `targetHandle` ở ChrIns + `0x6B0` rồi đổi sang ChrIns bằng hàm `GetChrInsFromHandle` của game. Trong `fromsoftware-rs` (rev đang dùng) trường này đã có kiểu: `locked_on_enemy: FieldInsHandle` ở `PlayerIns`, ngay sau `player_menu_ctrl`. Cách ghép theo `lock_on_target_position` của [probe.rs](../../speedmultiplier/src/probe.rs) sai số 8-25 m nên bỏ.
-- **Đổi handle sang ChrIns:** dùng slot 3 của vtable ChrSet (`get_chr_ins_by_handle`), mẫu ở `mods/spiritmultiplier/src/warp.rs::resolvable`. Không dùng `WorldChrMan::chr_ins_by_handle` (`rva::get()` panic trên 2.7.2.0).
-- **HP:** `chr.modules.data.hp` và `max_hp` (đã có kiểu trong `fromsoftware-rs`; souls_vision đọc `ChrStatModule` + `0x138/0x13C`).
-- **Poise (stagger):** `chr.modules.super_armor.sa_durability` và `sa_durability_max` (souls_vision đọc `ChrSuperArmorModule` + `0x10/0x14`). Cần kiểm tra giá trị thật khi đang bị đánh; một số boss không có thanh này nên ẩn hàng Poise.
-- **Tên kẻ địch:** từ `npc_param_id` / `npc_id`, tên hiển thị tra qua text của game (souls_vision không làm, cần tự tra).
-- **Cạm bẫy souls_vision đã gặp:** crash lúc khởi động khi con trỏ menu còn null, xung đột với MSI Afterburner (cùng hook DXGI), cần chờ trước khi khởi tạo overlay. Ta dùng cổng "đã vào game" của `common::player` và hudhook có sẵn.
-
-## Ý tưởng triển khai rút ra từ kubilaiswf-minimap (cho giai đoạn 2-4)
-
-- Chạy trên `CSTaskGroupIndex::FrameBegin`, **chụp snapshot** trên task game rồi luồng render chỉ đọc snapshot; không chạm đối tượng game từ luồng render. Cùng mô hình với SoulsTeleport (`SHARED`).
-- Khoá phiên bản exe và chỉ đọc khi khớp, nếu không thì để yên (tránh crash khi game cập nhật). Repo của ta dùng AOB và kiểm theo từng bản exe thay vì khoá cứng.
-- Toạ độ: ô overworld `mAA_XX_ZZ_LL` rộng `256 << LL` mét, vị trí tương đối tâm ô. Dungeon cũ đổi sang toạ độ thế giới qua `WorldMapLegacyConvParam` (chọn điểm tham chiếu gần nhất). Hầm ngầm dùng toạ độ overworld nhưng bản đồ riêng.
-- Nền bản đồ lấy từ chính bản cài game lúc chạy (giải mã archive, giải nén texture), **không đóng gói ảnh của game**. Đây là phần nặng nhất, để giai đoạn 4.
-- Đồng đội co-op: vị trí khối của người chơi khác chưa đặt, nên suy ra từ chênh lệch vị trí vật lý so với người chơi chính (cùng không gian Havok).
-- Ẩn khi: menu, bản đồ thế giới, màn hình tải, fade màn hình, tuỳ chọn khi đánh boss.
-
-## Việc tiếp theo
-
-1. Dựng khung mod (`Cargo.toml`, `build.rs`, ini, `.vscode/tasks.json`, workspace, README gốc) theo `mods/dropmultiplier/`.
-2. Task game đọc `locked_on_enemy`, đổi sang ChrIns, log HP/Poise để kiểm trên 2.7.1.0 và 2.7.2.0 (chưa vẽ gì).
-3. Overlay ImGui panel mục tiêu, thử trong game rồi mới commit.
+- **The locked target is a handle on the player**, not inferred from a position. The handle is
+  `PlayerIns::locked_on_enemy: FieldInsHandle` in fromsoftware-rs (+0x6B0). A match by
+  `lock_on_target_position` was off by 8 to 25 m and was dropped.
+- **Handle to ChrIns**: slot 3 of the ChrSet vtable (`get_chr_ins_by_handle`), as in
+  `mods/spiritmultiplier/src/warp.rs::resolvable`. `WorldChrMan::chr_ins_by_handle` goes through `rva::get()`,
+  which panics on 2.7.2.0.
+- **Health**: `chr.modules.data.hp` and `max_hp`.
+- **Posture**: `chr.modules.super_armor.sa_durability` and `sa_durability_max`; some bosses have none, so the
+  posture row is hidden then.
+- **Snapshot model**: the task on `CSTaskGroupIndex::FrameBegin` captures a snapshot on the game thread and the
+  render thread only reads it; the render thread never touches game objects. The mod gates reading on "in game"
+  from `shared::player`, and finds game data by pattern and checks it per build instead of locking the
+  executable version.
+- **Pitfalls of similar overlays**: a crash at start-up when a menu pointer is still null, clashes with other
+  DXGI hooks (a monitoring overlay), and the need to wait before initialising the overlay.
+- **Coordinates** (for the minimap): an overworld tile `mAA_XX_ZZ_LL` is `256 << LL` metres wide with the
+  position relative to the tile centre; old dungeons convert to world coordinates through
+  `WorldMapLegacyConvParam` (pick the nearest reference point); underground areas use overworld coordinates
+  with their own map. The map background comes from the player's own install at run time (archive decoding and
+  texture decompression); no game image is shipped.
+- **Co-op partners**: the block position of other players is not set, so it is derived from the physical
+  position difference to the main player (the same Havok space).
+- **Hidden when**: a menu, the world map, a loading screen, a screen fade, optionally in a boss fight.

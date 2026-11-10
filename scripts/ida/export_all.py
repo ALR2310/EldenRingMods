@@ -1,14 +1,14 @@
-"""Xuất toàn bộ exe ra file text để grep: pseudocode (hoặc asm nếu không có
-Hex-Rays) + danh sách string. NẶNG: decompile hàng trăm nghìn hàm, vài giờ và
-nhiều GB - chỉ dùng khi thật sự cần tìm kiếm văn bản trên cả binary.
+"""Export the whole exe to text files for grepping: pseudocode (or assembly without Hex-Rays)
+plus the string list. HEAVY: it decompiles hundreds of thousands of functions, takes hours and
+many GB. Use it only when you really need text search over the whole binary.
 
-Dùng:
+Usage:
     run.ps1 export_all [--asm]
 
-    --asm   bỏ Hex-Rays, xuất disassembly (nhanh hơn nhiều)
+    --asm   skip Hex-Rays and export disassembly (much faster)
 
-Ghi export.c (hoặc export.asm) và export.strings.txt vào thư mục output.
-Chạy cho DLL nhỏ (mod khác, ersc) thì dùng idat trực tiếp với script này.
+Writes export.c (or export.asm) and export.strings.txt to the output folder.
+For a small DLL, run idat directly with this script.
 """
 import os
 import sys
@@ -42,7 +42,7 @@ def main():
                 ok += 1
                 continue
             except Exception as e:
-                out.write("// ===== %s @ %#x : decompile thất bại %s =====\n" % (name, ea, e))
+                out.write("// ===== %s @ %#x : decompile failed %s =====\n" % (name, ea, e))
         for h in idautils.Heads(f.start_ea, f.end_ea):
             out.write("%x  %s\n" % (h, idc.generate_disasm_line(h, 0)))
         out.write("\n")

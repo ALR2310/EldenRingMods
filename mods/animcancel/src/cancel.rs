@@ -1,33 +1,22 @@
-//! Lets guard, dodge (roll, backstep) and weapon swap cancel the animation being played.
-//!
-//! The game decides in `CSChrActionRequestModule`: each frame it turns the
-//! pressed buttons into `queued` (press AND `possible_action_inputs`, minus
-//! `disabled_action_inputs`), then fills `input_entries[id]` with
-//! `queued AND cancel_entries[id]`, `id` being the animation's TAE id. The
-//! HKS reads `input_entries[id]` to start the action, and `cancel_entries[id]`
-//! is what the animation's own events open, a few frames at a time. So the mod
-//! only opens `cancel_entries[id]` earlier; `input_entries` is the list of
-//! requests and must never be written.
-//!
-//! Split in two: [plan] decides what may cancel (pure, tested), [open] writes
-//! it into the module through the typed bitfields of `fromsoftware-rs`.
-//! Written twice a frame, at `ChrIns_PreBehaviorSafe` (what the game sees this
-//! frame) and `ChrIns_BehaviorSafe` (next frame).
+//! Lets guard, dodge, jump and weapon swap cancel the animation being played, by opening its
+//! `cancel_entries[id]` earlier than its own events do. `input_entries` must never be written.
+//! See `docs/animation_cancel.md`.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use bitfield::{Bit, BitMut, BitRangeMut};
-use eldenring::cs::{ActionQueueEntry, CSChrActionRequestModule, CSTaskGroupIndex, ChrIns, WorldChrMan};
+use eldenring::cs::{
+    ActionQueueEntry, CSChrActionRequestModule, CSTaskGroupIndex, ChrIns, WorldChrMan,
+};
 use fromsoftware_shared::FromStatic;
 
-use common::anim::{group_of, Group};
-use common::logger;
+use shared::anim::{Group, group_of};
+use shared::logger;
 
 use crate::config::{self, Action, Config};
 
-/// `ChrActions` bit numbers.
 const L1: usize = 2;
 const ACTION: usize = 4;
 const SP_MOVE: usize = 5;
@@ -37,16 +26,13 @@ const CHANGE_WEAPON_R: usize = 9;
 const CHANGE_WEAPON_L: usize = 10;
 const BACKSTEP: usize = 16;
 const ROLLING: usize = 17;
-/// Not named in fromsoftware-rs; the game opens it together with the roll cancel.
+/// Not named in fromsoftware-rs; the game opens it with the roll cancel.
 const DODGE_18: usize = 18;
 const GUARD: usize = 24;
 const EMERGENCY_STEP: usize = 25;
-/// Queue-only bit (not a real action): the HKS weapon swap also asks for
-/// `cancel_entries[id]` bit 37. Without it the swap press was ready from
-/// t=0.28 of an attack but only ran at 0.83.
+/// Queue-only bit: the HKS weapon swap also asks for `cancel_entries[id]` bit 37.
 const SLOT_SWITCH: usize = 37;
 
-/// `TaeCancelFlags` bits.
 const TAE_SLOT_SWITCH: usize = 3;
 const TAE_ACTION_GENERAL: usize = 9;
 const TAE_CANCEL_DISABLE: usize = 11;
@@ -58,8 +44,6 @@ const DODGE_BITS: [usize; 5] = [SP_MOVE, ROLLING, BACKSTEP, DODGE_18, EMERGENCY_
 /// ACTION too: on keyboard the swap key is the pouch/swap button.
 const WEAPON_SWAP_BITS: [usize; 4] = [ACTION, CHANGE_WEAPON_R, CHANGE_WEAPON_L, SLOT_SWITCH];
 
-/// What may cancel: action bits for the queue entries, plus the `tae_cancels`
-/// flags that go with them.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Allow {
     pub actions: Vec<usize>,
@@ -72,7 +56,6 @@ impl Allow {
     }
 }
 
-/// Whether `action` may cancel an animation of this group.
 pub fn source_allowed(group: Group, action: &Action) -> bool {
     match group {
         Group::Attack => action.attack,
@@ -83,9 +66,7 @@ pub fn source_allowed(group: Group, action: &Action) -> bool {
     }
 }
 
-/// What may cancel an animation of `group`. `guard_ok`: L1 really guards with
-/// what is held and was not already held when the animation began (see
-/// [GuardTracker]); otherwise it may be an attack and cancels nothing.
+/// `guard_ok`: L1 really guards with what is held and was not already held when the animation began.
 pub fn plan(config: &Config, group: Group, guard_ok: bool) -> Allow {
     let on = |action: &Action| action.enabled && source_allowed(group, action);
     let mut allow = Allow::default();
@@ -108,9 +89,8 @@ pub fn plan(config: &Config, group: Group, guard_ok: bool) -> Allow {
     allow
 }
 
-/// The group of animation `id` for cancelling: `group_of`, except that every
-/// spell animation (TAE `a400`-`a599`) is a cast, so a beam phase that
-/// `group_of` files under Other can still be cancelled.
+/// `group_of`, except that every spell animation (TAE `a400`-`a599`) is a cast, so a beam phase
+/// filed under Other can still be cancelled.
 pub fn group_for_cancel(id: i32) -> Group {
     if (400..600).contains(&(id / 1_000_000)) {
         return Group::Cast;
@@ -118,11 +98,8 @@ pub fn group_for_cancel(id: i32) -> Group {
     group_of(id)
 }
 
-/// Guard (L1) held as the animation began is no new press, and letting it
-/// cancel cuts the attack the player just started from a raised guard at once
-/// (hold guard, press attack: the attack was cut and the guard raised again).
-/// A new animation starts blocked when guard is already held; the block ends
-/// when the guard is let go.
+/// Guard held as the animation began is no new press: letting it cancel would cut an attack started
+/// from a raised guard at once. The block ends when the guard is let go.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct GuardTracker {
     anim: i32,
@@ -132,8 +109,6 @@ struct GuardTracker {
 impl GuardTracker {
     const NEW: GuardTracker = GuardTracker { anim: -1, blocked: false };
 
-    /// Feeds one tick (the animation `id` playing, whether guard is `held`)
-    /// and says whether guard is blocked from cancelling it.
     fn update(&mut self, id: i32, held: bool) -> bool {
         self.blocked = if self.anim == id { self.blocked && held } else { held };
         self.anim = id;
@@ -143,19 +118,16 @@ impl GuardTracker {
 
 static GUARD_TRACKER: Mutex<GuardTracker> = Mutex::new(GuardTracker::NEW);
 
-/// Whether guard is blocked from cancelling the animation now playing (for the probe's log).
 pub fn guard_blocked() -> bool {
     GUARD_TRACKER.lock().unwrap_or_else(|e| e.into_inner()).blocked
 }
 
 static FORCED: AtomicBool = AtomicBool::new(false);
 
-/// Whether the last tick opened any cancel window (for the probe's log).
 pub fn last_forced() -> bool {
     FORCED.load(Ordering::Relaxed)
 }
 
-/// TAE id the queue entries are looked up by (`queue_tae_id_override` wins).
 pub fn queue_id(request: &CSChrActionRequestModule) -> i32 {
     if request.queue_tae_id_override >= 0 {
         request.queue_tae_id_override
@@ -164,32 +136,28 @@ pub fn queue_id(request: &CSChrActionRequestModule) -> i32 {
     }
 }
 
-/// The local player's `ChrIns`, only once actually in game.
 pub fn player<'a>() -> Option<&'a mut ChrIns> {
-    common::player::main_player_chr_ins_ptr()?;
+    shared::player::main_player_chr_ins_ptr()?;
+    // SAFETY: called from game tasks; `instance_mut` is `Err` until the singleton exists.
     let world_chr_man = unsafe { WorldChrMan::instance_mut() }.ok()?;
     world_chr_man.main_player.as_mut().map(|p| &mut p.chr_ins)
 }
 
-/// Opens the cancel windows of the animation with TAE id `id` for `allow`.
 fn open(request: &mut CSChrActionRequestModule, id: i32, allow: &Allow) {
     let bits = &allow.actions;
     for &bit in bits {
-        // Let the presses in and keep them from being dropped before queuing.
         request.possible_action_inputs.set_bit(bit, true);
         request.possible_action_cancels.set_bit(bit, true);
         request.disabled_action_inputs.set_bit(bit, false);
     }
 
-    // The per-animation permission the HKS reads. The entry only exists once
-    // an animation event wrote it, so it is created when missing.
+    // The entry only exists once an animation event wrote it, so it is created when missing.
     let entries = &mut request.action_request_queue.cancel_entries;
     if let Some(entry) = entries.iter_mut().find(|e| e.tae_id == id) {
         for &bit in bits {
             entry.actions.set_bit(bit, true);
         }
     } else {
-        // An empty action set: any bitfield value of the module, all bits cleared.
         let mut actions = request.disabled_action_inputs;
         actions.set_bit_range(63, 0, 0u64);
         for &bit in bits {
@@ -204,7 +172,6 @@ fn open(request: &mut CSChrActionRequestModule, id: i32, allow: &Allow) {
     request.tae_cancels.set_bit(TAE_CANCEL_DISABLE, false);
 }
 
-/// One tick of one stage.
 fn apply() {
     let config = config::get();
     let Some(chr) = player() else {
@@ -227,9 +194,14 @@ fn apply() {
 }
 
 pub fn run() {
-    let cs_task = common::task::wait_for_cs_task();
+    let cs_task = shared::task::wait_for_cs_task();
     for stage in [CSTaskGroupIndex::ChrIns_PreBehaviorSafe, CSTaskGroupIndex::ChrIns_BehaviorSafe] {
-        common::task::run_recurring_safe(cs_task, "Cancel", stage, move |_data: &eldenring::fd4::FD4TaskData| apply());
+        shared::task::run_recurring_safe(
+            cs_task,
+            "Cancel",
+            stage,
+            move |_data: &eldenring::fd4::FD4TaskData| apply(),
+        );
     }
     logger::log("Cancel: active");
     loop {
@@ -250,7 +222,12 @@ mod tests {
 
     fn only(guard: bool, dodge: bool, weapon_swap: bool) -> Config {
         let pick = |on: bool| if on { ALL } else { OFF };
-        Config { guard: pick(guard), dodge: pick(dodge), weapon_swap: pick(weapon_swap), ..Config::default() }
+        Config {
+            guard: pick(guard),
+            dodge: pick(dodge),
+            weapon_swap: pick(weapon_swap),
+            ..Config::default()
+        }
     }
 
     #[test]
@@ -272,13 +249,16 @@ mod tests {
         let allow = plan(&only(false, false, true), Group::Attack, true);
         assert!(allow.actions.contains(&SLOT_SWITCH));
         assert!(allow.tae.contains(&TAE_SLOT_SWITCH));
-        // The others don't get the slot flag.
-        assert!(!plan(&only(false, true, false), Group::Attack, true).tae.contains(&TAE_SLOT_SWITCH));
+        assert!(
+            !plan(&only(false, true, false), Group::Attack, true).tae.contains(&TAE_SLOT_SWITCH)
+        );
     }
 
     #[test]
     fn any_allowed_action_sets_the_general_flag() {
-        assert!(plan(&only(false, true, false), Group::Attack, true).tae.contains(&TAE_ACTION_GENERAL));
+        assert!(
+            plan(&only(false, true, false), Group::Attack, true).tae.contains(&TAE_ACTION_GENERAL)
+        );
         assert!(plan(&only(false, false, false), Group::Attack, true).tae.is_empty());
     }
 
@@ -287,7 +267,6 @@ mod tests {
         let dodge = Action { cast: false, ..ALL };
         assert!(plan(&config(dodge), Group::Cast, true).is_empty());
         assert!(!plan(&config(dodge), Group::Attack, true).is_empty());
-        // Never: a critical hit, rolls, walking.
         for group in [Group::Critical, Group::Roll, Group::Walk, Group::Run, Group::Other] {
             assert!(plan(&config(ALL), group, true).is_empty(), "{group:?}");
         }
@@ -300,11 +279,9 @@ mod tests {
         assert_eq!(allow.actions, vec![JUMP]);
         assert!(allow.tae.contains(&TAE_ACTION_GENERAL));
         assert!(!allow.tae.contains(&TAE_SLOT_SWITCH));
-        // Off, or an animation group it may not cancel: nothing.
         assert!(plan(&Config { jump: OFF, ..Config::default() }, Group::Attack, true).is_empty());
         let no_cast = Config { jump: Action { cast: false, ..ALL }, ..Config::default() };
         assert!(plan(&no_cast, Group::Cast, true).is_empty());
-        // The others never open the jump bit.
         assert!(!plan(&only(true, true, true), Group::Attack, true).actions.contains(&JUMP));
     }
 
@@ -315,8 +292,6 @@ mod tests {
         assert!(allow.tae.contains(&TAE_ACTION_GENERAL));
     }
 
-    /// L1 not guarding (dual wield, twin blades, or held before the attack):
-    /// guard cancels nothing, the rest still does.
     #[test]
     fn guard_cancels_nothing_when_l1_does_not_guard() {
         let config = only(true, true, true);

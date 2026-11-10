@@ -1,18 +1,16 @@
 #![allow(non_snake_case)] // crate name is "AutoRegen" to control the output DLL's filename
 
+mod config;
 mod heal;
 mod hit_hook;
 mod menu;
 mod regen;
 mod trigger;
 
-use common::{config, dll_dir, logger};
-
-const DEFAULT_INI: &str = include_str!("../AutoRegen.ini");
+use shared::{dll_dir, logger};
 
 /// # Safety
-/// This is exposed this way so the library loader can call it. Do not call it
-/// yourself.
+/// Called by the loader only.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     const DLL_PROCESS_ATTACH: u32 = 1;
@@ -22,25 +20,34 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
 
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
-        let ini_path = format!("{dir}\\AutoRegen.ini");
-        let added_keys = config::load_or_create_default(&ini_path, DEFAULT_INI);
+        let name = shared::dll_stem(hmodule);
+        let path = format!("{dir}\\{name}.toml");
+        config::adopt_ini(&path, &format!("{dir}\\{name}.ini"));
+        let report = config::init(&path);
 
-        // `LogFile` gates the log file entirely, see common::logger.
-        logger::init(&dir, "AutoRegen.log");
+        logger::set_enabled(config::get().logging.log_file);
+        logger::init(&dir, &format!("{name}.log"));
         logger::install_panic_hook();
-        if added_keys > 0 {
-            logger::log(&format!("AutoRegen.ini: added {added_keys} key(s) from the template"));
-        }
 
-        // Registers right away: the host only accepts menu registrations at
-        // startup.
-        menu::start(hmodule, ini_path.clone());
+        // The menu host accepts registrations only in its first seconds.
+        menu::start(hmodule);
 
-        common::diag::log_environment_when_game_ready();
+        report.log(&format!("{name}.toml"));
 
-        // `common::reload` owns the reload key; `regen::run` only follows
-        // `RELOAD_GENERATION`.
-        std::thread::spawn(move || common::reload::run(ini_path));
+        shared::diag::log_environment_when_game_ready();
+
+        std::thread::spawn(|| {
+            shared::reload::run(
+                || config::get().general.reload_key.clone(),
+                || config::get().general.reload_banner,
+                || {
+                    config::reload()?;
+                    logger::set_enabled(config::get().logging.log_file);
+                    menu::sync_from_config();
+                    Ok(())
+                },
+            )
+        });
         regen::run();
     });
 

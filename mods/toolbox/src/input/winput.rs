@@ -1,6 +1,6 @@
 //! The same synthetic input, for what reads it through Win32 instead of
 //! DirectInput: `GetAsyncKeyState` (hotkeys of other mods, such as
-//! `common::input::is_key_pressed`) and `GetCursorPos` (the game's menu cursor,
+//! `shared::input::is_key_pressed`) and `GetCursorPos` (the game's menu cursor,
 //! which imports it with `ScreenToClient`). While the game window is not really
 //! in front the real keyboard and mouse are hidden from both, like in `dinput`.
 //! `docs/background_input.md`.
@@ -8,9 +8,9 @@
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU8, AtomicUsize, Ordering};
 
-use common::overlay::mh::{MH_ApplyQueued, MH_Initialize, MhHook};
+use shared::overlay::mh::{MH_ApplyQueued, MH_Initialize, MhHook};
 
-use common::logger;
+use shared::logger;
 
 use super::dinput::{ISOLATE, KEYS, MOUSE_BUTTONS};
 use super::focus::{self, IN_FRONT};
@@ -70,6 +70,7 @@ fn dik_of(vsc_ex: u32) -> u8 {
 
 fn build_table() {
     for vk in 1..=0xFEu32 {
+        // SAFETY: plain Win32 calls with valid pointers; hooks are MinHook trampolines.
         let vsc = unsafe { MapVirtualKeyW(vk, MAPVK_VK_TO_VSC_EX) };
         VK_TO_DIK[vk as usize].store(dik_of(vsc), Ordering::Relaxed);
     }
@@ -86,12 +87,21 @@ fn synthetic_down(vk: i32) -> bool {
     if let Some(i) = button {
         return MOUSE_BUTTONS[i].load(Ordering::Relaxed) != 0;
     }
-    let dik = usize::try_from(vk).ok().and_then(|i| VK_TO_DIK.get(i)).map_or(0, |d| d.load(Ordering::Relaxed));
+    let dik = usize::try_from(vk)
+        .ok()
+        .and_then(|i| VK_TO_DIK.get(i))
+        .map_or(0, |d| d.load(Ordering::Relaxed));
     dik != 0 && KEYS[dik as usize].load(Ordering::Relaxed) != 0
 }
 
 unsafe extern "system" fn get_async_key_state_hook(vk: i32) -> i16 {
-    let orig = unsafe { std::mem::transmute::<usize, GetAsyncKeyStateFn>(ORIG_GET_ASYNC_KEY_STATE.load(Ordering::Relaxed)) };
+    // SAFETY: the slot holds the trampoline MinHook made for this function.
+    let orig = unsafe {
+        std::mem::transmute::<usize, GetAsyncKeyStateFn>(
+            ORIG_GET_ASYNC_KEY_STATE.load(Ordering::Relaxed),
+        )
+    };
+    // SAFETY: the original function, called with the arguments the caller passed.
     let real = unsafe { orig(vk) };
     let mut state = if isolating() { 0 } else { real };
     let slot = usize::try_from(vk).ok().and_then(|i| REPORTED.get(i));
@@ -109,20 +119,32 @@ unsafe extern "system" fn get_async_key_state_hook(vk: i32) -> i16 {
 unsafe extern "system" fn get_cursor_pos_hook(point: *mut Point) -> i32 {
     if CURSOR_ON.load(Ordering::Relaxed) && !IN_FRONT.load(Ordering::Relaxed) && !point.is_null() {
         let hwnd = focus::game_hwnd();
-        let mut p = Point { x: CURSOR_X.load(Ordering::Relaxed), y: CURSOR_Y.load(Ordering::Relaxed) };
+        let mut p =
+            Point { x: CURSOR_X.load(Ordering::Relaxed), y: CURSOR_Y.load(Ordering::Relaxed) };
+        // SAFETY: the pointer is the one the window procedure or the callback was given.
         if !hwnd.is_null() && unsafe { ClientToScreen(hwnd, &mut p) } != 0 {
+            // SAFETY: the pointer is the one the window procedure or the callback was given.
             unsafe { point.write(p) };
             return 1;
         }
     }
-    let orig = unsafe { std::mem::transmute::<usize, GetCursorPosFn>(ORIG_GET_CURSOR_POS.load(Ordering::Relaxed)) };
+    // SAFETY: the slot holds the trampoline MinHook made for this function.
+    let orig = unsafe {
+        std::mem::transmute::<usize, GetCursorPosFn>(ORIG_GET_CURSOR_POS.load(Ordering::Relaxed))
+    };
+    // SAFETY: the original function, called with the arguments the caller passed.
     unsafe { orig(point) }
 }
 
 fn hook(name: &[u8], detour: *mut c_void, orig: &AtomicUsize) -> bool {
+    // SAFETY: plain Win32 calls with valid pointers; hooks are MinHook trampolines.
     unsafe {
-        let module = GetModuleHandleA(b"user32.dll\0".as_ptr());
-        let target = if module.is_null() { std::ptr::null_mut() } else { GetProcAddress(module, name.as_ptr()) };
+        let module = GetModuleHandleA(c"user32.dll".as_ptr() as *const u8);
+        let target = if module.is_null() {
+            std::ptr::null_mut()
+        } else {
+            GetProcAddress(module, name.as_ptr())
+        };
         if target.is_null() {
             return false;
         }
@@ -138,14 +160,22 @@ fn hook(name: &[u8], detour: *mut c_void, orig: &AtomicUsize) -> bool {
 
 pub fn install() {
     build_table();
+    // SAFETY: MinHook initialization has no preconditions.
     let _ = unsafe { MH_Initialize() };
-    let keys = hook(b"GetAsyncKeyState\0", get_async_key_state_hook as *mut c_void, &ORIG_GET_ASYNC_KEY_STATE);
+    let keys = hook(
+        b"GetAsyncKeyState\0",
+        get_async_key_state_hook as *mut c_void,
+        &ORIG_GET_ASYNC_KEY_STATE,
+    );
     let cursor = hook(b"GetCursorPos\0", get_cursor_pos_hook as *mut c_void, &ORIG_GET_CURSOR_POS);
+    // SAFETY: applies the hooks queued above.
     let applied = unsafe { MH_ApplyQueued() }.ok().is_ok();
     if (keys || cursor) && applied {
         logger::log(&format!("Win32 input: hooks applied (keys {keys}, cursor {cursor})"));
     } else {
-        logger::error(&format!("Win32 input: hooks incomplete (keys {keys}, cursor {cursor}, applied {applied})"));
+        logger::error(&format!(
+            "Win32 input: hooks incomplete (keys {keys}, cursor {cursor}, applied {applied})"
+        ));
     }
 }
 

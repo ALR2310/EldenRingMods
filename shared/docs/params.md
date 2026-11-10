@@ -1,49 +1,50 @@
-# params: đọc và ghi param không qua `rows()` / `rows_mut()`
+# Param rows
 
-**Status 2026-10-13: hoạt động, dùng bởi dropmultiplier, fasterrevival, speedmultiplier, spiritmultiplier, risearcher, infiniteailment (`for_each_row_mut`, `row_ids`, `check`). Chỉ `sometweaks` (đã bỏ) còn dùng `rows_mut()`. Code ở `shared/src/params.rs`. Không có test tự động: mọi hàm cần `SoloParamRepository` thật của game, nên kiểm bằng log trong game.**
+Status: **Confirmed** in game on 1.16.2 with Convergence (the case below) and on vanilla 1.17. Conventions:
+[research notes](../../docs/research/README.md). Code: `shared/src/params.rs`.
 
-## Vì sao không dùng `rows()` / `rows_mut()`
+## Question
 
-Nguyên nhân gốc và bằng chứng (Convergence, `ItemLotParam_enemy` có header 4631
-dòng nhưng bảng lookup của game chỉ 4630, fromsoftware-rs đọc lố một mục và
-panic) nằm ở `mods/dropmultiplier/docs/convergence_panic.md`. Tóm lại: bảng
-lookup của game do game tự dựng và có kích thước theo số dòng runtime, nhỏ hơn
-header; vanilla không bị.
+How does a mod read and write the rows of a param table without panicking on a regulation whose header
+disagrees with the game's own tables?
 
-Hướng thay thế: `for_each_row_mut` duyệt theo **index** qua row descriptor của
-chính file param (cùng dữ liệu `get_row_by_index_mut` đã đọc), không đụng bảng
-lookup và dừng ở `row_count`. Đổi lại người gọi nhận chỉ số dòng thay vì param
-ID. Cần tra theo ID thì dùng `row_ids`, dựng bản đồ ID → index một lần.
+## The failure
 
-## `check`: khoá slot cứng của fromsoftware-rs
+With Convergence 3.0.2.0 a mod's thread died right after logging the snapshot of `ItemLotParam_enemy`:
+`param_repository.rs:357:22: called Option::unwrap() on a None value`. The mutex of the snapshot was then
+poisoned, so nothing was ever applied. Vanilla 1.17 worked (5135 rows); 1.16.2 with Convergence panicked
+every time.
 
-fromsoftware-rs cứng hoá slot của mỗi param và chỉ `debug_assert!` rằng slot
-đó đúng, tức không bao giờ kiểm trong bản release. Trên phiên bản game có thứ tự
-param khác, ghi qua slot sai sẽ âm thầm làm hỏng một param khác. `check` so tên
-resource và tên struct trước khi ghi.
+Line 357 is in `ParamFile::rows_mut()`: `get_row_by_index_mut(lookup.index).unwrap()`. It walks the
+**lookup table** the game builds after each param file, a list of `(param_id, index)` pairs sorted by id,
+but sizes the walk by the `row_count` in the file header (a `u16`).
 
-## `row_ids`: bố cục row descriptor
+A diagnostic log showed that the header of `ItemLotParam_enemy` says **4631** rows while the runtime count
+(a `u32` in the 0x10 bytes of metadata before the file, which the game really uses to build the lookup
+table) is **4630**. The game builds a table one entry shorter than the header, probably because the file
+has one duplicated row id, and the crate reads one entry too many into garbage memory, gets an index above
+`row_count` and panics.
 
-fromsoftware-rs để `row_data_offset` ở chế độ private, nên mã tự đọc descriptor
-nằm ngay sau header. Bố cục (phản chiếu `RowDescriptor<T>` của nó):
+Rejected: a `u16` overflow of `row_count` (the header has only 4631 rows) and a different layout between
+1.16.2 and 1.17 (slot 20 is `ItemLotParam_enemy` and `ITEMLOT_PARAM_ST` in both).
 
-- `id: u32`, rồi `data_offset: T`, rồi `name_offset: T`.
-- `T = u64` (descriptor 24 byte) khi bit 2 của `format_2d` (byte `0x2D` của header)
-  được đặt, ngược lại `T = u32` (12 byte).
-- Descriptor bắt đầu sau header, cộng thêm `0x10` byte khi có header mở rộng
-  (`T = u64`, hoặc bit 0 và bit 1 của `format_2d` cùng bật).
+## The helpers
 
-Mỗi `data_offset` được đối chiếu với con trỏ dòng mà `get_row_by_index` trả về.
-Lệch ở bất kỳ dòng nào (giả định bố cục sai trên một phiên bản game tương lai)
-thì hàm trả `None`, không trả ID sai.
+Do not use `ParamFile::rows()` or `rows_mut()` of fromsoftware-rs. Use:
 
-## Bẫy: `OwnedPtr<ParamFile>`
+- `for_each_row_mut::<P>(repo, f)`: walks by index through the file's own row descriptors
+  (`get_row_by_index_mut` until it returns `None`), never touching the lookup table.
+- `check::<P>(repo)`: verifies that the slot really holds `P` before writing. The crate only has a
+  `debug_assert!` for it, which a release build lacks.
+- `describe::<P>(repo)`: resource name, struct, paramdef version, header and runtime row counts, so a
+  failure log answers its own question.
+- `row_ids::<P>(repo)`: the id of every row, read from the row descriptors after the file header, with
+  every data offset cross-checked against the row `get_row_by_index` returns. If the layout assumption
+  breaks it returns `None` rather than wrong ids.
 
-`ParamResCap::param_res_cap.data` là `OwnedPtr<ParamFile>`, không phải `ParamFile`. Trong `row_ids`, `let file = &...data;` rồi `file as *const _ as *const u8` lấy địa chỉ của chính con trỏ, nên mọi offset đọc ra là rác (log 2026-10-16: `format 0x0`, offset `0x7ff6`, mọi ailment tìm được 0 dòng). Phải khai báo `let file: &ParamFile` để deref. `row_ids_or_reason` trả lý do thất bại để log.
+Snapshots are keyed by row index (stable within a session), not by id.
 
-## Số dòng runtime
+## Open risks
 
-`describe` in cả số dòng ở header (`u16`, trong file) lẫn số dòng runtime (`u32`
-trong metadata `0x10` byte trước file, ngay sau một `u32` offset tên); bảng
-lookup được dựng theo số thứ hai. Hai số này lệch nhau là dấu hiệu của đúng lỗi
-Convergence nêu trên, nên có sẵn trong log báo lỗi.
+Other crates of fromsoftware-rs that walk params with `rows()` have the same weakness. A table panics only
+when the regulation in use has a header that disagrees with the runtime count.

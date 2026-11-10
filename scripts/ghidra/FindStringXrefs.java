@@ -8,16 +8,14 @@ import ghidra.program.model.symbol.Reference;
 import java.io.FileOutputStream;
 import java.io.PrintWriter;
 
-// Scans all defined string data in the binary for a case-insensitive
-// substring match, then dumps every xref to each match plus the enclosing
-// function - used to locate ini-key lookups (e.g. "SCALING") without
-// needing any prior CE table or symbol.
+// Scans all defined strings in the binary for a case-insensitive substring, then dumps every
+// xref to each match plus the enclosing function. Works without any symbols.
 public class FindStringXrefs extends GhidraScript {
     @Override
     public void run() throws Exception {
         String[] args = getScriptArgs();
         String needle = args.length > 0 ? args[0].toLowerCase() : "scaling";
-        String outPath = args.length > 1 ? args[1] : "D:/tmp/string_xrefs.txt";
+        String outPath = args.length > 1 ? args[1] : System.getProperty("java.io.tmpdir") + "/string_xrefs.txt";
         PrintWriter out = new PrintWriter(new FileOutputStream(outPath));
 
         DataIterator iter = currentProgram.getListing().getDefinedData(true);

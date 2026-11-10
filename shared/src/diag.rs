@@ -1,8 +1,6 @@
-//! Environment dump for bug-report logs: the game exe and every non-system
-//! DLL loaded into the process, so a log shows which game build and which
-//! other mods were running. The log is posted publicly, so paths are never
-//! printed in full. What is listed, what is hidden and why:
-//! `shared/docs/diag.md`.
+//! Environment dump for bug-report logs: the game exe and every non-system DLL loaded into the
+//! process, so a log shows which game build and which other mods were running. Logs get posted
+//! publicly, so a path outside the game folder is never printed in full.
 
 use std::ffi::c_void;
 
@@ -13,7 +11,12 @@ use crate::module_path;
 unsafe extern "system" {
     fn GetCurrentProcess() -> *mut c_void;
     fn GetModuleHandleW(name: *const u16) -> *mut c_void;
-    fn K32EnumProcessModules(process: *mut c_void, modules: *mut *mut c_void, cb: u32, needed: *mut u32) -> i32;
+    fn K32EnumProcessModules(
+        process: *mut c_void,
+        modules: *mut *mut c_void,
+        cb: u32,
+        needed: *mut u32,
+    ) -> i32;
     fn GetSystemWindowsDirectoryW(buf: *mut u16, size: u32) -> u32;
 }
 
@@ -21,22 +24,23 @@ unsafe extern "system" {
 unsafe extern "system" {
     fn GetFileVersionInfoSizeW(filename: *const u16, handle: *mut u32) -> u32;
     fn GetFileVersionInfoW(filename: *const u16, handle: u32, len: u32, data: *mut c_void) -> i32;
-    fn VerQueryValueW(block: *const c_void, sub_block: *const u16, buf: *mut *mut c_void, len: *mut u32) -> i32;
+    fn VerQueryValueW(
+        block: *const c_void,
+        sub_block: *const u16,
+        buf: *mut *mut c_void,
+        len: *mut u32,
+    ) -> i32;
 }
 
-/// One module loaded in this process.
 pub struct ModuleInfo {
     /// File name only, e.g. `eldenring.exe`.
     pub name: String,
     pub path: String,
     pub base: usize,
-    /// `SizeOfImage` from the in-memory PE header.
     pub size: u32,
-    /// `FileHeader.TimeDateStamp`: identifies the exact build even when the
-    /// file version string wasn't bumped.
+    /// Identifies the exact build even when the file version string wasn't bumped.
     pub timestamp: u32,
-    /// `a.b.c.d` from the file's version resource; `0.0.0.0` if it has none
-    /// (most mod DLLs don't).
+    /// From the version resource; `0.0.0.0` if there is none (most mod DLLs).
     pub version: String,
 }
 
@@ -46,6 +50,7 @@ fn wide(s: &str) -> Vec<u16> {
 
 fn read_file_version(path: &str) -> Option<String> {
     let path_w = wide(path);
+    // SAFETY: `path_w` is NUL-terminated and the buffers passed to the version API are sized as it asks.
     unsafe {
         let mut handle = 0u32;
         let size = GetFileVersionInfoSizeW(path_w.as_ptr(), &mut handle);
@@ -60,7 +65,9 @@ fn read_file_version(path: &str) -> Option<String> {
         let mut len = 0u32;
         let root = wide("\\");
         // VS_FIXEDFILEINFO: dwSignature, dwStrucVersion, dwFileVersionMS, dwFileVersionLS, ...
-        if VerQueryValueW(data.as_ptr() as *const c_void, root.as_ptr(), &mut info, &mut len) == 0 || len < 16 {
+        if VerQueryValueW(data.as_ptr() as *const c_void, root.as_ptr(), &mut info, &mut len) == 0
+            || len < 16
+        {
             return None;
         }
         let fixed = info as *const u32;
@@ -69,8 +76,8 @@ fn read_file_version(path: &str) -> Option<String> {
     }
 }
 
-/// Reads `(SizeOfImage, TimeDateStamp)` from a loaded module's PE header.
 fn pe_size_and_timestamp(base: *const u8) -> (u32, u32) {
+    // SAFETY: `base` is a loaded module, whose headers stay mapped for as long as it is loaded.
     unsafe {
         let e_lfanew = (base.add(0x3C) as *const i32).read_unaligned();
         let nt = base.add(e_lfanew as usize);
@@ -89,13 +96,15 @@ fn module_info(hmodule: *mut c_void) -> Option<ModuleInfo> {
     Some(ModuleInfo { version, name, path, base: hmodule as usize, size, timestamp })
 }
 
-/// Handles of every module in this process, in load order (the main exe first).
 fn module_handles() -> Vec<*mut c_void> {
     let mut handles: Vec<*mut c_void> = vec![std::ptr::null_mut(); 512];
     loop {
         let mut needed = 0u32;
         let cb = (handles.len() * size_of::<*mut c_void>()) as u32;
-        let ok = unsafe { K32EnumProcessModules(GetCurrentProcess(), handles.as_mut_ptr(), cb, &mut needed) };
+        // SAFETY: `handles` has room for `cb` bytes and `needed` is a valid out-pointer.
+        let ok = unsafe {
+            K32EnumProcessModules(GetCurrentProcess(), handles.as_mut_ptr(), cb, &mut needed)
+        };
         if ok == 0 {
             return Vec::new();
         }
@@ -108,20 +117,19 @@ fn module_handles() -> Vec<*mut c_void> {
     }
 }
 
-/// Every module currently loaded in this process, in load order (the main
-/// exe first). Reads each file's version resource, so prefer
-/// [module_containing] / [is_module_loaded] for a single lookup.
+/// Every module currently loaded, in load order. Reads each file's version resource, so use
+/// [module_containing] for a single lookup.
 pub fn loaded_modules() -> Vec<ModuleInfo> {
     module_handles().into_iter().filter_map(module_info).collect()
 }
 
-/// Whether a module with this file name (e.g. `ersc.dll`) is loaded.
+/// Whether a module with this file name (for example `ersc.dll`) is loaded.
 pub fn is_module_loaded(name: &str) -> bool {
+    // SAFETY: the name is a NUL-terminated wide string that outlives the call.
     !unsafe { GetModuleHandleW(wide(name).as_ptr()) }.is_null()
 }
 
-/// The loaded module whose image contains `addr`, if any - e.g. to name
-/// which DLL a foreign `jmp` patched into game code points into.
+/// The loaded module whose image contains `addr`, if any.
 pub fn module_containing(addr: usize) -> Option<ModuleInfo> {
     let handle = module_handles().into_iter().find(|&h| {
         let base = h as usize;
@@ -130,13 +138,11 @@ pub fn module_containing(addr: usize) -> Option<ModuleInfo> {
     module_info(handle)
 }
 
-/// Whether `m` lives under the Windows directory (kernel32, user32, ...).
 pub fn is_system_module(m: &ModuleInfo) -> bool {
     m.path.to_lowercase().starts_with(&windows_dir())
 }
 
-/// Game-bundled and Steam-client DLLs left out of the logged list (compared
-/// case-insensitively).
+/// Game-bundled and Steam-client DLLs left out of the logged list.
 const HIDDEN_MODULES: &[&str] = &[
     // Shipped with the game
     "bink2w64.dll",
@@ -149,7 +155,7 @@ const HIDDEN_MODULES: &[&str] = &[
     "tier0_s64.dll",
     "vstdlib_s64.dll",
     "gameoverlayrenderer64.dll",
-    // Hidden for the same reason as steam_api64 (see docs)
+    // Hidden for the same reason as steam_api64
     "onlinefix64.dll",
 ];
 
@@ -168,6 +174,7 @@ fn display_path(m: &ModuleInfo, game_dir: &str) -> String {
 
 fn windows_dir() -> String {
     let mut buf = vec![0u16; 260];
+    // SAFETY: `buf` is writable for the length passed.
     let n = unsafe { GetSystemWindowsDirectoryW(buf.as_mut_ptr(), buf.len() as u32) } as usize;
     if n == 0 || n >= buf.len() {
         return "c:\\windows".to_string();
@@ -175,11 +182,12 @@ fn windows_dir() -> String {
     String::from_utf16_lossy(&buf[..n]).to_lowercase()
 }
 
-/// Logs the non-system module list, the game exe first. Call it after the
-/// other mods have loaded, not straight from `DllMain`.
+/// Logs the non-system module list, game exe first. Call it after the other mods have loaded.
 pub fn log_environment() {
+    // SAFETY: a null name asks for the main module.
     let exe = unsafe { GetModuleHandleW(std::ptr::null()) };
-    let game_dir = module_path(exe).and_then(|p| crate::dir_of(&p).map(str::to_string)).unwrap_or_default();
+    let game_dir =
+        module_path(exe).and_then(|p| crate::dir_of(&p).map(str::to_string)).unwrap_or_default();
     let win_dir = windows_dir();
     let mut hidden = 0;
     let modules: Vec<ModuleInfo> = loaded_modules()
@@ -203,10 +211,8 @@ pub fn log_environment() {
     }
 }
 
-/// Waits for `CSTaskImp` (by then every mod loader has loaded its DLLs), then
-/// [log_environment]. For a mod's startup thread, before its feature starts:
-/// several features only reach their own `wait_for_cs_task` once the player is
-/// in the world, too late for a "mod never started" report.
+/// Waits for `CSTaskImp` (by then every mod loader has loaded its DLLs), then [log_environment].
+/// Call it before a feature starts, so a "mod never started" report still has the environment.
 pub fn log_environment_when_game_ready() {
     crate::task::wait_for_cs_task();
     log_environment();
@@ -217,43 +223,75 @@ mod tests {
     use super::*;
 
     #[test]
-    fn lists_own_process_modules() {
-        let modules = loaded_modules();
-        let exe = &modules[0];
-        assert!(exe.name.to_lowercase().ends_with(".exe"), "{}", exe.name);
-        assert!(exe.size > 0 && exe.timestamp != 0);
-        assert!(modules.iter().any(|m| m.name.eq_ignore_ascii_case("kernel32.dll") && m.version != "0.0.0.0"));
-        // An address inside this test binary's own code resolves to the exe.
-        let here = lists_own_process_modules as *const () as usize;
-        assert_eq!(module_containing(here).map(|m| m.base), Some(exe.base));
-        assert!(module_containing(0).is_none());
-    }
-
-    #[test]
     fn is_module_loaded_matches_by_file_name() {
         assert!(is_module_loaded("kernel32.dll"));
         assert!(is_module_loaded("KERNEL32.DLL"));
         assert!(!is_module_loaded("no_such_module.dll"));
     }
 
+    #[test]
+    fn lists_own_process_modules() {
+        let modules = loaded_modules();
+        let exe = &modules[0];
+        assert!(exe.name.to_lowercase().ends_with(".exe"), "{}", exe.name);
+        assert!(exe.size > 0 && exe.timestamp != 0);
+        assert!(
+            modules
+                .iter()
+                .any(|m| m.name.eq_ignore_ascii_case("kernel32.dll") && m.version != "0.0.0.0")
+        );
+        // An address inside this test binary's own code resolves to the exe.
+        let here = lists_own_process_modules as *const () as usize;
+        assert_eq!(module_containing(here).map(|m| m.base), Some(exe.base));
+        assert!(module_containing(0).is_none());
+    }
+
     fn module(path: &str) -> ModuleInfo {
         let name = path.rsplit('\\').next().unwrap().to_string();
-        ModuleInfo { name, path: path.to_string(), base: 0, size: 0, timestamp: 0, version: String::new() }
+        ModuleInfo {
+            name,
+            path: path.to_string(),
+            base: 0,
+            size: 0,
+            timestamp: 0,
+            version: String::new(),
+        }
     }
 
     #[test]
     fn display_path_never_leaks_outside_game_dir() {
         let game = r"E:\SteamLibrary\steamapps\common\ELDEN RING\Game";
-        assert_eq!(display_path(&module(r"E:\SteamLibrary\steamapps\common\ELDEN RING\Game\modengine2\bin\lua.dll"), game), r"modengine2\bin\lua.dll");
+        assert_eq!(
+            display_path(
+                &module(r"E:\SteamLibrary\steamapps\common\ELDEN RING\Game\modengine2\bin\lua.dll"),
+                game
+            ),
+            r"modengine2\bin\lua.dll"
+        );
         // Case differs from the exe's path - still inside.
-        assert_eq!(display_path(&module(r"e:\steamlibrary\steamapps\common\elden ring\game\mod\AutoRegen.dll"), game), r"mod\AutoRegen.dll");
+        assert_eq!(
+            display_path(
+                &module(r"e:\steamlibrary\steamapps\common\elden ring\game\mod\Example.dll"),
+                game
+            ),
+            r"mod\Example.dll"
+        );
         // Outside the game folder: file name only, no user name.
         assert_eq!(display_path(&module(r"C:\Users\Nguyễn Văn A\ME3\mods\X.dll"), game), "X.dll");
         // Sibling folder sharing the prefix isn't "inside".
-        assert_eq!(display_path(&module(r"E:\SteamLibrary\steamapps\common\ELDEN RING\GameBackup\Y.dll"), game), "Y.dll");
+        assert_eq!(
+            display_path(
+                &module(r"E:\SteamLibrary\steamapps\common\ELDEN RING\GameBackup\Y.dll"),
+                game
+            ),
+            "Y.dll"
+        );
         // Non-ASCII game folder: no panic, still relative.
         let vn = r"D:\Trò chơi\ELDEN RING\Game";
-        assert_eq!(display_path(&module(r"D:\Trò chơi\ELDEN RING\Game\mod\Z.dll"), vn), r"mod\Z.dll");
+        assert_eq!(
+            display_path(&module(r"D:\Trò chơi\ELDEN RING\Game\mod\Z.dll"), vn),
+            r"mod\Z.dll"
+        );
         assert_eq!(display_path(&module(r"D:\x.dll"), ""), "x.dll");
     }
 }

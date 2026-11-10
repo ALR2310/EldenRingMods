@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Config file is now TOML; settings from the old INI file are kept.
+- Clean code, hoping to fix false positives.
+
 ## [1.6.0] - 2026-11-03
 
 - Added option to keep spirits when resting at a Site of Grace.

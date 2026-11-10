@@ -2,7 +2,21 @@
 
 ## [Unreleased]
 
+- Renamed the config key `Player.Effects` to `Player.EffectTimer`; existing configs are converted.
+
+## [1.4.0] - 2026-11-08
+
+- Added an option that puts a boss's posture and effects under the game's boss health bar.
+- Added an option to move and resize the game's rune counter.
+- Fixed dragging the minimap and the target panel being limited to part of the screen.
+- The minimap no longer shows Torrent.
+- Fixed the overlay not working with ER Item Wheel and ER Gesture Wheel by Maldron9955.
+- Made the minimap's map and icons load much faster and reorganized the config.
+
+## [1.3.0] - 2026-11-06
+
 - Added an option to hide the minimap in Roundtable Hold.
+- Fixed the minimap showing during cutscenes.
 
 ## [1.2.0] - 2026-11-03
 

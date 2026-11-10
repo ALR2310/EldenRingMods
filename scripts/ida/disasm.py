@@ -1,10 +1,10 @@
-"""Disassemble quanh 1 địa chỉ, kèm byte thô (để dựng AOB / chọn độ dài patch).
+"""Disassemble around an address, with raw bytes (to build AOB patterns or choose a patch length).
 
-Dùng:
-    run.ps1 disasm <ea>[:count] ...        (count mặc định 40 lệnh)
-    run.ps1 disasm <ea> --func              (cả hàm chứa <ea>, bỏ qua count)
+Usage:
+    run.ps1 disasm <ea>[:count] ...        (count defaults to 40 instructions)
+    run.ps1 disasm <ea> --func              (the whole function containing <ea>, count ignored)
 
-Mỗi dòng: `RVA: lệnh | byte hex`. Ghi ra disasm.txt.
+Each line: `RVA: instruction | hex bytes`. Written to disasm.txt.
 """
 import os
 import sys
@@ -29,7 +29,7 @@ def line(ea):
 def main():
     pos, flags = common.parse_args()
     if not pos:
-        common.die("thiếu địa chỉ; xem docstring")
+        common.die("missing address; see the docstring")
     out = common.open_out("disasm.txt")
     for tok in pos:
         spec, _, cnt = tok.partition(":")
@@ -38,7 +38,7 @@ def main():
         if "func" in flags:
             f = ida_funcs.get_func(ea)
             if not f:
-                out.write("(không nằm trong hàm)\n")
+                out.write("(not inside a function)\n")
                 continue
             for h in idautils.Heads(f.start_ea, f.end_ea):
                 out.write(line(h) + "\n")

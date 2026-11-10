@@ -1,0 +1,33 @@
+[General]
+# File format version, managed by the mod - don't change.
+ConfigVersion = 1
+
+# Key that reloads this config file in-game, no restart needed.
+# https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
+ReloadKey = "F5"
+
+# Show a banner at the top of the screen after a reload.
+ReloadBanner = false
+
+# Milliseconds to wait after game launch before applying the mod.
+LoadDelay = 5000
+
+
+[Features]
+# How your equip load is changed. 0 = Multiplier, 1 = FixedValue.
+Mode = 0
+
+# Multiplies your total equip load by this factor. Only used when Mode = 0.
+# Example: Multiplier = 0.5 with a real load of 100 shows as 50 (half).
+# Example: Multiplier = 1.0 leaves it unchanged.
+# Example: Multiplier = 2.0 with a real load of 100 shows as 200 (double).
+Multiplier = 0.5
+
+# Equip load is always set to this exact value, regardless of what you're
+# wearing. Only used when Mode = 1.
+FixedValue = 0.0
+
+
+[Logging]
+# Write a log file next to the DLL, for troubleshooting.
+LogFile = true

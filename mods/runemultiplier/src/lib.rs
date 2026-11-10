@@ -1,17 +1,13 @@
 #![allow(non_snake_case)] // crate name is "RuneMultiplier" to control the output DLL's filename
 
+mod config;
 mod hook;
 mod menu;
 
-use common::{config, dll_dir, logger};
-
-// The default config, embedded verbatim: the single source of truth for keys
-// and defaults.
-const DEFAULT_INI: &str = include_str!("../RuneMultiplier.ini");
+use shared::{dll_dir, logger};
 
 /// # Safety
-/// This is exposed this way so the library loader can call it. Do not call it
-/// yourself.
+/// Called by the loader only.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     const DLL_PROCESS_ATTACH: u32 = 1;
@@ -21,17 +17,38 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
 
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
-        let ini_path = format!("{dir}\\RuneMultiplier.ini");
-        let added_keys = config::load_or_create_default(&ini_path, DEFAULT_INI);
+        let name = shared::dll_stem(hmodule);
+        let path = format!("{dir}\\{name}.toml");
+        config::adopt_ini(&path, &format!("{dir}\\{name}.ini"));
+        let report = config::init(&path);
 
-        // `LogFile` gates the log file entirely, see common::logger.
-        logger::init(&dir, "RuneMultiplier.log");
+        logger::set_enabled(config::get().logging.log_file);
+        logger::init(&dir, &format!("{name}.log"));
         logger::install_panic_hook();
-        if added_keys > 0 {
-            logger::log(&format!("RuneMultiplier.ini: added {added_keys} key(s) from the template"));
+
+        // The menu host accepts registrations only in its first seconds.
+        menu::start(hmodule);
+
+        report.log(&format!("{name}.toml"));
+
+        hook::apply_config();
+        if hook::install() {
+            std::thread::spawn(|| {
+                shared::reload::run(
+                    || config::get().general.reload_key.clone(),
+                    || config::get().general.reload_banner,
+                    || {
+                        config::reload()?;
+                        logger::set_enabled(config::get().logging.log_file);
+                        hook::apply_config();
+                        menu::sync_from_config();
+                        Ok(())
+                    },
+                )
+            });
         }
 
-        hook::run(ini_path, hmodule);
+        shared::diag::log_environment_when_game_ready();
     });
 
     true

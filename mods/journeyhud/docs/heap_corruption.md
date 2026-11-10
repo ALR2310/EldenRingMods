@@ -1,17 +1,28 @@
-# JourneyHUD: game crash hỏng heap (0xC0000374)
+# Game crash with heap corruption (0xC0000374)
 
-**Status 2026-11-03: mở. Hai lần thấy, cả hai lần stack chỉ có `eldenring.exe` và `ntdll.dll` (không có khung nào của mod, và crash handler dừng ở khung đầu của game), nên chưa chứng minh mod liên quan. Chưa tìm được cách tái hiện.**
+Status: **Open**. Seen twice; both stacks hold only `eldenring.exe` and `ntdll.dll` (no frame of the mod, and
+the crash handler stops at the game's first frame), so a link to the mod is not shown. No reproduction.
+Conventions: [research notes](../../../docs/research/README.md).
 
-## Hai lần thấy
+## Observations
 
-- **2026-10-27 20:51:** game đang giải phóng `MicrosoftDiskFileOperator` (ghi trong TODO lúc đó). Chưa rõ mod nào.
-- **2026-11-03 13:21:51** (ModEngine2, ERSS tắt, `external_dlls`: ERNativeUI, JourneyHUD, SpeedMultiplier, FasterRevival, CameraFix, UltrawideFix, Toolbox; bản dựng JourneyHUD trước 13:26): `Exception: heap corruption at ntdll.dll+0x112FC5 (thread 52412)`, `rbx = 0xC0000374` (`STATUS_HEAP_CORRUPTION`), stack `ntdll.dll+0x112FC5 < ntdll.dll+0x95A65 < ntdll.dll+0xAE02 < ntdll.dll+0x12338A < ntdll.dll+0x2754C < eldenring.exe+0x254E298 < eldenring.exe+0x25234FE < eldenring.exe+0x1F65B6F < eldenring.exe+0x1EDFAC6 < eldenring.exe+0x1EDFD22 < eldenring.exe+0x242AE6F < eldenring.exe+0x242AEA4`. Log gốc đã bị ghi đè bởi các lần chạy sau.
+- **First**: the game was freeing a `MicrosoftDiskFileOperator`.
+- **Second** (ModEngine2, ERSS-FG off; loaded: ERNativeUI, JourneyHUD, SpeedMultiplier, FasterRevival, a camera
+  fix, an ultrawide fix, Toolbox): `heap corruption at ntdll.dll+0x112FC5`, `rbx = 0xC0000374`
+  (`STATUS_HEAP_CORRUPTION`), stack `ntdll.dll+0x112FC5 < ntdll.dll+0x95A65 < ntdll.dll+0xAE02 < ntdll.dll+0x12338A
+  < ntdll.dll+0x2754C < eldenring.exe+0x254E298 < eldenring.exe+0x25234FE < eldenring.exe+0x1F65B6F <
+  eldenring.exe+0x1EDFAC6 < eldenring.exe+0x1EDFD22 < eldenring.exe+0x242AE6F < eldenring.exe+0x242AEA4`. The
+  original log was overwritten by later runs.
 
-## Điều đã biết
+## What is known
 
-- `0xC0000374` là phát hiện hỏng heap lúc giải phóng hoặc cấp phát: kẻ gây hỏng (ghi tràn, giải phóng hai lần) thường đã chạy từ trước, nên khung bị phát hiện không phải nghi phạm.
-- Một crash khác trong engine (AV đọc `0x30`, không phải hỏng heap) từng gặp ở máy ta cả khi chưa có JourneyHUD: xem `map.md` mục "Khi nào bắt đầu đọc" và `docs/crash_dump_analysis.md`.
+- `0xC0000374` is detected at a free or an allocation; the writer (an overrun, a double free) usually ran
+  earlier, so the frame that detects it is not the suspect.
+- A different engine crash (an access violation reading `0x30`, not heap corruption) was also seen on the same
+  machine before JourneyHUD existed: see [map.md](map.md), "When reading starts".
 
-## Việc tiếp theo
+## Next
 
-- Khi gặp lại: giữ nguyên log (đừng chạy lại ngay) và ghi mod nào đang bật; thử chạy chỉ JourneyHUD; một hướng chưa thử là bật Page Heap (`gflags /p /enable eldenring.exe /full`) để bắt đúng chỗ ghi tràn (chỉ offline, không có Easy Anti-Cheat).
+When it happens again keep the log (do not start the game again at once) and note which mods are loaded; try
+JourneyHUD alone. An untried idea: enable Page Heap (`gflags /p /enable eldenring.exe /full`) to catch the
+overrun where it happens (offline only, without Easy Anti-Cheat).

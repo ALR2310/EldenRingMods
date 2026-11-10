@@ -1,16 +1,23 @@
-# Đỡ đòn trên không (guard khi đang nhảy): đã thử, dừng
+# Guarding in the air
 
-**Status 2026-10-15: ĐÃ DỪNG, không làm bằng DLL.** Thử ngày 2026-10-14, thấy nhiều vấn đề nên bỏ; người dùng Nexus (OKLICKMAN, 2026-10-15) cũng hỏi tính năng này ("air blocking like Sekiro") và đã được trả lời là không làm được chỉ bằng DLL.
+Status: **Rejected.** Cannot be done with a DLL alone. Conventions:
+[research notes](../../../docs/research/README.md).
 
-## Kết luận
+## Question
 
-Game không có trạng thái đỡ đòn khi đang trên không. Ép hành động guard giữa không trung thì game kéo nhân vật xuống đất và reset trạng thái liên tục, không ổn định. Làm cho đúng cần animation mới và sửa file hành vi (HKS/TAE), ngoài khả năng của một DLL.
+Can guard be made to work while jumping, like air blocking in other games?
 
-## Đã thử
+## Result
 
-- Thêm nhóm animation `Jump` vào `[Animations]` (`Jump = true`, ghi chú "EXPERIMENTAL: only Guard works in the air"): khi đang nhảy chỉ mở bit Guard, không mở lăn và đổi vũ khí (`cancel.rs`, `allow_from` với `dodge`/`weapon_swap` = false).
-- `EventProbe` (`src/eventprobe.rs`, 200 dòng): log các sự kiện hành vi (behavior event) phát ra khi giữ L1 lúc ở trên không, kèm `standing_on_solid_ground`.
+The game has no blocking state in the air. Forcing the guard action in mid-air makes the game pull
+the character to the ground and reset its state every frame, which is unstable. Doing it properly needs
+a new animation and changes to the behavior files (HKS/TAE), beyond what a DLL can do.
 
-## Còn lại
+## What was tried
 
-Code thử nằm trong stash git `stash@{0}` ("!!GitHub_Desktop<main>", 6 file trong `mods/animcancel/`), chưa đưa vào nhánh nào. Không áp dụng lại trừ khi có hướng mới (ví dụ sửa hành vi bằng file ngoài DLL).
+- A `Jump` animation group where only the guard bit is opened while airborne, and the roll and weapon
+  swap bits are not.
+- A probe that logged the behavior events emitted while holding L1 in the air, together with
+  `standing_on_solid_ground`.
+
+Neither is kept in the repository. Do not retry unless behavior files can be changed outside the DLL.

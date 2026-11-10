@@ -1,158 +1,237 @@
-# JourneyHUD: bản đồ thế giới dưới minimap
+# The world map under the minimap
 
-**Status 2026-10-27: đọc archive và giải mã tile đã kiểm trên bản cài thật (2.7.2.0, ra ảnh Limgrave đúng); vẽ lên minimap chưa thử trong game. Chỉ overworld (area 60), hầm ngầm và dungeon qua bảng đổi toạ độ; đã nối bản đồ Land of Shadow (gốc toạ độ khớp) (area 61).**
+Status: **Confirmed** in game: reading the archives and decoding the tiles (an image of Limgrave on 2.7.2.0),
+the map under the minimap, beacons (overworld and DLC), the Land of Shadow origin, the Mistwood block fix.
+Graces, points of interest and the Map for Goblins markers were written and checked offline; the rest of the
+open points are at the end. Conventions: [research notes](../../../docs/research/README.md). Code:
+`src/map/`. The dots drawn above it: [radar.md](radar.md).
 
-Bản đồ là chính các texture của game, đọc từ thư mục cài lúc chạy: DLL **không đóng gói** ảnh nào của game.
+The map is the game's own textures, read from the install folder at run time: the DLL ships **no image** of the
+game.
 
-## Cách làm (theo kubilaiswf-minimap, MIT)
+## Mechanism
 
-Mã trong `src/map/` có 4 file (`reader.rs`, `archive.rs`, `formats.rs`, `tiles.rs`) chép từ `kubilaiswf-minimap` rồi sửa đường dẫn
-`use`, kèm chú thích nguồn ở đầu file và `THIRD-PARTY-NOTICES.txt` cạnh `Cargo.toml`. `world.rs` và `layer.rs` viết theo ý tưởng
-của `game.rs` và `minimap.rs`. Năm khoá RSA công khai trong `src/map/keys/` là khoá của từng archive (cộng đồng đã công bố qua UXM
-và SoulsFormats), không phải khoá bí mật của ai.
+`src/map/` has four files (`reader.rs`, `archive.rs`, `formats.rs`, `tiles.rs`) adapted from an MIT-licensed
+minimap mod (source noted at the top of each file, licence in `THIRD-PARTY-NOTICES.txt`); `world.rs` and
+`layer.rs` follow its ideas. The five public RSA keys in `src/map/keys/` are per-archive keys the modding
+community has published (through UXM and SoulsFormats), not anyone's secret.
 
-1. **Archive:** `Data0..3` và `DLC` (`.bhd` mục lục + `.bdt` dữ liệu). Mục lục mã hoá RSA (mỗi khối 256 byte, nâng luỹ thừa số mũ công
-   khai), tìm file theo hash đường dẫn (`hash = hash*0x85 + byte` trên đường dẫn viết thường), dữ liệu có đoạn mã hoá AES-128.
-2. **File dùng:** `/menu/71_maptile.mtmskbnd.dcx` (mặt nạ mảnh bản đồ cho từng ô), `/menu/71_maptile.tpfbhd` + `.tpfbdt`
-   (tile `MENU_MapTile_M00_L0_XX_YY_<flags>.tpf.dcx`, mỗi tile 256x256, 1 pixel = 1 m, M00 = overworld, M01 = hầm ngầm).
-3. **Giải nén:** DCX kiểu KRAK bằng Oodle của chính game (`oo2core_6_win64.dll` trong thư mục game, nạp bằng `libloading`), rồi TPF, rồi
-   DDS BC7 hoặc BC1 (`texture2ddecoder`).
-4. **Cửa sổ 3x3 ô** (768x768 RGBA) quanh người chơi chạy ở luồng nền, ghép thành một texture; luồng render chỉ nạp texture đó.
-5. **Vẽ:** quạt 72 hình nêm cắt texture thành đĩa, mỗi đỉnh viền có UV riêng đã xoay theo camera (hướng nhìn là phía trên).
-6. **Toạ độ:** ô overworld `m60_XX_ZZ_LL` rộng `256 << LL` mét, vị trí tương đối tâm ô; ô bản đồ (i, j) ứng với `m60_{i+28}_{j+24}`. Dungeon
-   đổi qua `WorldMapLegacyConvParam` (điểm tham chiếu gần nhất), hầm ngầm dùng toạ độ overworld nhưng bản đồ riêng (M01).
+1. **Archives**: `Data0..3` and `DLC` (`.bhd` index and `.bdt` data). The index is RSA-encrypted (256-byte
+   blocks, public-exponent power); files are found by path hash (`hash = hash * 0x85 + byte` over the lowercase
+   path); the data has AES-128 encrypted ranges.
+2. **Files used**: `/menu/71_maptile.mtmskbnd.dcx` (map piece masks per cell) and `/menu/71_maptile.tpfbhd` +
+   `.tpfbdt` (tiles `MENU_MapTile_M00_L0_XX_YY_<flags>.tpf.dcx`, each 256x256, 1 pixel = 1 m, M00 = overworld,
+   M01 = underground).
+3. **Decoding**: DCX of kind KRAK with the game's own Oodle (`oo2core_6_win64.dll` in the game folder, loaded with
+   `libloading`), then TPF, then DDS BC7 or BC1 (`texture2ddecoder`).
+4. **A 3x3 cell window** (768x768 RGBA) around the player is built on a background thread and stitched into one
+   texture; the render thread only uploads it.
+5. **Drawing**: a fan of 72 wedges cuts the texture into a disc; every rim vertex has its own UV, rotated by the
+   camera (facing is up).
+6. **Coordinates**: an overworld tile `m60_XX_ZZ_LL` is `256 << LL` metres wide with the position relative to the
+   tile centre; map cell (i, j) is `m60_{i+28}_{j+24}`. Dungeons convert through `WorldMapLegacyConvParam`
+   (nearest reference point); underground uses overworld coordinates with its own map (M01).
 
-## Kiểm chứng ngoại tuyến
+Verified offline: an ignored developer test used to read the archives of a real install and write the window
+around cell (13, 11) as a PNG (about 2 seconds on 2.7.2.0, a correct map of Limgrave with its icons and
+hand-drawn lines); two small unit tests check the overworld conversion.
 
-Test bị bỏ qua mặc định `map::tests::map_window_from_the_installed_game` đọc archive của game thật, dựng cửa sổ quanh ô (13, 11) và ghi PNG:
-`ER_MAP_PNG=<file.png> cargo test -p journeyhud --release -- --ignored map_window --nocapture`. Trên 2.7.2.0 mất khoảng 2 giây và ra đúng
-bản đồ Limgrave (có icon, nét vẽ tay). Hai test nhỏ khác kiểm công thức đổi toạ độ overworld.
+## Differences from the original minimap mod
 
-## Khác với minimap gốc
+- The game build is not locked: if the archives or the parameter table cannot be read the minimap still runs
+  without a background (log `Map: loader stopped (...)`).
+- The whole map is shown by default; `FullMap = false` follows the map pieces the player has found.
+- The maximum range is 200 m: the window is only 768 m wide, so room is left to move the window before the
+  player reaches its edge.
 
-- Không khoá cứng bản game: nếu archive hay bảng tham số không đọc được thì minimap vẫn chạy, chỉ không có nền (log `Map: loader stopped (...)`).
-- Luôn hiện toàn bộ bản đồ (chưa theo mảnh bản đồ người chơi đã nhặt).
-- Có grace (chấm vàng, xem dưới); không có beacon, marker bản đồ, vệt đường đi.
-- Tầm tối đa 200 m: cửa sổ chỉ rộng 768 m nên phải chừa chỗ để dời cửa sổ trước khi người chơi tới mép.
+## Graces
 
-## Grace
+`map/graces.rs`: the grace table is `BonfireWarpParam` (only rows with an event flag); each grace converts to
+map coordinates with `world::locate` (which needs the dungeon conversion table loaded, so it is retried every
+frame until it is), and counts as found when its event flag is on (`CSEventFlagMan.virtual_memory_flag`). Every
+frame on the game task only graces in the same space and within 1.2 times the minimap range are kept, as a list
+of distances to the player. Drawn as a yellow dot with a small glow (`radar/ui.rs`), key `Minimap.Layers.Graces`.
 
-`map/graces.rs`: bảng grace là `BonfireWarpParam` (chỉ dòng có cờ sự kiện), mỗi grace đổi sang toạ độ bản đồ bằng `world::locate` (cần bảng đổi
-toạ độ dungeon đã nạp xong, nên đọc lại mỗi frame cho tới khi được), tìm thấy khi cờ sự kiện của nó bật (`CSEventFlagMan.virtual_memory_flag`).
-Mỗi frame trên task game chỉ lấy grace cùng không gian và trong 1,2 lần tầm minimap, ra danh sách khoảng cách tới người chơi. Vẽ là chấm
-vàng có quầng sáng nhỏ ở `radar_ui.rs`. Khoá `MinimapGraces` (menu có hàng bật tắt). **Chưa thử trong game.**
+## The game's own icons
 
-## Icon thật của game
+The marks use the world map's own icons, read at run time as the tiles are. `map/sprites.rs`:
 
-Các dấu trên minimap dùng chính icon của bản đồ thế giới trong game, đọc lúc chạy như tile (không đóng gói ảnh nào). `map/sprites.rs`:
+- A sprite sheet is a texture of `/menu/hi/01_common.tpf.dcx` (TPF, UTF-16 texture names, about 200 MB
+  decompressed) and each sprite's place is in the layout `/menu/hi/01_common.sblytbnd.dcx`, XML
+  `<TextureAtlas imagePath="SB_MapCursor_02.png"><SubTexture name=... x y width height/>`. It is read once on a
+  background thread (about 1.3 s, a few hundred MB temporarily), each sprite is cropped, and `MapLayer` uploads
+  them as textures during normal play.
+- Used: `SB_MapCursor_02/MENU_MAP_01_Bonfire` (grace, 156x156, a yellow disc with a glow),
+  `SB_MapCursor/MENU_MAP_Player_01` (the yellow arrow, only a hollow circle) plus `MENU_MAP_Player_02` (the small
+  figure at the circle's centre), `MENU_MAP_Coop_01` + `_02` (the pink arrow of other players, also two parts),
+  `MENU_MAP_Friend_00` (spirit, blue crossed swords), `MENU_MAP_Enemy_00` (locked enemy, red crossed swords).
+  Also available: `MENU_MAP_Raid_01/02`, `Host`, `Guests`, `Marker` (beacon), `memo_*` and the point icons
+  `MENU_MAP_NN`.
+- The game's cursor is two sprites stacked: the arrow with its hollow circle and the figure inside it; both
+  rotate around the circle's centre (about 54% of the arrow's height), not the image centre.
+- If they cannot be read the log says `Map: icons not read (...)` and the hand-drawn shapes (yellow dot, arrow,
+  red dot) are used.
+- A player-arrow replacement from a mod loader is picked up: see [player_marker.md](player_marker.md).
 
-- Sprite sheet là một texture trong `/menu/hi/01_common.tpf.dcx` (TPF, tên texture UTF-16, khoảng 200 MB sau khi giải nén), còn vị trí từng sprite nằm ở
-  layout `/menu/hi/01_common.sblytbnd.dcx` dạng XML `<TextureAtlas imagePath="SB_MapCursor_02.png"><SubTexture name=... x y width height/>`. Đọc một lần ở luồng nền
-  (khoảng 1,3 giây, vài trăm MB tạm thời), cắt từng sprite, rồi `MapLayer` nạp thành texture khi đang chơi bình thường.
-- Dùng: `SB_MapCursor_02/MENU_MAP_01_Bonfire` (grace, 156x156, đĩa vàng có quầng sáng), `SB_MapCursor/MENU_MAP_Player_01` (kim vàng của người chơi, chỉ có vòng tròn rỗng) cộng `MENU_MAP_Player_02`
-  (hình nhỏ đặt giữa vòng), `MENU_MAP_Coop_01` + `MENU_MAP_Coop_02` (kim hồng của người chơi khác, cũng gồm hai phần), `MENU_MAP_Friend_00` (spirit, kiếm chéo xanh), `MENU_MAP_Enemy_00` (kẻ địch khoá, kiếm chéo đỏ). Cũng có sẵn `MENU_MAP_Raid_01/02`
-  (kẻ xâm nhập), `Host`, `Guests`, `Marker` (beacon), `memo_*` và các icon điểm `MENU_MAP_NN` cho lần sau.
-- Con trỏ của game gồm hai sprite chồng nhau: kim có vòng tròn rỗng và hình nhỏ ở giữa vòng (thử game lần đầu chỉ vẽ kim nên giữa vòng bị trống). Cả hai quay
-  quanh tâm vòng tròn (khoảng 54% chiều cao kim), không quanh giữa ảnh.
-- Không đọc được thì log `Map: icons not read (...)` và dùng lại các hình vẽ tay (chấm vàng, mũi tên, chấm đỏ).
-- Kiểm ngoại tuyến: test bỏ qua `sprite_sheet_from_the_installed_game` (`ER_MAP_PNG`, `ER_SPRITES="Sheet:Name;..."`) ghi các sprite cạnh nhau ra PNG; đã ra đúng cả 13 sprite thử.
+## Points of interest (ruins, churches, caves...)
 
-## Địa điểm (di tích, nhà thờ, hang...)
+`map/points.rs`: the points are in `WorldMapPointParam` (each row has `iconId`, a block position, an open flag,
+text rows and their flags). The visibility rule follows the game (through the MIT minimap mod, itself from a
+community overlay's notes): the open flag must be on and, except rows allowed without text, at least one text
+must be active; text of kind 1 switches to the alternative icon (`altIconId`); a completion flag dims it (a boss
+that was beaten). Skipped: area label rows, icon 0, graces (1 and 2, drawn from the grace table) and the guiding
+light rays (83 to 85).
 
-`map/points.rs`: các địa điểm của bản đồ thế giới nằm trong `WorldMapPointParam` (mỗi dòng có `iconId`, vị trí theo block, cờ mở, các dòng text và cờ bật tắt
-chúng). Quy tắc hiện theo game (qua `kubilaiswf-minimap`, vốn lấy từ ghi chú EROverlay của soarqin): cờ mở phải bật và, trừ dòng cho phép không text, phải có ít nhất một
-text đang hoạt động; text loại 1 đổi sang icon thay thế (`altIconId`); cờ hoàn thành bật thì mờ đi (boss đã hạ). Bỏ các dòng nhãn vùng, icon 0, grace (1, 2, vẽ từ bảng grace riêng)
-và các tia sáng dẫn đường (83 đến 85).
+The icon of a point is the sprite `MENU_MAP_<iconId>` (icon 3, the church, is `MENU_MAP_Church`) in three
+sheets, `SB_MapCursor`, `SB_MapCursor_02` and `SB_MapCursor_03_dlc` (Shadow of the Erdtree).
+`sprites::load_map_icons` reads all 98 once on a background thread (about 1.4 s); `MapLayer` shrinks them (at
+most 96 px) and packs them into **one 1024x1024 atlas** uploaded once (hudhook leaks a buffer on every upload).
+Log lines `Map: N point(s)` and `Map: N point icon(s) uploaded`; key `Minimap.Layers.Points`.
 
-Icon của mỗi điểm là sprite `MENU_MAP_<iconId>` (riêng icon 3, nhà thờ, tên là `MENU_MAP_Church`) trong ba sheet `SB_MapCursor`, `SB_MapCursor_02`, `SB_MapCursor_03_dlc` (cho Shadow of the Erdtree). `sprites::load_map_icons` đọc
-cả 98 sprite một lần ở luồng nền (khoảng 1,4 giây), `MapLayer` thu nhỏ (tối đa 96 px) và xếp thành **một atlas 1024x1024** chỉ nạp một lần (hudhook rò bộ đệm mỗi lần nạp).
-Vẽ ở kích thước 0,11 lần sprite, không cao quá 30 px. Dòng log `Map: N point(s)` và `Map: N point icon(s) uploaded`. Khoá `MinimapPoints`. **Chưa thử trong game.**
+### Points that did not show
 
-Kiểm ngoại tuyến: test bỏ qua `map_icons_from_the_installed_game` ghi cả 97 icon ra PNG lưới. Còn thiếu: beacon (xem dưới).
+A diagnostic key that logged the map rows near the player found, at Elleh church (a 472-row table), that the
+church is a row with icon 3 whose flag and text were fine, so only the sprite `MENU_MAP_03` was missing (fixed
+by the name `MENU_MAP_Church`). The coordinate conversion was right (the player in `m60_42_36` at local (-63,
+90), the church 25 m away, the grace 20 m). The NPC icon with a hooded figure has no row near: 71 rows with icon
+80 but the nearest 208 m away, icon 87 738 m, icon 86 none. Elsewhere NPCs show normally, so Elleh may be a
+special case (an NPC that does not go through `WorldMapPointParam` or is a player mark). **Open**.
 
-## Beacon
+## Beacons
 
-`map/beacons.rs`. Beacon người chơi đặt không có kiểu trong `fromsoftware-rs`. Game giữ chúng trong `CSMenuMarkersSaveData`:
+`map/beacons.rs`. Beacons the player places have no type in fromsoftware-rs. The game keeps them in
+`CSMenuMarkersSaveData`:
 
 ```text
-CSMenuMan -> +0x80 -> +0x250 (view bản đồ thế giới) -> +0x338 (danh sách marker ở view +0x300, con trỏ dữ liệu ở +0x38 của nó)
-  -> +0x08 mảng slot (mỗi slot 16 byte), +0x10 số slot
-slot: id i32 (âm = trống), x f32, y f32 (toạ độ màn hình bản đồ của game, Y xuống, 41 ô 256 px), map u8 (0 overworld, 1 hầm ngầm, 10 Land of Shadow), icon u8
+CSMenuMan -> +0x80 -> +0x250 (world map view) -> +0x338 (marker list at view +0x300, data pointer at its +0x38)
+  -> +0x08 slot array (16 bytes each), +0x10 slot count
+slot: id i32 (negative = empty), x f32, y f32 (the game's map screen coordinates, Y down, 41 cells of 256 px),
+      map u8 (0 overworld, 1 underground, 10 Land of Shadow), icon u8
 ```
 
-**Kiểm trong IDA:** hàm thêm marker (chuỗi `CSMenuMarkersSaveData.cpp`) ghi đúng các trường này và nơi gọi nó giữ danh sách ở view +0x300 trên **cả bốn bản exe**
-(2.6.2.0 `0x818ED0`, 2.7.0.0 và 2.7.1.0 `0x819D50`, 2.7.2.0 `0x81A200`): mảng slot ở +0x08, số slot ở +0x10, phần tử 16 byte, bộ đếm id ở +0x48, con trỏ dữ liệu ở +0x38 của danh sách
-(`a1[7]`), danh sách ở `a1 + 768`. **Chưa kiểm riêng** phần đầu chuỗi (`CSMenuMan +0x80 +0x250`): nó lấy từ minimap gốc, tác giả đã thử trong game trên 2.7.2.0.
+**Checked in IDA**: the add-marker function (string `CSMenuMarkersSaveData.cpp`) writes exactly these fields
+and its caller keeps the list at view +0x300 on **all four builds** (2.6.2.0 `0x818ED0`, 2.7.0.0 and 2.7.1.0
+`0x819D50`, 2.7.2.0 `0x81A200`): slot array at +0x08, slot count at +0x10, 16-byte elements, id counter at
++0x48, data pointer at +0x38 of the list (`a1[7]`), list at `a1 + 768`. The start of the chain (`CSMenuMan +0x80
++0x250`) was not checked separately: it comes from the MIT minimap mod, whose author tried it on 2.7.2.0.
 
-**An toàn:** mọi con trỏ đọc bằng `ReadProcessMemory` (lỗi thì trả `None` thay vì crash), và kết quả bị bỏ hết nếu có slot nào không giống beacon (số slot 0 hoặc quá 10, id quá lớn, map
-khác 0, 1 và 10, vị trí ngoài bản đồ hoặc không hữu hạn). Bản exe nào chuỗi sai thì chỉ không có beacon.
+**Safety**: every pointer is read with `ReadProcessMemory` (a failure returns `None`), and the whole result is
+dropped if any slot does not look like a beacon (slot count 0 or above 10, an id too large, a map other than 0,
+1 and 10, a position outside the map or not finite). On a build where the chain is wrong there are simply no
+beacons.
 
-Chuyển toạ độ: `from_game_map` đổi (x, y) của màn hình bản đồ sang mét trên lưới overworld, ô (i, j) của bản đồ ứng với `m60_{i+28}_{j+24}`. Số slot (1 đến 5...) là số game hiển thị cạnh beacon;
-chưa vẽ số. Icon là `MENU_MAP_Marker` (64x324, tia sáng xanh nhạt, đầu mũi tên ở dưới là vị trí): vẽ cao 36 px, mũi dưới đặt đúng chỗ; beacon ngoài tầm ghim vào viền như người chơi khác.
-Khoá `MinimapBeacons`. **Đã xác nhận chạy trong game (cả Overworld và DLC).**
+`from_game_map` converts the map screen (x, y) to metres on the overworld grid (cell (i, j) is
+`m60_{i+28}_{j+24}`). The slot number (1 to 5...) is the number the game shows beside the beacon; it is not
+drawn. The icon is `MENU_MAP_Marker` (64x324, a pale blue ray, the arrow head at the bottom is the position),
+drawn 36 px high with its tip on the spot; a beacon out of range is pinned to the rim like other players. Key
+`Minimap.Layers.Beacons`. Confirmed in game (overworld and DLC).
 
-## Thứ tự lớp và cỡ icon
+## Layer order and icon size
 
-Như game (người dùng, 2026-10-27), từ dưới lên: **địa điểm < NPC < grace < beacon < spirit, đồng đội, kẻ địch khoá < người chơi**. NPC là các icon 80, 86, 87, 88 (người, dấu
-triệu hồi, kẻ xâm nhập), còn lại là địa điểm. Cỡ theo sprite của game: địa điểm 0,2 lần (to nhất, nhà thờ cao hơn đĩa grace nên vẫn thấy khi grace nằm đè lên), NPC 0,17 lần, grace 0,15 lần,
-không icon điểm nào quá 42 px. Cỡ sau thử game 2026-10-27: gấp đôi bản đầu rồi bớt 30% (0,28 / 0,24 / 0,21 lần sprite), rồi người dùng thấy icon tàn tích còn to nên chốt **một hệ số chung cho địa điểm, NPC và grace** (`ICON_SCALE`, thay cho ba hệ số riêng; 0,18 rồi người dùng nâng lên 0,20); icon gốc 156 px thành khoảng 31 px, người dùng thấy vậy là vừa. Bản trước dời grace xuống góc phải khi che địa điểm; bỏ vì game không làm vậy và lớp mới đã giải quyết.
+As in the game, from bottom to top: **points < NPCs < graces < beacons < spirits, partners, locked enemy <
+player**. NPCs are icons 80, 86, 87, 88 (a person, a summon sign, an invader); the rest are points. One common
+factor, `ICON_SCALE` (0.20), scales points, NPCs and graces (a 156 px icon becomes about 31 px); the size was
+tuned in game from a first version twice as large. An earlier version moved a grace to the lower right when it
+covered a point; dropped because the game does not do that and the layer order solves it. The rim of the disc
+darkens in 4 faint rings so it blends with the map, and each N/E/S/W letter has a dark dot behind it to read on a
+bright map.
 
-## Điểm không hiện (đã tra, 2026-10-27)
+## When reading starts
 
-Đã từng có khoá config `MinimapDebug` ghi log các dòng bản đồ gần người chơi; đã gỡ sau khi tra xong. Kết quả thử game ở nhà thờ Elleh (bảng điểm 472 dòng): nhà thờ là dòng icon 3 (cờ mở bật,
-text hoạt động) nên chỉ thiếu sprite `MENU_MAP_03`, sửa bằng tên `MENU_MAP_Church`. Quy đổi toạ độ đúng (người chơi `m60_42_36` cục bộ (-63, 90), nhà thờ cách 25 m, grace 20 m). NPC khung hình người
-đội mũ trùm không có dòng nào gần: 71 dòng icon 80 nhưng gần nhất cách 208 m, icon 87 cách 738 m, icon 86 không có dòng nào. Ở chỗ khác NPC hiện bình thường (người dùng), nên chỗ Elleh có thể là
-trường hợp riêng (NPC không đi qua `WorldMapPointParam` hoặc là dấu của người chơi); chưa kết luận.
+The archive-reading thread (map, icons, points) starts only **once the player is in the world** (the first frame
+with `in_control`), not when the game launches: it needs a few hundred MB and a few seconds of disk and CPU and
+should not compete with a game that is starting. A game crash was seen about 3 seconds after the DX12 hooks, before
+the overlay was initialised (an access violation reading `0x30` in a getter, `sub_141E937F0`, called by
+`sub_141E8B8B0`, related to `CGShaderResourceView`, on a thread with no frame of the mod; the same family as a
+crash seen before JourneyHUD existed). A link to the mod was not shown; reading late removes one source of noise.
+See also [heap_corruption.md](heap_corruption.md).
 
-## Vẽ cho dễ nhìn
-
-Làm tối dần vòng ngoài của đĩa (4 vòng mờ) để viền ăn khớp với bản đồ, và có chấm nền tối sau mỗi chữ N/E/S/W cho dễ đọc trên nền bản đồ sáng.
-
-## Khi nào bắt đầu đọc
-
-Luồng đọc archive (bản đồ, icon, địa điểm) chỉ khởi động **khi người chơi đã vào thế giới** (frame đầu tiên có `in_control`), không phải lúc game mới chạy. Lý do: nó cần vài trăm MB và vài giây
-đĩa và CPU, không nên tranh với game đang khởi động. Thử game 2026-10-27 có một lần crash ở engine khoảng 3 giây sau khi móc DX12, trước khi overlay kịp khởi tạo (AV đọc `0x30` trong getter
-`sub_141E937F0` do `sub_141E8B8B0`, hàm liên quan `CGShaderResourceView`, trên luồng không có khung nào của mod; cùng họ với crash 2026-10-04 khi chưa có JourneyHUD, xem `docs/crash_dump_analysis.md`).
-Chưa chứng minh mod liên quan; chuyển sang đọc muộn để loại một nguồn nhiễu.
-
-## Lưu ý kỹ thuật (lấy từ minimap gốc)
-
-- hudhook rò bộ đệm trung gian ở mỗi lần nạp texture, nên chỉ xin cửa sổ mới khi người chơi tới gần mép cửa sổ cũ (`margin = tầm + 20 m`).
-- Nạp texture trên màn hình tải có thể treo (hàng đợi GPU chờ game), nên chỉ nạp khi `hud_visible` và không fade (`Radar::in_control`).
+Technical notes from the original minimap mod: hudhook leaks an intermediate buffer at every texture upload, so a
+new window is requested only when the player nears the edge of the old one (`margin = range + 20 m`); uploading a
+texture on a loading screen can hang (the GPU queue waits for the game), so uploads happen only while
+`hud_visible` and not fading (`Radar::in_control`).
 
 ## Map for Goblins
 
-Lớp `Minimap.Layers.MapForGoblins`, code ở `src/map/mfg.rs`. Mod Map for Goblins DLL (từ 2.1.6) xuất hàm `MfgGetMapAPI` (header `sdk/mfg_map_api.h` của nó, ABI 1) để mod khác đọc đúng những marker nó đang vẽ; cách đọc và giải mã icon theo kubilaiswf-minimap (MIT, `mfg.rs`).
+Layer `Minimap.Layers.MapForGoblins`, code in `src/map/mfg.rs`. The Map for Goblins DLL (from 2.1.6) exports
+`MfgGetMapAPI` (its header `sdk/mfg_map_api.h`, ABI 1) so another mod can read the markers it draws; the reading
+and the icon decoding follow the MIT minimap mod.
 
-- **Tìm API:** `GetModuleHandleW("MapForGoblins.dll")` rồi `MfgGetMapAPI(1)`, kiểm cỡ struct. Chưa thấy thì hỏi lại mỗi 2 giây (thứ tự nạp DLL không cố định); không có DLL thì lớp không làm gì và không tốn gì.
-- **Marker:** `view_points(layer)` với layer 0 = overworld, 1 = hầm ngầm (layer DLC bỏ qua, chưa có bản đồ). Mỗi điểm có `raw_map_id` (area, grid X, grid Z) và `x, z` trong ô đó, đổi qua `world::locate` như hàng `WorldMapPointParam`. Danh sách dựng lại tối đa 3 lần mỗi giây; vòng highlight (bit 62 của id) bị bỏ, huy hiệu hoàn thành (bit 63) vẽ như icon thường. Danh sách đã gồm việc người chơi tắt loại trong menu của nó và vật phẩm đã nhặt, nên không phải kiểm cờ ở đây.
-- **Icon:** `get_icon` trả thân thẻ SWF DefineBitsLossless2 (định dạng 3 bảng màu hoặc 5 ARGB, nhân alpha sẵn); giải nén zlib rồi chia lại alpha. Giải mã trên luồng riêng khi API xuất hiện lần đầu, xếp lưới ô 96 px (16 cột) thành một texture; icon quá 96 px bị bỏ. Không đóng gói ảnh nào của mod đó.
-- **Vẽ:** icon 96 px vẽ khoảng 29 px ở 1080p (hệ số 0,30, `GOBLIN_SCALE`; bản đầu 1/6 thì người dùng thấy nhỏ hơn icon của game), dưới grace và trên các địa điểm của game; ngoài tầm thì không vẽ (không ghim viền).
-- **Chưa thử trong game.** Bản Map for Goblins DLL cài trên máy là 2.1.6 (có API); mod này chưa nằm trong `external_dlls` của `config_eldenring.toml` ở thư mục game nên cần bật nó mới thấy marker.
+- **Finding the API**: `GetModuleHandleW("MapForGoblins.dll")` then `MfgGetMapAPI(1)`, checking the struct sizes.
+  If not found it asks again every 2 seconds (DLL load order is not fixed); without the DLL the layer does and
+  costs nothing.
+- **Markers**: `view_points(layer)` with layer 0 = overworld, 1 = underground (the DLC layer is skipped, no map
+  for it). Each point has `raw_map_id` (area, grid X, grid Z) and `x, z` inside the cell, converted through
+  `world::locate` like a `WorldMapPointParam` row. The list is rebuilt at most 3 times a second; the highlight
+  ring (bit 62 of the id) is dropped and the completion badge (bit 63) is drawn as a normal icon. The list
+  already honours the player's choices in that mod's menu and items already picked up, so no flag is checked
+  here.
+- **Icons**: `get_icon` returns the body of an SWF DefineBitsLossless2 tag (format 3 palette or 5 ARGB,
+  premultiplied alpha); zlib-decompressed and un-premultiplied. Decoded on its own thread when the API first
+  appears and packed into a grid of 96 px cells (16 columns) in one texture; icons above 96 px are dropped. No
+  image of that mod is shipped.
+- **Drawing**: a 96 px icon is drawn at about 29 px at 1080p (`GOBLIN_SCALE` 0.30; the first 1/6 looked smaller
+  than the game's icons), under graces and above the game's points; out of range it is not drawn (not pinned).
+- Not tried in game with the DLL loaded.
 
-## Bản đồ Land of Shadow (DLC, 2026-10-27)
+## Land of Shadow (DLC)
 
-Bản đồ DLC nằm trong cùng archive `/menu/71_maptile.tpfbhd`: `M10` (Land of Shadow, lưới 41x41 ô 256 px, cùng định dạng tile như `M00`) và `M11` (một vùng nhỏ 16x10 ô, bản đồ hầm ngầm của DLC, chưa dùng). Tile giải mã được bằng đúng bộ đọc hiện có (đã ghép thử cả 41x41 ô `M10` thành ảnh để xem: một đảo lớn ở nửa dưới, Scadutree ở phía trên, viền tối quanh).
+The DLC map is in the same archive `/menu/71_maptile.tpfbhd`: `M10` (Land of Shadow, a 41x41 grid of 256 px
+cells, the same tile format as `M00`) and `M11` (a small 16x10 area). The tiles decode with the existing reader
+(all 41x41 cells of `M10` were stitched into one picture: a large island in the lower half, the Scadutree to the
+north, a dark border).
 
-- **Cách nối vào:** `MapId::Shadow` (`M10`), `world::locate` trả `Some(Shadow)` cho block area 61 (và đích area 61 của bảng đổi toạ độ dungeon; bậc lưới overworld lấy chữ số hàng đơn vị `(block.index() % 10).min(2)` để bỏ qua chữ số hàng chục của biến thể sự kiện), điểm đánh dấu theo `disp_mask02` của `WorldMapPointParam`, beacon theo bản đồ 10 (`M10`) và marker Map for Goblins theo layer 2.
-- **`M11`:** DLC không có bản đồ hầm ngầm. Bảng tên mask trong exe (`menu:/71_MapTile.mtmskbnd`, 8 ô) chỉ liệt kê `M00`, `M01`, `M10`, `M03` đến `M07`; `M11` có trong archive (1521 ô, mọi mask bằng 0, không phải bản đồ theo mảnh) nhưng game không nạp. Người dùng nhớ DLC không có khu ngầm, khớp.
-- **Mảnh bản đồ DLC:** mask của `M10` dùng 5 bit (0 đến 4; `M00` 21 bit, `M01` 5 bit), tức 5 mảnh. Dòng log `Map: piece rows 0-20, 70-70, 100-105, 1000-1004, 1070-1070` (2026-10-28, 2.7.2.0) cho thấy hàng của DLC là **1000 đến 1004** (5 hàng, khớp 5 bit), không phải 200 đến 204 như đoán lúc đầu (khi đó `FullMap = false` ở DLC tối cả vùng đã nhặt mảnh). Hàng 70 và 1070 chưa rõ (không thuộc 5 bit). `FullMap = false` ở DLC dùng gốc 1000.
-- **Gốc toạ độ:** ô (0, 0) của `M10` ứng với tile m61 (28, 24), cùng khung với bản đồ cơ sở (m60). Đây là giả định đầu tiên và người dùng thử trong game thấy minimap DLC khớp, nên không cần chỉnh (đảo trên ảnh chiếm ô x 12..31, z 10..33, tức tile m61 khoảng x 40..59, z 34..57).
-- **`M11`:** chưa dùng; cần biết khối nào của game chọn nó và toạ độ riêng của nó.
+- **Wiring**: `MapId::Shadow` (`M10`); `world::locate` returns `Some(Shadow)` for block area 61 (and area 61
+  targets of the dungeon conversion table; the overworld grid step takes the units digit
+  `(block.index() % 10).min(2)` so the tens digit of an event variant is ignored); points by `disp_mask02` of
+  `WorldMapPointParam`, beacons by map 10, Map for Goblins markers by layer 2.
+- **`M11`**: the DLC has no underground map. The mask name table in the executable
+  (`menu:/71_MapTile.mtmskbnd`, 8 entries) lists only `M00`, `M01`, `M10`, `M03` to `M07`; `M11` is in the
+  archive (1521 cells, every mask 0, not a map by pieces) but the game does not load it. Not used.
+- **DLC map pieces**: the `M10` mask uses 5 bits (0 to 4; `M00` 21 bits, `M01` 5 bits), i.e. 5 pieces. A log
+  line `Map: piece rows 0-20, 70-70, 100-105, 1000-1004, 1070-1070` (2.7.2.0) shows the DLC rows are **1000 to
+  1004** (5 rows, matching 5 bits), not 200 to 204 as first guessed (with that guess `FullMap = false` made the
+  whole region with found pieces dark). Rows 70 and 1070 are unexplained (not among the 5 bits). In the DLC
+  `FullMap = false` uses base 1000.
+- **Origin**: cell (0, 0) of `M10` is tile m61 (28, 24), the same frame as the base map (m60). A first guess that
+  matched in game (the island spans cells x 12..31, z 10..33, i.e. m61 tiles about x 40..59, z 34..57).
 
-## Dungeon legacy và hang (2026-11-03)
+## Legacy dungeons and caves
 
-- `world::in_cave`: `InCaves` chỉ áp dụng cho hang, catacomb, tunnel (area 30 đến 32, 40 đến 43), không cho tháp Divine (area 34, người dùng bảo 2026-11-03) và không cho legacy dungeon (area 10, 11, 13 đến 16, 18 đến 22, 25, 28, 35; `world::is_legacy_dungeon`, game không có cờ nào cho việc này) và không cho khu ngầm (area 12).
-- Nền bản đồ trong dungeon dùng `WorldMapLegacyConvParam`: hầu hết dungeon có mọi điểm tham chiếu chụm vào một điểm đích hoặc dịch đều nhau, chọn điểm gần người chơi nhất là đúng. Ba dungeon thì các điểm mâu thuẫn nhau (bảng vanilla, khoảng cách trên bản đồ so với bên trong): Farum Azula 2683 m so với 3673 m, Haligtree 661 m so với 0, Finger Birthing Grounds 918 m so với 10.
-- **Farum Azula** (đã đối chiếu với bản đồ trong game, 2026-11-03): bản đồ thế giới vẽ nó thành đảo xoáy nước ở biển phía đông, quanh tile `m60_61_46`, grace của nó nằm trên đảo đó. Ba dòng (ID 10, 11, 132) cho ba nơi khác nhau: dòng 11 (`isBasePoint` = 1, nguồn (-2509.6, -668.0), đích `m60_51_43`) đặt grace Crumbling Beast Grave đúng tile (61.1, 46.2), dòng 10 (không phải điểm gốc) rơi vào tile (48.7, 53.4), dòng 132 (nguồn (0, 0), đích `m60_54_53` (0, 0), điểm gần nhất với người chơi) rơi vào Flame Peak, nên bản đầu hiện núi tuyết. Quy tắc: khi các dòng mâu thuẫn thì dùng dòng điểm gốc đầu tiên theo thứ tự param cho cả dungeon (`legacy_conversion`, hàm `agree`). Haligtree (dòng 18 trước dòng 136) và Finger Birthing Grounds (dòng 1000 trước 1113 đến 1116) cũng đi qua quy tắc này, **chưa đối chiếu với bản đồ trong game**.
-- Một bản trung gian bỏ nền ở mọi legacy dungeon, người dùng thử thấy mất minimap ở Stormveil, Leyndell, Học viện (đã có quy đổi tốt) và ở Farum Azula (bản đồ trong game có nền cho nó): bỏ.
+- `world::in_cave`: `Hide.InCaves` applies only to caves, catacombs and tunnels (areas 30 to 32 and 40 to 43),
+  not to Divine Towers (area 34), not to legacy dungeons (areas 10, 11, 13 to 16, 18 to 22, 25, 28, 35;
+  `world::is_legacy_dungeon`, the game has no flag for it) and not to the underground (area 12).
+- The map background inside dungeons uses `WorldMapLegacyConvParam`: in most dungeons all reference points
+  collapse to one target or shift evenly, so the nearest point to the player is right. In three the points
+  contradict one another (vanilla table, the distance on the map against the one inside): Farum Azula 2683 m
+  against 3673 m, the Haligtree 661 m against 0, the Finger Birthing Grounds 918 m against 10.
+- **Farum Azula** (compared with the in-game map): the world map draws it as a whirlpool island in the eastern
+  sea around tile `m60_61_46`, with its grace on that island. Three rows (IDs 10, 11, 132) give three places:
+  row 11 (`isBasePoint` = 1, source (-2509.6, -668.0), target `m60_51_43`) puts the Crumbling Beast Grave grace in
+  the right tile (61.1, 46.2), row 10 (not a base point) lands in tile (48.7, 53.4), row 132 (source (0, 0),
+  target `m60_54_53` (0, 0), the point nearest to the player) lands in Flame Peak, so a first version showed a
+  snow mountain. Rule: when rows contradict, use the first base-point row in param order for the whole dungeon
+  (`legacy_conversion`, function `agree`). The Haligtree (row 18 before 136) and the Finger Birthing Grounds (row
+  1000 before 1113 to 1116) go through the same rule and were **not compared with the in-game map**.
+- An intermediate version dropped the background in every legacy dungeon; that lost the minimap in Stormveil,
+  Leyndell and the Academy (which have a good conversion) and in Farum Azula (whose in-game map has a
+  background). Dropped.
 
-## Block overworld có chỉ số lạ (2026-11-03)
+## Overworld blocks with an unusual index
 
-Chữ số cuối của chỉ số block `mAA_XX_ZZ_II` là độ phóng của ô (0 là 256 m, 1 là 512 m, 2 là 1024 m), chữ số hàng chục là biến thể sự kiện. Sau khi đánh Radahn vùng Mistwood nằm ở `m60_44_37_16`: chữ số cuối 6 không phải độ phóng, và bản cũ chặn `.min(2)` thành ô 1024 m nên vị trí rơi vào ô (150, 126) của bản đồ 41x41, không có tile, minimap trống (log `Map: no tile for Overworld cell [149, 125]`). Giờ chữ số cuối quá 2 được coi là ô nhỏ 256 m (`world::locate`); đã thử trong game ở Mistwood, minimap có bản đồ. Giả thuyết ban đầu về mảnh bản đồ (Starfall Crater, `FullMap` tắt) sai, người dùng bật `FullMap`. Log chẩn đoán, **chỉ ghi khi `[Logging] MapProbe = true`** (mặc định tắt, bật lại khi cần tra một lỗi bản đồ): `Map: block ... map ...` khi khu vực đổi, `Map: no tile for ...` khi thiếu tile, `Map: piece rows ...` khi tập mảnh đổi (chỉ khi `FullMap` tắt).
+The last digit of the block index `mAA_XX_ZZ_II` is the tile zoom (0 is 256 m, 1 is 512 m, 2 is 1024 m) and the
+tens digit is an event variant. After Radahn is defeated the Mistwood region is `m60_44_37_16`: the last digit 6
+is not a zoom, and an older version clamped it with `.min(2)` to a 1024 m tile, so the position fell into cell
+(150, 126) of the 41x41 map, which has no tile and the minimap was blank (log `Map: no tile for Overworld cell
+[149, 125]`). A last digit above 2 now counts as the small 256 m tile (`world::locate`); confirmed in game at the
+Mistwood. The first hypothesis (map pieces, the Starfall Crater, `FullMap` off) was wrong; the player had
+`FullMap` on. Diagnostic lines, **written only with `[Logging] MapProbe = true`** (off by default): `Map: block
+... map ...` when the area changes, `Map: no tile for ...` for a missing tile, `Map: piece rows ...` when the
+set of pieces changes (only with `FullMap` off).
 
-## Việc chưa làm
+## Open
 
-- Thử trong game: bản đồ có khớp vị trí người chơi (so với bản đồ thế giới trong game), xoay đúng khi quay camera, đổi cửa sổ không giật.
-- Hầm ngầm (M01) và dungeon qua bảng đổi toạ độ.
-- Mảnh bản đồ theo cờ sự kiện, grace, beacon, bản đồ Shadow of the Erdtree.
+- Check in game that the map matches the player's position (against the in-game world map), turns the right way
+  with the camera, and that the window changes without a hitch.
+- The underground (M01) and dungeons through the conversion table in more places; the Map for Goblins markers
+  with the DLL loaded; the points and the graces in a long session.

@@ -2,66 +2,39 @@
 
 # AutoPickup
 
-**Tự nhặt đồ khi đứng trong tầm, không cần bấm nút.**
+**Picks things up when you stand within reach, without pressing the interact button.**
 
-![Rust](https://img.shields.io/badge/Rust-cdylib-orange?logo=rust)
-![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)
+[Tiếng Việt](README.vi.md)
+
 ![Game](https://img.shields.io/badge/game-Elden_Ring-8a6d3b)
+![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)
+[![Nexus Mods](https://img.shields.io/badge/Nexus_Mods-11470-orange)](https://www.nexusmods.com/eldenring/mods/11470)
 
 </div>
 
 ---
 
-## Giới thiệu
+## About
 
-Trong Elden Ring, mỗi lần nhặt cây cỏ, đồ trên đất hay đồ trên xác đều phải đứng
-đúng chỗ và bấm nút. AutoPickup làm bước bấm đó thay bạn: đứng trong tầm là nhặt.
-Cần gạt, cửa, grace và hội thoại không bị đụng tới.
+In Elden Ring every plant, ground item and corpse needs you to stand in the right spot and press a
+button. AutoPickup presses it for you: materials, items, corpse loot and the runes you dropped.
+Levers, doors, graces and conversations are left alone. Each group can be switched on or off and
+given its own reach.
 
-## Tính năng
+Does not work with Seamless Co-op, or together with another DLL that also picks items up.
 
-Năm nhóm, mỗi nhóm bật tắt và chỉnh tầm độc lập:
+## Installation
 
-| Nhóm | Gồm |
-|---|---|
-| **Materials** | cây cỏ, nấm, nguyên liệu chế tạo |
-| **Items** | vật phẩm nằm trên đất |
-| **CorpseLoot** | đồ trên xác và hài cốt |
-| **LostRunes** | rune bạn làm rơi khi chết |
-| **Chests** | rương kho báu (mặc định tắt, vì rương mimic mở cùng cách) |
+1. Download the mod from its [Nexus page](https://www.nexusmods.com/eldenring/mods/11470).
+2. Install a mod loader that can load DLLs (see the [repository README](../../README.md)).
+3. Put `AutoPickup.dll` in the loader's mod folder and register it.
+4. Start the game. `AutoPickup.toml` is created next to the DLL on first run. Every key is explained by the comments in [AutoPickup.toml](AutoPickup.toml); edit it and press `F5` (the default) to apply a change without restarting the game.
 
-Ngoài ra có thể tạm dừng tự nhặt khi đang chiến đấu, và nới tầm nhặt (cũng là tầm
-hiện gợi ý nhặt) cho từng nhóm.
+If [ERNativeUI](https://github.com/Flammrock/ERNativeUI) is loaded before the mod, the **Auto Pickup** entry also appears under System > Game Options. It is optional.
 
-## Cấu hình
+## Documentation
 
-Cấu hình nằm trong `AutoPickup.toml` cạnh DLL, tự tạo ở lần chạy đầu. Tên key,
-giá trị mặc định và ý nghĩa nằm ở chú thích trong [AutoPickup.toml](AutoPickup.toml),
-file mẫu nhúng sẵn trong DLL. Sửa file rồi bấm phím reload để áp dụng, không cần
-khởi động lại game.
-
-### Menu trong game (tùy chọn)
-
-Nếu [ERNativeUI](https://github.com/Flammrock/ERNativeUI) được nạp trước mod, mục
-**Auto Pickup** xuất hiện ở System > Game Options với đủ các tuỳ chọn trên. Không
-có ERNativeUI thì mod vẫn chạy bình thường từ file toml.
-
-## Cách hoạt động
-
-Mod hook hàm game dùng để hỏi "tương tác này có được kích hoạt không"
-(`CSActionButtonManImp::ExecActionButton`). Với tương tác thuộc nhóm đang bật, hook
-trả lời "có" nên game nhặt như thể bạn đã bấm; mọi tương tác khác chạy như cũ. Tầm
-nhặt là bán kính, chiều cao và độ lệch của dòng ActionButtonParam, nhân theo `Range`
-và luôn tính từ giá trị gốc của game. Chi tiết: [docs/exec_action_button.md](docs/exec_action_button.md).
-
-## Giới hạn
-
-- Không chạy cùng Seamless Co-op.
-- Dùng mẫu byte để tìm hàm; bản game mới có thể cần cập nhật mod (mod ghi log lỗi).
-- Không dùng chung với DLL khác cũng tự nhặt (Solid Uncapper, ErdTools của Convergence): tắt tính năng đó ở bên kia.
-
-## Tài liệu
-
-- [CHANGELOG.md](CHANGELOG.md): ghi chú phát hành.
-- [HISTORY.md](HISTORY.md): dòng thời gian phát triển.
-- [docs/exec_action_button.md](docs/exec_action_button.md): cơ chế, điểm hook, nguồn tham khảo, rủi ro.
+- [CHANGELOG.md](CHANGELOG.md): release notes.
+- [Nexus page](https://www.nexusmods.com/eldenring/mods/11470): downloads and comments.
+- [docs/exec_action_button.md](docs/exec_action_button.md): mechanism, hook point, risks.
+- [docs/pickup_animation.md](docs/pickup_animation.md): how the animation is switched off.

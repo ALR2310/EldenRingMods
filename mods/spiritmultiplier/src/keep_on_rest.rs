@@ -11,7 +11,9 @@ use std::time::Duration;
 
 use eldenring::cs::CSTaskGroupIndex;
 
-use common::{codepatch, config, logger, memscan};
+use shared::{codepatch, logger, memscan};
+
+use crate::config;
 
 /// `mov rcx,[rcx+1E508h]; mov edx,0CAh; call sub_1403F21B0; test al,al; jz
 /// +8; mov rcx,r15; call DisappearAll` in the spirit manager update
@@ -24,7 +26,7 @@ const CALL_OFFSET: usize = 12;
 /// 2.6.2.0 - 2.7.2.0), the WorldChrMan "reset every chr" routine run by the
 /// world reset of a grace rest. `sub_1404B83B0(manager)` sets the removal flag
 /// (`group+0x20`) of every spirit group of every owner, and the manager update
-/// then destroys them (log 2026-11-03: only the flagged-group destroy site ran).
+/// then destroys them (a log showed only the flagged-group destroy site running).
 /// The `call` is at +12.
 const RESET_AOB: &str = "48 8B 8E 38 E5 01 00 48 85 C9 74 05 E8 ?? ?? ?? ?? 33 DB 39 9E";
 const RESET_CALL_OFFSET: usize = 12;
@@ -42,8 +44,11 @@ unsafe extern "system" fn has_effect_hook(player: usize, id: i32) -> u8 {
     }
     match ORIGINAL.load(Ordering::Relaxed) {
         0 => 0,
+        // SAFETY: `original` is the destination the call had before the redirect, a function of this signature.
         original => unsafe {
-            std::mem::transmute::<usize, unsafe extern "system" fn(usize, i32) -> u8>(original)(player, id)
+            std::mem::transmute::<usize, unsafe extern "system" fn(usize, i32) -> u8>(original)(
+                player, id,
+            )
         },
     }
 }
@@ -59,7 +64,10 @@ unsafe extern "system" fn flag_all_hook(manager: usize) {
     }
     match FLAG_ALL_ORIGINAL.load(Ordering::Relaxed) {
         0 => {}
-        original => unsafe { std::mem::transmute::<usize, unsafe extern "system" fn(usize)>(original)(manager) },
+        // SAFETY: `original` is the destination the call had before the redirect, a function of this signature.
+        original => unsafe {
+            std::mem::transmute::<usize, unsafe extern "system" fn(usize)>(original)(manager)
+        },
     }
 }
 
@@ -78,9 +86,15 @@ unsafe impl Send for Patch {}
 
 impl Patch {
     /// Redirects the `call` at `site` to `hook`, remembering its destination.
-    fn apply(site: *mut u8, hook: usize, original: &'static AtomicUsize, name: &'static str) -> Option<Patch> {
+    fn apply(
+        site: *mut u8,
+        hook: usize,
+        original: &'static AtomicUsize,
+        name: &'static str,
+    ) -> Option<Patch> {
         // SAFETY: reads the 5 bytes of a call found in the game image.
         let Some(target) = (unsafe { codepatch::rel32_target(site) }) else {
+            // SAFETY: `site` is code in the game image, readable for the length checked.
             if !unsafe { crate::conflicts::check(site, name) } {
                 logger::error(&format!("{name}: site is not a call"));
             }
@@ -95,7 +109,7 @@ impl Patch {
 
     /// Seamless Co-op redirects the same `call` of the manager update (its
     /// diff lists the 202 check) after we did, which silently drops our stub
-    /// (log 2026-11-03: the 202 branch ran with the option on). Patches again,
+    /// (a log showed the 202 branch running with the option on). Patches again,
     /// chained to whatever is there now, when the destination is not ours.
     fn keep(&mut self) {
         // SAFETY: reads the 5 bytes of the call at `site`.
@@ -111,7 +125,11 @@ impl Patch {
 }
 
 fn find_call(pattern: &str, offset: usize, name: &str) -> Option<*mut u8> {
-    let anchor = memscan::wait_for_pattern_in_module(pattern, Duration::from_millis(500), Duration::from_secs(30));
+    let anchor = memscan::wait_for_pattern_in_module(
+        pattern,
+        Duration::from_millis(500),
+        Duration::from_secs(30),
+    );
     if anchor.is_none() {
         logger::error(&format!("{name}: pattern not found (game updated?)"));
     }
@@ -122,14 +140,23 @@ fn find_call(pattern: &str, offset: usize, name: &str) -> Option<*mut u8> {
 fn install() -> Vec<Patch> {
     let mut patches = Vec::new();
     if let Some(site) = find_call(AOB, CALL_OFFSET, "KeepSpiritsOnRest")
-        && let Some(patch) = Patch::apply(site, has_effect_hook as *const () as usize, &ORIGINAL, "KeepSpiritsOnRest")
+        && let Some(patch) = Patch::apply(
+            site,
+            has_effect_hook as *const () as usize,
+            &ORIGINAL,
+            "KeepSpiritsOnRest",
+        )
     {
         patches.push(patch);
     }
     // The world reset flags every spirit group for removal: the second part.
     if let Some(site) = find_call(RESET_AOB, RESET_CALL_OFFSET, "KeepSpiritsOnRest (reset)")
-        && let Some(patch) =
-            Patch::apply(site, flag_all_hook as *const () as usize, &FLAG_ALL_ORIGINAL, "KeepSpiritsOnRest (reset)")
+        && let Some(patch) = Patch::apply(
+            site,
+            flag_all_hook as *const () as usize,
+            &FLAG_ALL_ORIGINAL,
+            "KeepSpiritsOnRest (reset)",
+        )
     {
         patches.push(patch);
     }
@@ -137,15 +164,15 @@ fn install() -> Vec<Patch> {
 }
 
 pub fn run() {
-    KEEP.store(config::get_bool("KeepSpiritsOnRest", true), Ordering::Relaxed);
+    KEEP.store(config::get().spirit.keep_spirits_on_rest, Ordering::Relaxed);
     let mut patches = install();
     if patches.is_empty() {
         return;
     }
     logger::log("KeepSpiritsOnRest: patched");
-    let cs_task = common::task::wait_for_cs_task();
+    let cs_task = shared::task::wait_for_cs_task();
     let mut elapsed_ms: f64 = 0.0;
-    let _handle = common::task::run_recurring_safe(
+    let _handle = shared::task::run_recurring_safe(
         cs_task,
         "KeepSpiritsOnRest",
         CSTaskGroupIndex::FrameBegin,
@@ -155,7 +182,7 @@ pub fn run() {
                 return;
             }
             elapsed_ms = 0.0;
-            let keep = config::get_bool("KeepSpiritsOnRest", true);
+            let keep = config::get().spirit.keep_spirits_on_rest;
             if KEEP.swap(keep, Ordering::Relaxed) != keep {
                 logger::log(&format!("KeepSpiritsOnRest={keep}."));
             }

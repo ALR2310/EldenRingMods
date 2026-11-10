@@ -1,64 +1,35 @@
-# memscan: quét AOB và cache địa chỉ
+# Memory scanning
 
-**Status 2026-10-13: hoạt động, mọi mod hook bằng AOB đều dùng. Code ở `shared/src/memscan.rs`, có test cho việc parse pattern, tìm khớp và cache.**
+Status: **Confirmed** in released mods and in unit tests. Conventions:
+[research notes](../../docs/research/README.md). Code: `shared/src/memscan.rs`.
 
-## Quét AOB
+## Question
 
-`find_pattern_in_module` quét **chỉ các section thực thi** của module chính (exe
-game) và trả về địa chỉ tuyệt đối của khớp đầu tiên. Pattern là chuỗi hex theo
-kiểu IDA, `?` hoặc `??` là byte đại diện. Dùng cho các call site mà
-`fromsoftware-rs` không có API phản chiếu (vd. `hit_hook` của autoregen, tìm
-hàm hit-resolution bằng prologue của nó chứ không từ struct engine).
+How does a mod find game code and data by pattern, safely, on several builds?
 
-Token không phải `?`, `??` hay hex bị coi là byte `00`: một lỗi gõ trong pattern
-cho ra "không tìm thấy" chứ không panic trong game.
+## Pieces
 
-Đọc `SizeOfOptionalHeader` từ header để tìm bảng section, không giả định
-`0xF0`.
+| Function | Use |
+|---|---|
+| `find_pattern_in_module(pattern)` | First match of an IDA-style AOB (`"48 8B 05 ?? ?? ?? ?? 48 85 C0"`, `?` or `??` wildcard) in the executable sections of the main module. |
+| `wait_for_pattern_in_module(pattern, interval, timeout)` | Same, retried until the module has unpacked. |
+| `find_jumps_to(target)` | Every `jmp rel32` in executable sections that lands on `target`: the tail jump of a small wrapper into a function. |
+| `read_safe::<T>(address)` | Reads a `T` with `ReadProcessMemory`, `None` when unreadable: the way to walk a pointer chain that is not checked on every build. |
+| `CachedAddr` | Caches one resolved address (a hit is kept, a miss is retried by the next caller) behind a lock. |
+| `find_data_pointers(value)` | Every 8-byte-aligned slot in the non-executable sections holding `value`: where a function address sits in a vtable or call table. |
 
-## `CachedAddr`
+A pattern must match exactly once on every supported build (see the research notes); a pattern that matches
+twice is unresolved.
 
-Địa chỉ code của exe không đổi sau khi đã tìm thấy (ASLR chỉ chọn base module
-một lần lúc process khởi động), nên quét lại cùng pattern (mỗi lần đăng ký task,
-mỗi lần hiện banner reload...) chỉ tốn công.
+## `find_data_pointers` and guard pages
 
-- **Chỉ cache lần resolve thành công.** Một lần trượt (vd. đua với Arxan đang giải
-  nén lúc khởi động) để cache trống, người gọi sau quét lại thay vì bị khoá vào
-  thất bại.
-- **`Mutex` thay vì `OnceLock`:** khi nhiều thread hỏi cùng lúc (vd. thread
-  `common::reload` và thread tính năng của mod cùng đăng ký task lúc khởi động),
-  những thread đến sau chờ thread đầu xong rồi dùng kết quả của nó, thay vì tất cả
-  cùng quét song song.
-- `resolve` chỉ chạy khi chưa có gì trong cache, nên log "found" đặt bên trong nó
-  chỉ xuất hiện một dòng mỗi process.
+Scanning a data section by its size crashed the game: a section can contain guard or no-access pages that
+fault when touched. The scan walks it page by page, asks `conflict::readable_len` for how much is committed
+and readable at the current address, reads only that span and skips to the next page otherwise. A test
+checks that a pointer stored in the test binary's own data is found and a missing value is not.
 
-## `wait_for_pattern_in_module`
+## `find_jumps_to`
 
-Thử lại mỗi `retry_interval` đến khi khớp hoặc hết `timeout`. Dành cho quét một
-lần lúc khởi động có thể đua với cơ chế chống can thiệp của game (Arxan) trên máy
-chậm hoặc đang tải, khi người gọi không có đường thử lại nào khác (hook chỉ cài
-một lần, không thử lại mỗi tick). Hạn chót tính bằng đồng hồ thật, nên thời gian
-mỗi lần quét cũng được tính vào `timeout`.
-
-## `find_data_pointers` và `find_jumps_to`
-
-Hai phép quét khác với AOB, cho hook mà mẫu byte không dùng được.
-
-- **`find_data_pointers(value)`** tìm mọi ô 8 byte trong các section **không thực
-  thi** của exe chứa `value`: chỗ một địa chỉ hàm nằm trong vtable hoặc bảng gọi.
-  Chỉ đọc vùng đọc được: section có trang guard / no-access (bảo vệ của game), chạm
-  vào là crash (log 2026-10-23, `access violation` ngay lúc quét), nên đi theo từng
-  vùng `VirtualQuery` thay vì theo kích thước khai báo của section. `gfx_hook` dùng
-  nó để đổi slot của hàm mở tệp.
-- **`find_jumps_to(target)`** tìm mọi `jmp rel32` trong các section thực thi rơi
-  đúng vào `target`: lệnh nhảy cuối của hàm bọc nhỏ gọi vào một hàm. Dùng khi hàm
-  cần hook chỉ được gọi qua một wrapper không có mẫu byte duy nhất; người gọi tự lọc
-  thêm bằng byte đứng trước lệnh nhảy.
-
-## `read_safe`
-
-`read_safe::<T>(address)` đọc một `T` bằng `ReadProcessMemory` trên chính process, trả
-`None` thay vì fault khi vùng nhớ không đọc được. Dùng để đi một chuỗi con trỏ chưa
-kiểm trên mọi bản exe (JourneyHUD đọc beacon bằng nó). `crash.rs` giữ bản riêng của
-nó vì chạy trong bộ xử lý ngoại lệ, không nên phụ thuộc module khác.
-
+Only the displacement of an `E9` is compared (`base + i + 5 + rel == target`), so a data byte `E9` that
+happens to land on the target would be reported too. Callers treat the result as candidates and check the
+bytes before them (the hook of the spirit HUD wrapper does).

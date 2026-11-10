@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-05
+
+- Config file is AnimCancel.toml again; settings from AnimCancelV1.toml are kept.
+- Clean code, hoping to fix false positives.
+
 ## [1.2.0] - 2026-10-19
 
 - Added jump option to cancel animations by jumping.

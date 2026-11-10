@@ -1,6 +1,5 @@
-//! Per-slot accessors of an `ITEMLOT_PARAM_ST` row. A row has 8 slots and
-//! `fromsoftware-rs` exposes one method per slot, so each field is read or
-//! written as an array here.
+//! Per-slot accessors of an `ITEMLOT_PARAM_ST` row: a row has 8 slots and `fromsoftware-rs` has
+//! one method per slot, so each field is read and written as an array here.
 
 use eldenring::param::ITEMLOT_PARAM_ST;
 

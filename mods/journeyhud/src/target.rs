@@ -6,13 +6,13 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use eldenring::cs::{
-    CSChrDataModule, CSChrSuperArmorModule, CSTaskGroupIndex, ChrIns, ChrInsModuleContainer, ChrSet, FieldInsHandle,
-    PlayerIns, SpecialEffectEntry, WorldChrMan,
+    CSChrDataModule, CSChrSuperArmorModule, CSFeManImp, CSTaskGroupIndex, ChrIns,
+    ChrInsModuleContainer, ChrSet, FieldInsHandle, PlayerIns, SpecialEffectEntry, WorldChrMan,
 };
 use eldenring::fd4::FD4TaskData;
 use fromsoftware_shared::FromStatic;
 
-use common::logger;
+use shared::logger;
 
 use crate::{radar, settings};
 
@@ -38,7 +38,8 @@ const _: () = {
 };
 
 /// The seven status buildups, in the order the resist module keeps them.
-pub const BUILDUP: [&str; 7] = ["poison", "scarlet rot", "bleed", "death blight", "frostbite", "sleep", "madness"];
+pub const BUILDUP: [&str; 7] =
+    ["poison", "scarlet rot", "bleed", "death blight", "frostbite", "sleep", "madness"];
 
 /// Where the resist module is in the module container, and where it keeps the seven values left
 /// to resist and the seven maximums (`docs/buildup.md`).
@@ -80,6 +81,8 @@ pub struct Target {
     /// The chr's address: stable for one enemy, differs between enemies.
     pub id: usize,
     pub npc_param_id: i32,
+    /// The slot of the game's boss health bars that shows it (0 is the lowest bar), when it has one.
+    pub boss: Option<usize>,
     /// Meters from the player along the world's X and Z axes.
     pub offset: [f32; 2],
     pub hp: i32,
@@ -90,6 +93,32 @@ pub struct Target {
     pub buildup: Vec<Buildup>,
     /// The effects it has that show an icon, in the order the game keeps them.
     pub effects: Vec<Effect>,
+}
+
+/// A boss that has a health bar of the game: `slot` is its place among those bars (0 is the
+/// lowest), `id` tells it from another boss.
+#[derive(Clone)]
+pub struct Boss {
+    pub slot: usize,
+    pub id: usize,
+    pub hp: i32,
+    pub max_hp: i32,
+    /// The value and the maximum of the posture; `None` for a boss without a posture bar.
+    pub poise: Option<(f32, f32)>,
+    /// The effects it has that show an icon, as for the target.
+    pub effects: Vec<Effect>,
+}
+
+/// The bosses with a health bar, kept like [OWN].
+static BOSSES: Mutex<Option<(Vec<Boss>, Instant)>> = Mutex::new(None);
+
+/// The bosses with a health bar, `[]` when stale.
+pub fn bosses_now() -> Vec<Boss> {
+    let Ok(guard) = BOSSES.lock() else { return Vec::new() };
+    match guard.as_ref() {
+        Some((bosses, at)) if at.elapsed() < STALE_AFTER => bosses.clone(),
+        _ => Vec::new(),
+    }
 }
 
 /// The latest target and when it was read; [current] drops it once stale
@@ -117,53 +146,69 @@ pub fn own_effects_now() -> Vec<Effect> {
 }
 
 pub fn run() {
-    let cs_task = common::task::wait_for_cs_task();
+    let cs_task = shared::task::wait_for_cs_task();
     let mut last = None;
     let mut last_kinds: Vec<usize> = Vec::new();
     let mut last_effects: Vec<i32> = Vec::new();
     let mut last_own: Vec<i32> = Vec::new();
-    common::task::run_recurring_safe(cs_task, "Target", CSTaskGroupIndex::FrameBegin, move |_data: &FD4TaskData| {
-        let read = if settings::enabled() { read() } else { None };
-        radar::update(read.as_ref().map(|t| t.offset));
-        let npc = read.as_ref().map(|t| t.npc_param_id);
-        if npc != last {
-            last = npc;
-            match &read {
-                Some(t) => logger::log(&format!("Target: npc {} hp {}/{} poise {:?}", t.npc_param_id, t.hp, t.max_hp, t.poise)),
-                None => logger::log("Target: none"),
+    shared::task::run_recurring_safe(
+        cs_task,
+        "Target",
+        CSTaskGroupIndex::FrameBegin,
+        move |_data: &FD4TaskData| {
+            let read = if settings::enabled() { read() } else { None };
+            radar::update(read.as_ref().map(|t| t.offset));
+            let npc = read.as_ref().map(|t| t.npc_param_id);
+            if npc != last {
+                last = npc;
+                match &read {
+                    Some(t) => logger::log(&format!(
+                        "Target: npc {} hp {}/{} poise {:?}",
+                        t.npc_param_id, t.hp, t.max_hp, t.poise
+                    )),
+                    None => logger::log("Target: none"),
+                }
             }
-        }
-        // One line when a status starts or stops building up: how the values behave, in the log.
-        let kinds: Vec<usize> = read.iter().flat_map(|t| t.buildup.iter().map(|b| b.kind)).collect();
-        if kinds != last_kinds {
-            if let Some(target) = &read {
-                let shown: Vec<String> =
-                    target.buildup.iter().map(|b| format!("{} {}/{}", BUILDUP[b.kind], b.built, b.max)).collect();
-                logger::log(&format!("Buildup: {}", shown.join(", ")));
+            // One line when a status starts or stops building up: how the values behave, in the log.
+            let kinds: Vec<usize> =
+                read.iter().flat_map(|t| t.buildup.iter().map(|b| b.kind)).collect();
+            if kinds != last_kinds {
+                if let Some(target) = &read {
+                    let shown: Vec<String> = target
+                        .buildup
+                        .iter()
+                        .map(|b| format!("{} {}/{}", BUILDUP[b.kind], b.built, b.max))
+                        .collect();
+                    logger::log(&format!("Buildup: {}", shown.join(", ")));
+                }
+                last_kinds = kinds;
             }
-            last_kinds = kinds;
-        }
-        // One line when the set of effects changes: which ones show up, for `docs/effects.md`.
-        let effects: Vec<i32> = read.iter().flat_map(|t| t.effects.iter().map(|e| e.param_id)).collect();
-        if effects != last_effects {
-            if let Some(target) = &read {
-                logger::log(&format!("Effects: enemy {}", describe(&target.effects)));
+            // One line when the set of effects changes: which ones show up, for `docs/effects.md`.
+            let effects: Vec<i32> =
+                read.iter().flat_map(|t| t.effects.iter().map(|e| e.param_id)).collect();
+            if effects != last_effects {
+                if let Some(target) = &read {
+                    logger::log(&format!("Effects: enemy {}", describe(&target.effects)));
+                }
+                last_effects = effects;
             }
-            last_effects = effects;
-        }
-        let own = own_effects();
-        let ids: Vec<i32> = own.iter().map(|e| e.param_id).collect();
-        if ids != last_own {
-            logger::log(&format!("Effects: player {}", describe(&own)));
-            last_own = ids;
-        }
-        if let Ok(mut guard) = OWN.lock() {
-            *guard = Some((shown_effects(own, MAX_EFFECTS), Instant::now()));
-        }
-        if let Ok(mut guard) = SNAPSHOT.lock() {
-            *guard = read.map(|target| (target, Instant::now()));
-        }
-    });
+            let own = own_effects();
+            let ids: Vec<i32> = own.iter().map(|e| e.param_id).collect();
+            if ids != last_own {
+                logger::log(&format!("Effects: player {}", describe(&own)));
+                last_own = ids;
+            }
+            if let Ok(mut guard) = BOSSES.lock() {
+                *guard = Some((read_bosses(), Instant::now()));
+            }
+            if let Ok(mut guard) = OWN.lock() {
+                *guard = Some((shown_effects(own, MAX_EFFECTS), Instant::now()));
+            }
+            if let Ok(mut guard) = SNAPSHOT.lock() {
+                *guard = read.map(|target| (target, Instant::now()));
+            }
+        },
+    );
 }
 
 /// At most `max` of `effects`, in the same order: when there are more, the ones with the
@@ -192,7 +237,13 @@ fn describe(effects: &[Effect]) -> String {
     let shown: Vec<String> = effects
         .iter()
         .take(40)
-        .map(|e| if e.permanent { format!("{} icon {} permanent", e.param_id, e.icon) } else { format!("{} icon {} {:.0}s", e.param_id, e.icon, e.left) })
+        .map(|e| {
+            if e.permanent {
+                format!("{} icon {} permanent", e.param_id, e.icon)
+            } else {
+                format!("{} icon {} {:.0}s", e.param_id, e.icon, e.left)
+            }
+        })
         .collect();
     shown.join(", ")
 }
@@ -201,17 +252,60 @@ fn describe(effects: &[Effect]) -> String {
 /// shows them, the times go under it) and the procs of the status buildups (which have no icon of
 /// the game's: the mod draws them after its row, `ui::draw_icon_times`).
 fn own_effects() -> Vec<Effect> {
+    // SAFETY: the accessor returns `Err` while the singleton does not exist.
     let Ok(world_chr_man) = (unsafe { WorldChrMan::instance() }) else { return Vec::new() };
-    world_chr_man
-        .main_player
-        .as_ref()
-        .map_or_else(Vec::new, |player| read_effects(&player.chr_ins))
+    world_chr_man.main_player.as_ref().map_or_else(Vec::new, |player| read_effects(&player.chr_ins))
+}
+
+/// Each boss that has a health bar of the game (`Target.BossBar`), whether it is locked on or not.
+fn read_bosses() -> Vec<Boss> {
+    if !settings::enabled() || !settings::boss_bar() {
+        return Vec::new();
+    }
+    // SAFETY: the accessors return `Err` while the singletons do not exist.
+    let (Ok(world_chr_man), Ok(fe)) =
+        (unsafe { WorldChrMan::instance() }, unsafe { CSFeManImp::instance() })
+    else {
+        return Vec::new();
+    };
+    fe.boss_health_displays
+        .iter()
+        .enumerate()
+        .filter(|(_, boss)| !boss.field_ins_handle.is_empty())
+        .filter_map(|(slot, boss)| {
+            let chr = chr_by_handle(world_chr_man, boss.field_ins_handle)?;
+            let max_hp = chr.modules.data.max_hp;
+            let armor = &chr.modules.super_armor;
+            (max_hp > 0).then(|| Boss {
+                slot,
+                id: chr as *const ChrIns as usize,
+                hp: chr.modules.data.hp.max(0),
+                max_hp,
+                poise: (armor.sa_durability_max > 0.0 && armor.sa_durability_max.is_finite())
+                    .then_some((armor.sa_durability.max(0.0), armor.sa_durability_max)),
+                effects: if settings::effects_target() {
+                    shown_effects(read_effects(chr), MAX_EFFECTS)
+                } else {
+                    Vec::new()
+                },
+            })
+        })
+        .collect()
 }
 
 fn read() -> Option<Target> {
+    // SAFETY: the accessor returns `Err` while the singleton does not exist.
     let world_chr_man = unsafe { WorldChrMan::instance() }.ok()?;
     let player = world_chr_man.main_player.as_ref()?;
-    let handle = player.locked_on_enemy;
+    // SAFETY: the accessor returns `Err` while the singleton does not exist.
+    let bosses = unsafe { CSFeManImp::instance() }.ok().map(|fe| &fe.boss_health_displays);
+    let mut handle = player.locked_on_enemy;
+    // With no lock-on, the lowest boss bar's boss: its bars show without having to target it.
+    if handle.is_empty() && settings::boss_bar() {
+        handle = bosses
+            .and_then(|b| b.iter().map(|b| b.field_ins_handle).find(|h| !h.is_empty()))
+            .unwrap_or(handle);
+    }
     if handle.is_empty() {
         return None;
     }
@@ -221,9 +315,11 @@ fn read() -> Option<Target> {
         return None;
     }
     let armor = &chr.modules.super_armor;
+    let boss = bosses.and_then(|b| b.iter().position(|b| b.field_ins_handle == handle));
     Some(Target {
         id: chr as *const ChrIns as usize,
         npc_param_id: chr.npc_param_id,
+        boss,
         offset: offset_from(player, chr),
         hp: chr.modules.data.hp.max(0),
         max_hp,
@@ -267,17 +363,23 @@ fn read_effects(chr: &ChrIns) -> Vec<Effect> {
             let row = unsafe { entry.param_data?.as_ref() };
             let (icon, state_info) = (row.icon_id(), row.state_info());
             // SAFETY: the entry is 0x78 bytes (asserted above); +0x44 is the time left.
-            let left = unsafe { std::ptr::read_unaligned((entry as *const SpecialEffectEntry as *const u8).add(0x44) as *const f32) };
+            let left = unsafe {
+                std::ptr::read_unaligned(
+                    (entry as *const SpecialEffectEntry as *const u8).add(0x44) as *const f32,
+                )
+            };
             let permanent = entry.duration < 0.0;
             // An effect with an icon is drawn with it; the proc of a status has none.
             let kind = if icon > 0 { None } else { proc_kind(state_info) };
-            ((icon > 0 || kind.is_some()) && (permanent || entry.duration > 1.0)).then_some(Effect {
-                param_id: entry.param_id,
-                icon: icon as i32,
-                kind,
-                left: if left.is_finite() { left } else { 0.0 },
-                permanent,
-            })
+            ((icon > 0 || kind.is_some()) && (permanent || entry.duration > 1.0)).then_some(
+                Effect {
+                    param_id: entry.param_id,
+                    icon,
+                    kind,
+                    left: if left.is_finite() { left } else { 0.0 },
+                    permanent,
+                },
+            )
         })
         .collect()
 }
@@ -290,10 +392,11 @@ fn read_buildup(chr: &ChrIns) -> Vec<Buildup> {
     // not null, is a `CSChrResistModule` (see `docs/buildup.md` for its layout).
     let (left, max) = unsafe {
         let module = std::ptr::read_unaligned(container.add(RESIST_AT) as *const usize);
-        if module == 0 || module % std::mem::align_of::<i32>() != 0 {
+        if module == 0 || !module.is_multiple_of(std::mem::align_of::<i32>()) {
             return Vec::new();
         }
-        let read = |at: usize| -> [i32; 7] { std::ptr::read_unaligned((module + at) as *const [i32; 7]) };
+        let read =
+            |at: usize| -> [i32; 7] { std::ptr::read_unaligned((module + at) as *const [i32; 7]) };
         (read(RESIST_LEFT), read(RESIST_MAX))
     };
     buildup_of(left, max)
@@ -303,7 +406,11 @@ fn read_buildup(chr: &ChrIns) -> Vec<Buildup> {
 fn buildup_of(left: [i32; 7], max: [i32; 7]) -> Vec<Buildup> {
     (0..7)
         .filter(|&kind| max[kind] > 0 && max[kind] < IMMUNE)
-        .map(|kind| Buildup { kind, built: (max[kind] - left[kind]).clamp(0, max[kind]), max: max[kind] })
+        .map(|kind| Buildup {
+            kind,
+            built: (max[kind] - left[kind]).clamp(0, max[kind]),
+            max: max[kind],
+        })
         .filter(|buildup| buildup.built > 0)
         .collect()
 }
@@ -321,7 +428,9 @@ fn offset_from(player: &PlayerIns, chr: &ChrIns) -> [f32; 2] {
 fn chr_by_handle(world_chr_man: &WorldChrMan, handle: FieldInsHandle) -> Option<&ChrIns> {
     let chr_set = world_chr_man.chr_sets.get(handle.selector.container() as usize)?.as_ref()?;
     let chr_set: &ChrSet<ChrIns> = chr_set;
-    type GetByHandle = extern "C" fn(&ChrSet<ChrIns>, FieldInsHandle) -> Option<std::ptr::NonNull<ChrIns>>;
+    type GetByHandle =
+        extern "C" fn(&ChrSet<ChrIns>, FieldInsHandle) -> Option<std::ptr::NonNull<ChrIns>>;
+    // SAFETY: slot 3 of the ChrSet's vtable is its get-by-handle function, and the character it returns stays valid for this frame.
     unsafe {
         let vtable = *(chr_set as *const ChrSet<ChrIns> as *const *const usize);
         let get_by_handle: GetByHandle = std::mem::transmute(*vtable.add(3));
@@ -337,10 +446,16 @@ mod tests {
 
     #[test]
     fn state_info_tells_which_status_an_effect_afflicts() {
-        assert_eq!((proc_kind(2), proc_kind(5), proc_kind(6), proc_kind(116)), (Some(0), Some(1), Some(2), Some(3)));
+        assert_eq!(
+            (proc_kind(2), proc_kind(5), proc_kind(6), proc_kind(116)),
+            (Some(0), Some(1), Some(2), Some(3))
+        );
         assert_eq!((proc_kind(260), proc_kind(436), proc_kind(437)), (Some(4), Some(5), Some(6)));
         // The cures (10, 11, 12...) and the game's own marker (275) are not afflictions.
-        assert_eq!((proc_kind(0), proc_kind(10), proc_kind(11), proc_kind(275)), (None, None, None, None));
+        assert_eq!(
+            (proc_kind(0), proc_kind(10), proc_kind(11), proc_kind(275)),
+            (None, None, None, None)
+        );
     }
 
     #[test]

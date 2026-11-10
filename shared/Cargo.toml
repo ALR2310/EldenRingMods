@@ -1,19 +1,24 @@
 [package]
-name = "common"
+name = "shared"
 version = "1.0.0"
-edition = "2024"
-publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
 
 [dependencies]
 chrono.workspace = true
 eldenring.workspace = true
 fromsoftware-shared.workspace = true
-vtable-rs.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 toml.workspace = true
 toml_edit.workspace = true
-serde_json.workspace = true
+vtable-rs.workspace = true
 hudhook = { version = "0.9.3", default-features = false, features = ["dx12"], optional = true }
 
 [features]
 overlay = ["dep:hudhook"]
+
+[lints]
+workspace = true

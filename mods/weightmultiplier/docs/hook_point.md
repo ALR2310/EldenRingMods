@@ -1,113 +1,108 @@
-# WeightMultiplier: điểm hook của phép tính Trọng Tải
+# The hook point of the equip load calculation
 
-**Status 2026-10-07: ĐANG PHÁT HÀNH (2.0.1), điểm hook đã chốt.** Mẫu AOB neo
-duy nhất trên cả 2.6.2.0, 2.7.0.0 và 2.7.1.0 (kiểm tra bằng IDA ngày
-2026-10-07). Tài liệu cũ không ghi lại kết quả test in-game riêng của bản Rust;
-khi sửa hook phải kiểm cả hai mặt (xem "Khi test"). Code:
-`mods/weightmultiplier/src/hook.rs`.
+Status: **Confirmed** in game in the released versions (2.0.1 on). The anchor pattern was checked in IDA
+and is unique on 2.6.2.0, 2.7.0.0 and 2.7.1.0. The conflict report was never run against a real second
+weight mod. Conventions: [research notes](../../../docs/research/README.md). Code: `src/hook.rs`.
 
-## Điều mod làm
+## Question
 
-Patch **một lệnh CPU** trong `eldenring.exe` (inline hook: nhảy tới một đoạn
-code tự cấp phát rồi nhảy về), không đọc/ghi struct nào của game. Lệnh được
-patch chạy **đúng một lần** sau khi game cộng xong trọng lượng mọi món đồ, nên
-nhân hay ghi đè ở đó cho một con số sạch.
+Where can the equip load be scaled or fixed so that both the number on the screen and the real
+behavior (roll type, run speed) follow, with a single factor?
 
-## Lịch sử tìm điểm hook (3 lần thử)
+## What the mod does
 
-Vòng lặp tính tổng trọng lượng (5 slot), dạng:
+It patches **one CPU instruction** in `eldenring.exe` (an inline hook: a jump to a stub allocated at run
+time, then a jump back) and reads and writes no game struct. The patched instruction runs **exactly once**
+after the game has added up the weight of every item, so scaling or overwriting there gives one clean
+number.
+
+## Finding the point (three attempts)
+
+The loop that sums the 5 slots looks like this:
 
 ```asm
-addss xmm6, dword ptr [rax + 0xc]   ; cộng trọng lượng slot này
-inc ebx                              ; <-- Zibinha hook ở đây (set cứng mỗi vòng)
+addss xmm6, dword ptr [rax + 0xc]   ; add this slot's weight
+inc ebx                              ; <-- a third-party mod hooks here (sets a fixed value every pass)
 cmp ebx, 5
 jl <loop start>
 lea r11, [rsp+0x70]
-movaps xmm0, xmm6                    ; <-- WeightMultiplier hook ở đây (chạy đúng 1 lần)
+movaps xmm0, xmm6                    ; <-- this mod hooks here (runs exactly once)
 mov rbx, [r11+0x10]
 ```
 
-1. **Sai, đã bỏ:** suy từ decompile `Zibinha_Weight_Control.dll`, hook lùi 5 byte
-   trước chỗ AOB khớp (đoán là `addss xmm6,[rax+0xc]`). Build và chạy không lỗi
-   nhưng **không có tác dụng**: `addss` chỉ chạy có điều kiện, không nằm cố định
-   cách AOB 5 byte, nên hook trúng byte giữa một lệnh khác, vô hiệu mà không
-   crash.
-2. **Đúng UI, sai gameplay:** dò bằng Cheat Engine, pin địa chỉ "Trọng Tải Hiện
-   Tại" rồi "Find out what writes to this address", bắt được `movss
-   [rsi+1C],xmm0` (rsi = struct equip-load). Hook ở đó làm **UI hiện đúng số đã
-   giảm** nhưng **roll type và tốc độ chạy không đổi**, tức chỉ ảnh hưởng đường
-   hiển thị, không phải đường gameplay.
-3. **Đúng (đang dùng):** người dùng cài `Zibinha_Weight_Control.dll` (set
-   `WeightValue=0`) và xác nhận roll type đổi thật; log của DLL đó in địa chỉ nó
-   patch, khớp **chính xác** vị trí AOB ở lần 1 (không lùi 5 byte). Vậy AOB đúng,
-   chỉ sai ở việc tự lùi.
+1. **Wrong, dropped.** Inferred from the decompile of a third-party weight DLL: hook 5 bytes before the
+   matching AOB (guessed to be `addss xmm6,[rax+0xc]`). It built and ran without error but **did
+   nothing**: `addss` runs conditionally and is not a fixed 5 bytes from the AOB, so the hook landed on
+   the middle of another instruction, harmless and without a crash.
+2. **Right for the UI, wrong for gameplay.** Found with a memory scanner: pin the address of the
+   current equip load and "find out what writes to this address", which gives `movss [rsi+1C],xmm0`
+   (`rsi` is the equip-load struct). Hooking there made the **UI show the reduced number** but left the
+   **roll type and run speed unchanged**: it only affects the display path, not the gameplay one.
+3. **Right (in use).** With that third-party DLL installed (set to a weight of 0) the player confirmed that
+   the roll type really changed, and the DLL's log printed the address it patches, which matches the AOB
+   position of attempt 1 **exactly** (not 5 bytes earlier). The AOB was right; only the guessed offset
+   was wrong.
 
-Zibinha hook thẳng vào `inc ebx` và ghi đè `xmm6` bằng giá trị cố định **mỗi
-vòng lặp**; chỉ lần ghi cuối còn lại, nên tổng luôn = số cố định. Tốt cho "set
-cứng = 0" nhưng **không dùng được cho %**: nhân `xmm6` tại đó sẽ dồn qua từng
-vòng (món ở slot đầu bị giảm nhiều hơn món ở slot cuối). `movaps xmm0,xmm6`
-chạy một lần sau khi tổng hoàn chỉnh, nên nhân ở đó là một hệ số duy nhất.
+That mod hooks `inc ebx` and overwrites `xmm6` with a fixed value **on every pass** of the loop; only the
+last write survives, so the total is always the fixed number. That is fine for "set to 0" but **useless
+for a percentage**: multiplying `xmm6` there compounds with each pass (the first slots are reduced more
+than the last). `movaps xmm0,xmm6` runs once after the total is complete, so multiplying there is a single
+factor.
 
-## AOB, patch và stub
+## AOB, patch and stub
 
-- **Mẫu neo:** `FF C3 83 FB ?? 7C ?? 4C 8D 5C 24 ??`
-  (`inc ebx; cmp ebx,N; jl ..; lea r11,[rsp+..]`).
-- **Điểm patch** = neo + 12 byte (bỏ `inc/cmp/jl` 7 byte và `lea r11,[rsp+0x70]` 5
-  byte), trúng `movaps xmm0,xmm6` (3) + `mov rbx,[r11+0x10]` (4) = **7 byte**.
-- **Jump:** chỉ 7 byte nên không đủ chỗ cho jump tuyệt đối `mov reg,imm64; jmp
-  reg` (~12 byte) như `runemultiplier`/`autoregen`. Dùng JMP tương đối 5 byte
-  (`E9 rel32`) và tìm vùng nhớ thực thi gần bằng `VirtualAlloc` (quét lùi/tiến
-  theo bước `0x10000`), port từ `CodePatch.cpp` của bản C++ thành
-  `common::codepatch::install_jmp_hook`.
-- **Stub:**
+- **Anchor:** `FF C3 83 FB ?? 7C ?? 4C 8D 5C 24 ??` (`inc ebx; cmp ebx,N; jl ..; lea r11,[rsp+..]`).
+- **Patch point:** anchor + 12 bytes (past `inc`, `cmp`, `jl` at 7 and `lea r11,[rsp+0x70]` at 5), landing
+  on `movaps xmm0,xmm6` (3) and `mov rbx,[r11+0x10]` (4): **7 bytes**.
+- **The jump.** Seven bytes leave no room for an absolute jump (`mov reg,imm64; jmp reg`, about 12 bytes)
+  as in `mods/runemultiplier` and `mods/autoregen`. It uses the relative 5-byte `E9 rel32` and a stub in
+  executable memory near the target, found with `VirtualAlloc` at explicit addresses (backward and
+  forward in steps of `0x10000`): `shared::codepatch::install_jmp_hook`.
+- **The stub:**
   ```asm
   mov   rcx, &WEIGHT_VALUE
-  mulss xmm6, dword ptr [rcx]        ; Mode 0 (Multiplier); Mode 1 dùng movss
-  movaps xmm0, xmm6                  ; lệnh gốc
-  mov   rbx, qword ptr [r11+0x10]    ; lệnh gốc
+  mulss xmm6, dword ptr [rcx]        ; mode 0 (Multiplier); mode 1 uses movss
+  movaps xmm0, xmm6                  ; original instruction
+  mov   rbx, qword ptr [r11+0x10]    ; original instruction
   jmp   <target + 7>
   ```
-- **Hai chế độ cùng một điểm hook:** `Mode=0` dùng `mulss xmm6,[rcx]` (nhân), `Mode=1`
-  dùng `movss xmm6,[rcx]` (ghi đè tổng bằng `FixedValue`). Cùng một static
-  `WEIGHT_VALUE` mang nghĩa khác nhau theo mode (hệ số hay số cố định), vì chỉ
-  một mode được dùng tại một thời điểm.
-- **Hot reload:** đổi `Multiplier`/`FixedValue` chỉ cần ghi lại `WEIGHT_VALUE`
-  (stub đọc từ địa chỉ cố định mỗi lần chạy). Đổi **`Mode`** thì opcode
-  `mulss`/`movss` đã nằm cứng trong code đang chạy, nên mod tự vá lại đúng 4 byte
-  đó qua `codepatch::overwrite_bytes` (`STUB_MODE_INSTR_ADDR`); rủi ro như lúc
-  cài hook ban đầu (ghi đè code CPU có thể đang chạy), chỉ lặp lại theo yêu cầu.
-  Người dùng đã chấp nhận đánh đổi này khi chọn hỗ trợ đổi cả `Mode` lúc chạy.
-  Nếu vá lại thất bại, mod giữ `Mode` cũ và ghi cảnh báo.
+- **Two modes at the same point:** `Mode = 0` uses `mulss xmm6,[rcx]` (multiply) and `Mode = 1` uses
+  `movss xmm6,[rcx]` (overwrite the total with `FixedValue`). One static, `WEIGHT_VALUE`, means a factor or
+  a fixed number depending on the mode, since only one mode is active at a time.
+- **Hot reload.** Changing `Multiplier` or `FixedValue` only rewrites `WEIGHT_VALUE`; the stub reads it from
+  a fixed address on every run. Changing **`Mode`** changes the opcode, which is baked into running code,
+  so the mod patches exactly those 4 bytes again with `codepatch::overwrite_bytes`
+  (`STUB_MODE_INSTR_ADDR`). The risk is the one of the first install (overwriting code the CPU may be
+  running), repeated only on request. The player accepted this trade-off when choosing to support
+  changing `Mode` at run time. If the patch fails the mod keeps the old `Mode` and logs a warning.
 
-## Mod khác hook đè cùng chỗ
+## Another mod hooked the same place
 
-Khi không tìm thấy neo, mod quét thêm `FOREIGN_PATCH_PATTERN`
-(`E9 ?? ?? ?? ?? 7C ?? 4C 8D 5C 24 ??`), tức `inc ebx; cmp ebx,5` (đúng 5 byte)
-đã bị thay bằng `jmp rel32`, chỗ các DLL kiểu "NoWeight" hook vào. Nếu khớp, log
-báo đã bị mod khác hook, kèm tên DLL chứa đích của `jmp` (hoặc "unknown" nếu
-`jmp` nhảy vào stub cấp phát ngoài mọi module). Chưa test được trong game vì cần
-một mod trọng lượng khác để dựng lại tình huống.
+When the anchor is not found the mod also scans `FOREIGN_PATCH_PATTERN` (`E9 ?? ?? ?? ?? 7C ?? 4C 8D 5C
+24 ??`), which is `inc ebx; cmp ebx,5` (exactly 5 bytes) replaced by `jmp rel32`, where DLLs of that kind
+hook. If it matches, the log says another mod hooked the code, with the name of the DLL that holds the
+destination of the `jmp` (or "unknown" if it jumps into a stub allocated outside every module), and
+`shared::conflict` shows one message box ([conflict.md](../../../shared/docs/conflict.md)). This could not
+be tested in game, since it needs another weight mod to reproduce.
 
-Báo lỗi trên Nexus ("anchor pattern not found", 2026-09-26) có nguyên nhân chưa
-rõ: nghi có DLL giảm trọng lượng khác đã hook đè lên `inc ebx`, hoặc khác phiên
-bản game; đang chờ người báo trả lời, không thấy ghi nhận kết luận.
+A report of "anchor pattern not found" had an unclear cause: either another weight-reducing DLL hooking
+over `inc ebx`, or a different game version. No conclusion was recorded.
 
-## Kiểm tra tương thích (IDA, 2026-10-07)
+## Compatibility check (IDA)
 
-| Bản exe | Neo (RVA) | Điểm patch (neo + 12) | Hai lệnh tại đó |
+| Build | Anchor (RVA) | Patch point (anchor + 12) | The two instructions there |
 |---|---|---|---|
-| 2.6.2.0 | `0x247C9E` | `0x247CAA` | `movaps xmm0,xmm6` / `mov rbx,[r11+10h]` |
-| 2.7.0.0 | `0x247C9E` | `0x247CAA` | như trên |
-| 2.7.1.0 | `0x247C9E` | `0x247CAA` | như trên |
+| 2.6.2.0 | `0x247C9E` | `0x247CAA` | `movaps xmm0,xmm6`, `mov rbx,[r11+10h]` |
+| 2.7.0.0 | `0x247C9E` | `0x247CAA` | the same |
+| 2.7.1.0 | `0x247C9E` | `0x247CAA` | the same |
 
-Mẫu duy nhất ở cả ba và **cùng RVA** (khác `runemultiplier`, nơi RVA lệch giữa
-các bản). Mod vẫn chỉ dùng AOB, không hard-code RVA.
+The pattern is unique on all three and at the **same RVA** (unlike `mods/runemultiplier`, where the RVA
+differs between builds). The mod still uses only the AOB, never the RVA.
 
-## Khi test
+## When testing
 
-- **Luôn kiểm cả hai mặt:** số hiển thị trên UI **và** hành vi thật (roll, chạy).
-  Bài học từ lần thử 2: một hook có thể đúng nửa việc (UI) mà sai nửa còn lại,
-  dù không crash và không báo lỗi gì.
-- Đây là patch code sống: nếu bản game đã đổi, có thể crash. Test ở nơi an toàn
-  (không giữa trận boss).
-- Xem log có dòng `Weight-summing-loop anchor pattern not found` không.
+- **Check both sides:** the number on the UI **and** the real behavior (roll, run). The lesson of attempt
+  2: a hook can be right for half of it, the UI, and wrong for the other half, without a crash or an error.
+- This is a live code patch: if the game build changed, it can crash. Test somewhere safe, not in the
+  middle of a boss fight.
+- Look in the log for `Hook: anchor pattern not found`.

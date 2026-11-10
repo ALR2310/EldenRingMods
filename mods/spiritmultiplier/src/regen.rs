@@ -3,7 +3,7 @@
 //! `RegenValue` 0 = off. Modes: 1 = `RegenValue` HP per second; 2 (default) =
 //! `RegenValue` percent of max HP; 3 = percent of the HP it is missing (fast when
 //! badly hurt, slow when nearly full). The old single `Regen` key is carried over
-//! to `RegenValue` when the ini is updated. Only `Active` / `ReadyForActivation`
+//! to `RegenValue` when an old ini is imported. Only `Active` / `ReadyForActivation`
 //! entries are touched (any other `ChrIns` can be stale).
 
 use std::time::Duration;
@@ -11,7 +11,7 @@ use std::time::Duration;
 use eldenring::cs::{CSTaskGroupIndex, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
-use common::config;
+use crate::config;
 
 const TICK_INTERVAL_MS: f64 = 1000.0;
 
@@ -24,8 +24,8 @@ enum Mode {
 }
 
 impl Mode {
-    /// The `RegenMode` ini value; anything else is the default (percent of max).
-    fn from_ini(value: i32) -> Mode {
+    /// The `RegenMode` config value; anything else is the default (percent of max).
+    fn from_config(value: i32) -> Mode {
         match value {
             1 => Mode::FlatHp,
             3 => Mode::PercentOfMissing,
@@ -53,13 +53,14 @@ fn heal_amount(mode: Mode, value: f64, hp: i32, max_hp: i32) -> i32 {
 /// Heals each live summon by [heal_amount]. Dead characters (`hp <= 0`) are
 /// left alone.
 fn heal_summons(mode: Mode, value: f64) {
-    if common::player::main_player_chr_ins_ptr().is_none() {
+    if shared::player::main_player_chr_ins_ptr().is_none() {
         return;
     }
+    // SAFETY: called from a game task; the accessor returns `Err` while the singleton does not exist.
     let Ok(world_chr_man) = (unsafe { WorldChrMan::instance_mut() }) else {
         return;
     };
-    common::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| {
+    shared::player::for_each_active_chr(&world_chr_man.summon_buddy_chr_set, |chr| {
         let data = &mut chr.modules.data;
         if data.hp > 0 {
             data.hp += heal_amount(mode, value, data.hp, data.max_hp);
@@ -68,11 +69,11 @@ fn heal_summons(mode: Mode, value: f64) {
 }
 
 pub fn run() {
-    let cs_task = common::task::wait_for_cs_task();
+    let cs_task = shared::task::wait_for_cs_task();
 
     let mut elapsed_ms: f64 = 0.0;
 
-    let _handle = common::task::run_recurring_safe(
+    let _handle = shared::task::run_recurring_safe(
         cs_task,
         "Regen",
         CSTaskGroupIndex::FrameBegin,
@@ -83,9 +84,9 @@ pub fn run() {
             }
             elapsed_ms = 0.0;
 
-            let value = config::get_double("RegenValue", 0.5);
+            let value = config::get().spirit.regen_value;
             if value > 0.0 {
-                heal_summons(Mode::from_ini(config::get_int("RegenMode", 2)), value);
+                heal_summons(Mode::from_config(config::get().spirit.regen_mode), value);
             }
         },
     );
@@ -123,11 +124,11 @@ mod tests {
     }
 
     #[test]
-    fn mode_from_ini() {
-        assert_eq!(Mode::from_ini(1), Mode::FlatHp);
-        assert_eq!(Mode::from_ini(2), Mode::PercentOfMax);
-        assert_eq!(Mode::from_ini(3), Mode::PercentOfMissing);
-        assert_eq!(Mode::from_ini(0), Mode::PercentOfMax);
-        assert_eq!(Mode::from_ini(9), Mode::PercentOfMax);
+    fn mode_from_config() {
+        assert_eq!(Mode::from_config(1), Mode::FlatHp);
+        assert_eq!(Mode::from_config(2), Mode::PercentOfMax);
+        assert_eq!(Mode::from_config(3), Mode::PercentOfMissing);
+        assert_eq!(Mode::from_config(0), Mode::PercentOfMax);
+        assert_eq!(Mode::from_config(9), Mode::PercentOfMax);
     }
 }

@@ -1,16 +1,18 @@
 //! In-game menu listing co-op partners; clicking one teleports there. Built on
-//! `common::overlay` (`shared/docs/overlay.md`). The menu runs on the render
+//! `shared::overlay` (`shared/docs/overlay.md`). The menu runs on the render
 //! thread and only shares [SHARED] (a snapshot plus status text) and
 //! [REQUEST] (the partner clicked) with the game task in `warp.rs`. Details:
 //! `docs/menu_ui.md`.
 
 use std::sync::Mutex;
 
-use common::overlay::{
+use crate::config;
+
+use shared::overlay::{
     self, ERROR_TEXT, GOLD, GOLD_DIM, TEXT_MUTED, Ui, WindowConfig, centered_text,
 };
 
-pub use common::overlay::{MENU_OPEN, set_ini_path, toggle};
+pub use shared::overlay::{MENU_OPEN, toggle};
 
 #[derive(Clone)]
 pub struct PartnerRow {
@@ -116,7 +118,10 @@ fn draw_body(ui: &Ui) {
     if !status.is_empty() {
         ui.spacing();
         ui.separator();
-        let color = if status.contains("did not respond") || status.contains("Can't") || status.contains("no longer") {
+        let color = if status.contains("did not respond")
+            || status.contains("Can't")
+            || status.contains("no longer")
+        {
             ERROR_TEXT
         } else {
             GOLD
@@ -128,6 +133,7 @@ fn draw_body(ui: &Ui) {
 
 /// Installs the DX12 hooks. Call once from `DllMain`'s worker thread.
 pub fn install() {
+    overlay::set_store(config::overlay_store());
     overlay::install(
         WindowConfig {
             title: "Souls Teleport",

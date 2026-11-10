@@ -1,44 +1,44 @@
 [workspace]
 resolver = "2"
-members = [
-    "shared",
-    "mods/autoregen",
-    "mods/sometweaks",
-    "mods/passiverunes",
-    "mods/runemultiplier",
-    "mods/weightmultiplier",
-    "mods/risearcher",
-    "mods/dropmultiplier",
-    "mods/infiniteailment",
-    "mods/soulsteleport",
-    "mods/spiritmultiplier",
-    "mods/fasterrevival",
-    "mods/speedmultiplier",
-    "mods/animcancel",
-    "mods/autopickup",
-    "mods/journeyhud",
-    "mods/toolbox",
-]
+members = ["shared", "mods/*"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.99.1"
+license = "MIT"
+authors = ["ALR2310"]
+publish = false
 
 [workspace.dependencies]
-# https://github.com/vswarte/fromsoftware-rs - Rust bindings to the game's engine
-# structs. Same rev for both crates so every mod builds against one version.
+# Rust bindings for the game's engine structs: https://github.com/vswarte/fromsoftware-rs
 eldenring = { git = "https://github.com/vswarte/fromsoftware-rs", rev = "57023153d786c4b13fe95d9170e6dcd9d35093ea" }
 fromsoftware-shared = { git = "https://github.com/vswarte/fromsoftware-rs", rev = "57023153d786c4b13fe95d9170e6dcd9d35093ea" }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-# Fake C++ vtable for registering a Rust closure as a game task
-vtable-rs = "0.1.5"
-# TOML config (common::toml_config): typed parse via serde, comment-preserving
-# "add missing keys from the template" via toml_edit.
 serde = { version = "1", features = ["derive"] }
-toml = "1.1.8"
-toml_edit = "0.25.17"
-# Menu translation files (common::i18n).
 serde_json = "1"
+toml = "1.1"
+toml_edit = "0.25"
+vtable-rs = "0.1.5"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "warn"
+dbg_macro = "deny"
+todo = "warn"
+print_stdout = "warn"
 
 # hudhook 0.9.3 plus an HDR colour conversion in the DX12 pixel shader (vendor/README.md).
 [patch.crates-io]
 hudhook = { path = "vendor/hudhook" }
+
+[profile.dev.package.rsa]
+opt-level = 3
+
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
 
 [profile.release]
 lto = true

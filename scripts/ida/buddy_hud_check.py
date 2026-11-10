@@ -1,18 +1,20 @@
-"""Kiểm các chỗ patch của `HubHpBars` (mods/spiritmultiplier/src/buddy_hud.rs) trên một bản exe.
+"""Checks the patch sites of `HubHpBars` (mods/spiritmultiplier/src/buddy/hud.rs) on one executable.
 
-Dùng:
+Usage:
     run.ps1 buddy_hud_check -Version all
 
-Mỗi mẫu AOB trong buddy_hud.rs phải UNIQUE, và điểm đến của từng `call`/`jmp`
-phải đúng quan hệ giữa các hàm (không chỉ khớp byte):
-  - lệnh gọi Blob nằm trong chính hàm mà chỗ gọi list builder trỏ tới;
-  - hàm view update chứa cặp `lea` cửa sổ slot (header 136 byte, 5 slot);
-  - constructor view tham chiếu string "Anim/GaugeList" và một vtable có slot 2
-    là wrapper `add rcx,8; jmp` của hàm thêm hàng;
-  - constructor view dựng component gắn với clip "Anim" ở view+776 (0x308);
-  - `sub_140D872C0` (đặt `_x/_y` của clip) duy nhất, và được gọi từ hàm đặt vị trí component;
-  - hàm mở tệp có slot con trỏ trong dữ liệu, mẫu bắt đầu từ byte thứ 17.
-Mỗi dòng `RESULT OK|FAIL <tên> ...`; sửa mẫu ở đây khi sửa buddy_hud.rs.
+Every AOB pattern of hud.rs must be UNIQUE, and the target of each `call`/`jmp` must have the
+right relation to the other functions (a byte match is not enough):
+  - the Blob call lies inside the function the list-builder call targets;
+  - the view-update function contains the pair of `lea` that sets the slot window (136 byte
+    header, 5 slots);
+  - the view constructor references the string "Anim/GaugeList" and a vtable whose slot 2 is
+    the `add rcx,8; jmp` wrapper of the row-append function;
+  - the view constructor builds the component bound to the clip "Anim" at view+776 (0x308);
+  - `sub_140D872C0` (sets `_x/_y` of a clip) is unique and is called from the function that
+    positions a component;
+  - the file-opener function has pointer slots in data, and its pattern starts at byte 17.
+Every line is `RESULT OK|FAIL <name> ...`; change the patterns here when hud.rs changes.
 """
 import os
 import sys

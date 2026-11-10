@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-04
+
+- Clean code, hoping to fix false positives.
+
 ## [1.1.0] - 2026-10-27
 
 - Added option to disable the pickup animation.

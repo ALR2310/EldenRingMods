@@ -1,13 +1,13 @@
-"""Liệt kê import của exe khớp một chuỗi con, kèm nơi gọi.
+"""List the exe's imports that match a substring, with their callers.
 
-Dùng:
-    run.ps1 imports <chuỗi>... [--noxrefs]
+Usage:
+    run.ps1 imports <string>... [--noxrefs]
 
-    <chuỗi>       tên (hoặc DLL) chứa chuỗi này, không phân biệt hoa thường
-    --noxrefs     chỉ liệt kê import, không tìm nơi gọi
+    <string>      name (or DLL) containing this string, case-insensitive
+    --noxrefs     list the imports only, do not look up callers
 
-Ghi imports.txt: `<DLL> <tên> @<RVA ô import>` rồi các dòng `  <- <RVA nơi gọi>
-(hàm <RVA đầu hàm>)`. Import theo ordinal in dạng `ord<N>`.
+Writes imports.txt: `<DLL> <name> @<RVA of the import slot>` followed by lines
+`  <- <RVA of call site> (func <RVA of function start>)`. Imports by ordinal print as `ord<N>`.
 """
 import os
 import sys
@@ -25,7 +25,7 @@ import common
 def main():
     pos, flags = common.parse_args()
     if not pos:
-        common.die("thiếu chuỗi tìm; xem docstring")
+        common.die("missing search string; see the docstring")
     want = [p.lower() for p in pos]
     xrefs = "noxrefs" not in flags
     out = common.open_out("imports.txt")
@@ -46,7 +46,7 @@ def main():
             if xrefs:
                 for frm, fs in common.callers(ea):
                     out.write(
-                        "  <- %X (hàm %s)\n"
+                        "  <- %X (func %s)\n"
                         % (common.rva(frm), "%X" % common.rva(fs) if fs else "?")
                     )
     out.close()

@@ -1,302 +1,343 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "Cargo: Build AutoRegen (Release)",
-            "detail": "Builds AutoRegen (release), then copies AutoRegen.dll + AutoRegen.ini into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "AutoRegen"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build SomeTweaks (Release)",
-            "detail": "Builds SomeTweaks (release), then copies SomeTweaks.dll + SomeTweaks.ini into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "SomeTweaks"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build PassiveRunes (Release)",
-            "detail": "Builds PassiveRunes (release), then copies PassiveRunes.dll + PassiveRunes.ini into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "PassiveRunes"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build RuneMultiplier (Release)",
-            "detail": "Builds RuneMultiplier (release), then copies RuneMultiplier.dll + RuneMultiplier.ini into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "RuneMultiplier"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build WeightMultiplier (Release)",
-            "detail": "Builds WeightMultiplier (release), then copies WeightMultiplier.dll + WeightMultiplier.ini into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "WeightMultiplier"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build RiseArcher (Release)",
-            "detail": "Builds RiseArcher (release), then copies RiseArcher.dll + RiseArcher.ini into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "RiseArcher"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build DropMultiplier (Release)",
-            "detail": "Builds DropMultiplier (release), then copies DropMultiplier.dll + DropMultiplier.ini into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "DropMultiplier"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build InfiniteAilment (Release)",
-            "detail": "Builds InfiniteAilment (release), then copies InfiniteAilment.dll + InfiniteAilment.ini into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "InfiniteAilment"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build SoulsTeleport (Release)",
-            "detail": "Builds SoulsTeleport (release), then copies SoulsTeleport.dll + SoulsTeleport.ini into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "SoulsTeleport"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build FasterRevival (Release)",
-            "detail": "Builds FasterRevival (release), then copies FasterRevival.dll + FasterRevival.ini into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "FasterRevival"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build SpeedMultiplier (Release)",
-            "detail": "Builds SpeedMultiplier (release), then copies SpeedMultiplier.dll + SpeedMultiplier.ini into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "SpeedMultiplier"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build SpiritMultiplier (Release)",
-            "detail": "Builds SpiritMultiplier (release), then copies SpiritMultiplier.dll + SpiritMultiplier.ini into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "SpiritMultiplier"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build Toolbox (Release)",
-            "detail": "Builds Toolbox (release), then copies Toolbox.dll + Toolbox.toml into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "Toolbox"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build AnimCancel (Release)",
-            "detail": "Builds AnimCancel (release), then copies AnimCancel.dll + AnimCancelV1.toml into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "AnimCancel"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build AutoPickup (Release)",
-            "detail": "Builds AutoPickup (release), then copies AutoPickup.dll + AutoPickup.toml into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "AutoPickup"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build JourneyHUD (Release)",
-            "detail": "Builds JourneyHUD (release), then copies JourneyHUD.dll + JourneyHUD.toml into builds/<crate>/",
-            "type": "process",
-            "command": "powershell.exe",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}\\scripts\\build-mod.ps1",
-                "-Mod", "JourneyHUD"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": "$rustc"
-        },
-        {
-            "label": "Cargo: Build All (Release)",
-            "detail": "Runs every per-mod build task - builds/<crate>/ holds each mod's .dll + .ini",
-            "dependsOrder": "sequence",
-            "dependsOn": [
-                "Cargo: Build AutoRegen (Release)",
-                "Cargo: Build SomeTweaks (Release)",
-                "Cargo: Build PassiveRunes (Release)",
-                "Cargo: Build RuneMultiplier (Release)",
-                "Cargo: Build WeightMultiplier (Release)",
-                "Cargo: Build RiseArcher (Release)",
-                "Cargo: Build DropMultiplier (Release)",
-                "Cargo: Build InfiniteAilment (Release)",
-                "Cargo: Build SoulsTeleport (Release)",
-                "Cargo: Build FasterRevival (Release)",
-                "Cargo: Build SpeedMultiplier (Release)",
-                "Cargo: Build SpiritMultiplier (Release)",
-                "Cargo: Build Toolbox (Release)",
-                "Cargo: Build AnimCancel (Release)",
-                "Cargo: Build AutoPickup (Release)",
-                "Cargo: Build JourneyHUD (Release)"
-            ],
-            "group": "build",
-            "problemMatcher": []
-        }
-    ]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build AutoPickup",
+      "detail": "Builds AutoPickup and copies the DLL (and its config) to builds/autopickup/",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "AutoPickup"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build AnimCancel",
+      "detail": "Builds AnimCancel and copies the DLL (and its config) to builds/animcancel/",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "AnimCancel"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build SpeedMultiplier",
+      "detail": "Builds SpeedMultiplier and copies the DLL (and its config) to builds/speedmultiplier/",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "SpeedMultiplier"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build AutoRegen",
+      "detail": "Builds AutoRegen and copies the DLL (and its config) to builds/autoregen/",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "AutoRegen"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build DropMultiplier",
+      "detail": "Builds DropMultiplier and copies the DLL (and its config) to builds/dropmultiplier/",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "DropMultiplier"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build FasterRevival",
+      "detail": "Builds FasterRevival and copies the DLL (and its config) to builds/fasterrevival/",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "FasterRevival"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build RuneMultiplier",
+      "detail": "Builds RuneMultiplier and copies the DLL (and its config) to builds/runemultiplier/",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "RuneMultiplier"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build InfiniteAilment",
+      "detail": "Builds InfiniteAilment and copies the DLL (and its config) to builds/infiniteailment/",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "InfiniteAilment"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build WeightMultiplier",
+      "detail": "Builds WeightMultiplier and copies the DLL (and its config) to builds/weightmultiplier/",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "WeightMultiplier"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build PassiveRunes",
+      "detail": "Builds PassiveRunes and copies the DLL (and its config) to builds/passiverunes/",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "PassiveRunes"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build RiseArcher",
+      "detail": "Builds RiseArcher and copies the DLL (and its config) to builds/risearcher/",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "RiseArcher"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build SpiritMultiplier",
+      "detail": "Builds SpiritMultiplier and copies the DLL (and its config) to builds/spiritmultiplier/",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "SpiritMultiplier"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build JourneyHUD",
+      "detail": "Builds JourneyHUD and copies the DLL (and its config) to builds/journeyhud/",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "JourneyHUD"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build SoulsTeleport",
+      "detail": "Builds SoulsTeleport and copies the DLL (and its config) to builds/soulsteleport/",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "SoulsTeleport"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Build Toolbox",
+      "detail": "Builds Toolbox and copies the DLL (and its config) to builds/toolbox/",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\build-mod.ps1",
+        "-Mod",
+        "Toolbox"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Cargo: Build All",
+      "type": "shell",
+      "command": "cargo build --release --workspace",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Cargo: Test",
+      "type": "shell",
+      "command": "cargo test --workspace",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "test",
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Cargo: Clippy",
+      "type": "shell",
+      "command": "cargo clippy --workspace --all-targets -- -D warnings",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "Cargo: Format",
+      "type": "shell",
+      "command": "cargo fmt --all",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ]
 }

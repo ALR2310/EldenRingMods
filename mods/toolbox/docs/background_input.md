@@ -1,45 +1,84 @@
-# Input nền cho Elden Ring: các lớp chặn và cách gỡ
+# Input for a game window in the background
 
-**Status 2026-10-27: bàn phím và chuột chèn được vào game đang ở nền, kể cả cho mod đọc phím bằng `GetAsyncKeyState` và con trỏ menu đặt theo toạ độ (xem mục "Đường Win32") (thử trên 2.7.2.0: từ màn hình tiêu đề vào world, đi bằng W, mở/đóng bản đồ bằng M, xoay camera, chuột trái vung kiếm; bàn phím/chuột thật của người dùng bị lọc khi game không ở trước). Chưa làm: tay cầm (chỉ lọc), kênh pipe/MCP, đọc trạng thái trực tiếp.**
+Status: **Confirmed** on 2.7.2.0: keyboard and mouse can be injected into a game that is not in the foreground,
+including for mods that read keys with `GetAsyncKeyState` and a menu cursor placed by coordinates (from the title
+screen into the world, walking with W, opening and closing the map with M, turning the camera, the left button
+swinging the sword); the real keyboard and mouse are filtered out while the game is not in front. Not done: the
+gamepad (only filtered), a pipe channel, reading state directly. Conventions:
+[research notes](../../../docs/research/README.md). Code: `src/input/`.
 
-## Kết luận
+## Question
 
-`PostMessage` (chế độ nền của `game-player` MCP) không bao giờ tới được game: nó không đọc input qua tin nhắn cửa sổ. `eldenring.exe` chỉ import `DINPUT8!DirectInput8Create` và `XINPUT1_4` (`XInputGetState`/`XInputSetState`). Để gửi phím lúc game ở nền phải gỡ **ba lớp** chặn, mỗi lớp thử riêng đều chưa đủ:
+How can an agent play the game while its window sits in the background and the user keeps working elsewhere?
 
-| Lớp | Biểu hiện | Cách gỡ (`src/`) |
+## Conclusion
+
+`PostMessage` never reaches the game: it does not read input through window messages. `eldenring.exe` only
+imports `DINPUT8!DirectInput8Create` and `XINPUT1_4` (`XInputGetState` / `XInputSetState`). Sending keys while the
+game is in the background means removing **three layers** of blocking, none enough on its own:
+
+| Layer | Symptom | Fix (`src/`) |
 |---|---|---|
-| 1. DirectInput mất thiết bị khi mất focus | `GetDeviceState` bàn phím trả `0x8007001E` (`DIERR_INPUTLOST`) | `dinput.rs`: hook `GetDeviceState`/`GetDeviceData`, lỗi thì trả `DI_OK` với trạng thái rỗng rồi OR các phím giả |
-| 2. Cờ "chỉ foreground" của game | Đọc phím thành công nhưng game bỏ qua | `gate.rs`: xoá 3 byte `+0x88E` (pad), `+0x88F` (bàn phím), `+0x890` (chuột) của singleton input |
-| 3. So `GetForegroundWindow` với cửa sổ game | Vẫn bỏ qua khi hai lớp trên đã gỡ | `focus.rs`: hook `GetForegroundWindow` trả cửa sổ game; kèm `ClipCursor`/`SetCursorPos` để game không nhốt chuột người dùng |
+| 1. DirectInput loses the device when focus is lost | the keyboard `GetDeviceState` returns `0x8007001E` (`DIERR_INPUTLOST`) | `dinput.rs`: hook `GetDeviceState` / `GetDeviceData`; on an error return `DI_OK` with an empty state, then OR in the injected keys |
+| 2. The game's "foreground only" flags | reading the keys succeeds but the game ignores them | `gate.rs`: clear the 3 bytes `+0x88E` (pad), `+0x88F` (keyboard), `+0x890` (mouse) of the input singleton |
+| 3. A `GetForegroundWindow` compare with the game window | still ignored once the first two are removed | `focus.rs`: hook `GetForegroundWindow` to return the game window, with `ClipCursor` / `SetCursorPos` so the game does not trap the user's mouse |
 
-Bằng chứng: tách từng lớp. Chỉ lớp 1 + 2: bàn phím đọc 0 lỗi ở nền nhưng E không ăn. Khi game được focus thật thì cùng lệnh E ăn ngay (chứng tỏ cách chèn đúng). Thêm lớp 3 thì E ăn ở nền.
+Evidence: each layer was isolated. Layers 1 and 2 only: the keyboard reads with no error in the background but E
+does nothing; when the game really has focus the same E works at once (so the injection is right); adding layer 3
+makes E work in the background.
 
-## Cổng ở lớp 2 (IDA, 2.7.2.0)
+## The gate of layer 2 (IDA, 2.7.2.0)
 
-Singleton ở global `qword_144864D48` (RVA `0x4864D48`; mod dò bằng AOB, không hard-code). Byte `+0x88D` = "cửa sổ active", `+0x88E/0x88F/0x890` = "SetForeground" cho pad/bàn phím/chuột, nạp lúc khởi tạo từ các cờ cấu hình `Ext.UserInput.CooperativeLevel.SetForeGround.{Pad,Keyboard,Mouse}` (hàm `0x1F2C7B0`). Hàm đọc tay cầm `0x1F6F030` bỏ qua khi `[+0x88E] && ![+0x88D]`. Hàm `0x1F70C20` là phần dựng thiết bị bàn phím (đọc `+0x88F`). AOB của gate: `scripts/ida/run.ps1 aob -Version all` cho `UNIQUE` ở 2.6.2.0, 2.7.0.0, 2.7.1.0, 2.7.2.0.
+The singleton is the global `qword_144864D48` (RVA `0x4864D48`; found by AOB, not hard-coded). Byte `+0x88D` =
+"window active", `+0x88E/0x88F/0x890` = "SetForeground" for pad, keyboard and mouse, loaded at initialisation
+from the config flags `Ext.UserInput.CooperativeLevel.SetForeGround.{Pad,Keyboard,Mouse}` (function
+`0x1F2C7B0`). The pad read function `0x1F6F030` skips when `[+0x88E] && ![+0x88D]`; `0x1F70C20` builds the
+keyboard device (reads `+0x88F`). The gate pattern is unique on 2.6.2.0, 2.7.0.0, 2.7.1.0 and 2.7.2.0
+(`scripts/ida/run.ps1 aob -Version all`).
 
-`GetForegroundWindow` có hai nơi gọi trong exe: `0x22AC530` (cấu hình âm thanh) và `0x2671EB0` (so với cửa sổ game, 4 hàm gọi: `0x9BEBB0`, `0x9BF350`, `0xE21B80`, `0xE3785F`, `0xE85F20`, `0xE93D80`).
+`GetForegroundWindow` is called from two places in the executable: `0x22AC530` (audio configuration) and
+`0x2671EB0` (compare with the game window, called by 6 functions: `0x9BEBB0`, `0x9BF350`, `0xE21B80`,
+`0xE3785F`, `0xE85F20`, `0xE93D80`).
 
-## Lỗi đã gặp: không dùng `GetWindowTextW` trên cửa sổ game
+## A fault: do not use `GetWindowTextW` on the game window
 
-Tìm cửa sổ game bằng `EnumWindows` + `GetWindowTextW` làm game crash lúc khởi động (`eldenring.exe+0x1E937F0`, `a1=0x20`): với cửa sổ cùng process `GetWindowTextW` gửi `WM_GETTEXT` thẳng vào window proc, lúc đó game chưa khởi tạo xong. Dùng `InternalGetWindowText` (đọc trực tiếp, không gửi tin nhắn).
+Finding the game window with `EnumWindows` and `GetWindowTextW` crashed the game at start-up
+(`eldenring.exe+0x1E937F0`, `a1=0x20`): for a window of the same process `GetWindowTextW` sends `WM_GETTEXT`
+straight to the window procedure, which the game had not finished initialising. Use `InternalGetWindowText`
+(reads directly, sends no message).
 
-## Giao thức thử
+## Test protocol
 
-Ghi `Toolbox.cmd` (ghi tên tạm rồi đổi tên) cạnh DLL, mod đọc rồi xoá: `down <phím>`, `up <phím>`, `press <phím> [giây]`, `release_all`; chuột: `mouse <dx> <dy>`, `look <dx> <dy> <giây>` (dịch mỗi khung, `look 6 0 1` xoay camera khoảng 25-30 độ), `mdown`/`mup`/`mclick <left|right|middle> [giây]`, `wheel <n>`. Mã phím là DIK (`src/input/keys.rs`). Chuột chèn vào `DIMOUSESTATE`/`DIMOUSESTATE2` (lX, lY, lZ rồi từng byte nút) trong cùng hook `GetDeviceState`. Một số thao tác có hiệu ứng chậm vài giây (bản đồ), `look` ảnh sau 3-5 giây. Log `Toolbox.log` có dòng thống kê mỗi 5 giây: `fg` (foreground thật), `gate=active/pad/kb/mouse`, số lần đọc và lỗi của từng thiết bị.
+Write `Toolbox.cmd` next to the DLL (write a temporary name, then rename); the mod reads and deletes it: `down
+<key>`, `up <key>`, `press <key> [seconds]`, `release_all`; mouse: `mouse <dx> <dy>`, `look <dx> <dy> <seconds>`
+(shifts per frame; `look 6 0 1` turns the camera about 25 to 30 degrees), `mdown` / `mup` / `mclick <left|right|
+middle> [seconds]`, `wheel <n>`. Key codes are DIK (`src/input/keys.rs`). The mouse is injected into
+`DIMOUSESTATE` / `DIMOUSESTATE2` (lX, lY, lZ, then each button byte) in the same `GetDeviceState` hook. Some
+actions take a few seconds to show (the map), and `look` after 3 to 5 seconds. `Toolbox.log` has a line every 5
+seconds: `fg` (the real foreground), `gate=active/pad/kb/mouse`, the reads and errors of each device. The MCP
+server of this folder (`mcp/server.py`) drives the same file.
 
-## Đường Win32 (`src/winput.rs`)
+## The Win32 path (`src/input/winput.rs`)
 
-Mod khác trong tiến trình đọc phím bằng `GetAsyncKeyState` (`common::input::is_key_pressed`: phím reload F5, phím zoom của JourneyHud...) không thấy phím DirectInput giả. `winput.rs` hook `GetAsyncKeyState`: trả bit "đang nhấn" (và bit "đã nhấn từ lần gọi trước", một lần mỗi lần nhấn) cho phím hay nút chuột giả, đổi virtual-key sang scan code bằng `MapVirtualKeyW(vk, MAPVK_VK_TO_VSC_EX)` (mã `0xE0xx` thành `0x80|xx`, như DIK). Khi game không ở trước và `IsolateInput` bật, phím thật bị che khỏi hook này (cùng ý với lọc DirectInput). Thử: `press minus` làm vòng minimap JourneyHud đổi tầm.
+Another mod in the process reading keys with `GetAsyncKeyState` (`shared::input::is_key_pressed`: a reload key, a
+zoom key) does not see the fake DirectInput keys. `winput.rs` hooks `GetAsyncKeyState`: it returns the "down" bit
+(and the "pressed since the last call" bit, once per press) for a fake key or mouse button, converting the
+virtual key to a scan code with `MapVirtualKeyW(vk, MAPVK_VK_TO_VSC_EX)` (`0xE0xx` becomes `0x80|xx`, as DIK).
+While the game is not in front and `IsolateInput` is on, the real keys are hidden from this hook as well (the
+same idea as the DirectInput filter). Tried: `press minus` changed the range of another mod's minimap.
 
-`eldenring.exe` import `GetCursorPos`/`ScreenToClient`/`SetCursorPos`/`GetKeyState`/`GetKeyboardState`. Hook `GetCursorPos`: khi `moveto x y` đang bật và game không ở trước, trả vị trí màn hình của điểm (x, y) trong vùng client của cửa sổ game (đổi bằng `ClientToScreen` mỗi lần gọi, nên cửa sổ bị kéo đi vẫn đúng). Thử trên bản đồ: `moveto` lên một icon grace thì nhãn grace hiện đúng chỗ. Chưa thử `mclick` tại đó và chưa xác nhận menu khác (danh sách, hộp thoại) theo con trỏ này; `GetKeyState`/`GetKeyboardState` chưa hook.
+`eldenring.exe` imports `GetCursorPos`, `ScreenToClient`, `SetCursorPos`, `GetKeyState` and `GetKeyboardState`.
+`GetCursorPos` is hooked: while `moveto x y` is on and the game is not in front it returns the screen position of
+the point (x, y) of the game window's client area (converted with `ClientToScreen` on every call, so a dragged
+window stays right). On the map, `moveto` onto a grace icon showed the grace label in the right place. Not tried:
+`mclick` there, and whether other menus (lists, dialogs) follow this cursor; `GetKeyState` and
+`GetKeyboardState` are not hooked.
 
-Bảng phím: `src/keys.txt` (`<tên> <mã DIK>`), mod đọc bằng `include_str!`, MCP đọc cùng file; có test không trùng tên.
+## Open
 
-## Chưa biết / việc tiếp
-
-- Tay cầm (`XInputGetState`) mới chỉ bị lọc (xoá nút và cần gạt khi game ở nền), chưa chèn.
-- Chưa thử chiến đấu thật (khoá mục tiêu, đỡ, lăn): cần biết phím lăn của người dùng.
-- Đường đọc có đệm (`GetDeviceData`) game không dùng ở màn hình tiêu đề (0 lần gọi).
-- Mod tự chứa một bản MinHook; không bật cùng `SoulsTeleport.dll` (cùng hook DirectInput).
-- `PauseTheGame.dll` đã tắt khi thử; chưa kiểm xem nó có ảnh hưởng không.
+- The gamepad (`XInputGetState`) is only filtered (buttons and sticks cleared while the game is in the
+  background), not injected.
+- Real combat was not tried (lock-on, guard, roll).
+- The buffered path (`GetDeviceData`) is not used by the game on the title screen (0 calls).
+- The mod carries its own MinHook; do not load it together with another DLL hooking the same DirectInput
+  functions without the shared extension point (`shared::overlay::InputExtension`).

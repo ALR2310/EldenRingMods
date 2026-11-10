@@ -9,9 +9,9 @@ use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering};
 use std::time::Duration;
 
-use common::overlay::mh::{MH_ApplyQueued, MH_Initialize, MhHook};
+use shared::overlay::mh::{MH_ApplyQueued, MH_Initialize, MhHook};
 
-use common::logger;
+use shared::logger;
 
 #[link(name = "user32")]
 unsafe extern "system" {
@@ -56,6 +56,7 @@ type XInputGetStateFn = unsafe extern "system" fn(u32, *mut u8) -> u32;
 
 unsafe extern "system" fn find_cb(hwnd: *mut c_void, _: isize) -> i32 {
     let mut pid = 0u32;
+    // SAFETY: plain Win32 calls with valid pointers; hooks are MinHook trampolines.
     unsafe {
         GetWindowThreadProcessId(hwnd, &mut pid);
         if pid != GetCurrentProcessId() || IsWindowVisible(hwnd) == 0 {
@@ -74,6 +75,7 @@ unsafe extern "system" fn find_cb(hwnd: *mut c_void, _: isize) -> i32 {
 fn find_game_window(timeout: Duration) -> bool {
     let deadline = std::time::Instant::now() + timeout;
     while std::time::Instant::now() < deadline {
+        // SAFETY: plain Win32 calls with valid pointers; hooks are MinHook trampolines.
         unsafe { EnumWindows(find_cb, 0) };
         if GAME_HWND.load(Ordering::Relaxed) != 0 {
             return true;
@@ -87,16 +89,21 @@ fn find_game_window(timeout: Duration) -> bool {
 fn real_foreground() -> *mut c_void {
     let orig = ORIG_GET_FOREGROUND.load(Ordering::Relaxed);
     if orig == 0 {
+        // SAFETY: the slot holds the trampoline MinHook made for this function.
         return unsafe { GetForegroundWindow() };
     }
+    // SAFETY: the slot holds the trampoline MinHook made for this function.
     unsafe { std::mem::transmute::<usize, GetForegroundFn>(orig)() }
 }
 
 pub fn game_is_really_foreground() -> bool {
     let mut pid = 0u32;
+    // SAFETY: plain Win32 calls with valid pointers; hooks are MinHook trampolines.
     unsafe {
         let hwnd = real_foreground();
-        !hwnd.is_null() && GetWindowThreadProcessId(hwnd, &mut pid) != 0 && pid == GetCurrentProcessId()
+        !hwnd.is_null()
+            && GetWindowThreadProcessId(hwnd, &mut pid) != 0
+            && pid == GetCurrentProcessId()
     }
 }
 
@@ -111,7 +118,7 @@ unsafe extern "system" fn get_foreground_hook() -> *mut c_void {
 
 /// Whether the overlay's `ClipCursor` / `SetCursorPos` hooks should neutralize the calls: a game
 /// that thinks it is in front grabs the cursor, so while the window is not really in front it
-/// must not (`common::overlay::InputExtension`).
+/// must not (`shared::overlay::InputExtension`).
 pub fn unpin_cursor() -> bool {
     ENABLED.load(Ordering::Relaxed) && !game_is_really_foreground()
 }
@@ -119,15 +126,27 @@ pub fn unpin_cursor() -> bool {
 /// A pad plugged in while the game is in the background must not drive the
 /// game: neutralize `XINPUT_GAMEPAD` (12 bytes after the packet number).
 unsafe extern "system" fn xinput_get_state_hook(index: u32, state: *mut u8) -> u32 {
-    let orig = unsafe { std::mem::transmute::<usize, XInputGetStateFn>(ORIG_XINPUT_GET_STATE.load(Ordering::Relaxed)) };
+    // SAFETY: the slot holds the trampoline MinHook made for this function.
+    let orig = unsafe {
+        std::mem::transmute::<usize, XInputGetStateFn>(
+            ORIG_XINPUT_GET_STATE.load(Ordering::Relaxed),
+        )
+    };
+    // SAFETY: the original function, called with the arguments the caller passed.
     let ret = unsafe { orig(index, state) };
-    if ret == 0 && !state.is_null() && super::dinput::ISOLATE.load(Ordering::Relaxed) && !IN_FRONT.load(Ordering::Relaxed) {
+    if ret == 0
+        && !state.is_null()
+        && super::dinput::ISOLATE.load(Ordering::Relaxed)
+        && !IN_FRONT.load(Ordering::Relaxed)
+    {
+        // SAFETY: the buffer is the one the caller passed, of that size.
         unsafe { std::ptr::write_bytes(state.add(4), 0, 12) };
     }
     ret
 }
 
 fn hook(module: &[u8], name: &[u8], detour: *mut c_void, orig: &AtomicUsize) -> bool {
+    // SAFETY: plain Win32 calls with valid pointers; hooks are MinHook trampolines.
     unsafe {
         let m = GetModuleHandleA(module.as_ptr());
         if m.is_null() {
@@ -153,9 +172,20 @@ pub fn install() {
         logger::error("Focus: game window not found");
         return;
     }
+    // SAFETY: MinHook initialization has no preconditions.
     let _ = unsafe { MH_Initialize() };
-    let ok = hook(b"user32.dll\0", b"GetForegroundWindow\0", get_foreground_hook as *mut c_void, &ORIG_GET_FOREGROUND)
-        && hook(b"xinput1_4.dll\0", b"XInputGetState\0", xinput_get_state_hook as *mut c_void, &ORIG_XINPUT_GET_STATE);
+    let ok = hook(
+        b"user32.dll\0",
+        b"GetForegroundWindow\0",
+        get_foreground_hook as *mut c_void,
+        &ORIG_GET_FOREGROUND,
+    ) && hook(
+        b"xinput1_4.dll\0",
+        b"XInputGetState\0",
+        xinput_get_state_hook as *mut c_void,
+        &ORIG_XINPUT_GET_STATE,
+    );
+    // SAFETY: applies the hooks queued above.
     let applied = unsafe { MH_ApplyQueued() }.ok().is_ok();
     if ok && applied {
         logger::log("Focus: hooks applied");

@@ -10,7 +10,7 @@ use std::sync::OnceLock;
 use eldenring::cs::{BlockId, SoloParamRepository, WorldMapLegacyConvParam};
 use fromsoftware_shared::FromStatic;
 
-use common::{logger, params};
+use shared::{logger, params};
 
 use super::tiles::MapId;
 
@@ -129,7 +129,11 @@ fn agree(rows: &[&Conversion]) -> bool {
 /// the graces of Crumbling Farum Azula on the whirlpool island where the game's map draws it
 /// (the nearest point there is a placeholder in Flame Peak). Rows that lead to another dungeon
 /// are only followed when no row leads to the world map.
-fn legacy_conversion(conversions: &[Conversion], block: BlockId, local: [f32; 2]) -> Option<([f32; 2], u8)> {
+fn legacy_conversion(
+    conversions: &[Conversion],
+    block: BlockId,
+    local: [f32; 2],
+) -> Option<([f32; 2], u8)> {
     let (mut src, mut at) = ((block.area(), block.block(), block.region()), local);
     for _ in 0..4 {
         let nearest = |to_world: bool| {
@@ -142,7 +146,11 @@ fn legacy_conversion(conversions: &[Conversion], block: BlockId, local: [f32; 2]
         };
         if let Some(nearest) = nearest(true) {
             let rows = world_rows(conversions, src);
-            let c = if agree(&rows) { nearest } else { rows.iter().find(|c| c.base_point).copied().unwrap_or(nearest) };
+            let c = if agree(&rows) {
+                nearest
+            } else {
+                rows.iter().find(|c| c.base_point).copied().unwrap_or(nearest)
+            };
             let position = [
                 at[0] - c.src_pos[0] + f32::from(c.dst.1) * 256.0 + c.dst_pos[0],
                 at[1] - c.src_pos[1] + f32::from(c.dst.2) * 256.0 + c.dst_pos[1],
@@ -150,10 +158,7 @@ fn legacy_conversion(conversions: &[Conversion], block: BlockId, local: [f32; 2]
             return Some((position, c.dst.0));
         }
         let c = nearest(false)?;
-        at = [
-            at[0] - c.src_pos[0] + c.dst_pos[0],
-            at[1] - c.src_pos[1] + c.dst_pos[1],
-        ];
+        at = [at[0] - c.src_pos[0] + c.dst_pos[0], at[1] - c.src_pos[1] + c.dst_pos[1]];
         src = c.dst;
     }
     None
@@ -174,12 +179,11 @@ fn conversions() -> Option<&'static [Conversion]> {
     if let Some(conversions) = CONVERSIONS.get() {
         return Some(conversions);
     }
+    // SAFETY: the accessor returns `Err` while the singleton does not exist.
     let repo = unsafe { SoloParamRepository::instance() }.ok()?;
     // fromsoftware-rs hardcodes the slot of each param; make sure it holds this one.
     if let Err(reason) = params::check::<WorldMapLegacyConvParam>(repo) {
-        logger::warn(&format!(
-            "Map: legacy conversion params unavailable ({reason})"
-        ));
+        logger::warn(&format!("Map: legacy conversion params unavailable ({reason})"));
         return None;
     }
     let conversions: Vec<Conversion> = (0..)
@@ -195,10 +199,7 @@ fn conversions() -> Option<&'static [Conversion]> {
     if conversions.is_empty() {
         return None;
     }
-    logger::log(&format!(
-        "Map: {} legacy conversion row(s)",
-        conversions.len()
-    ));
+    logger::log(&format!("Map: {} legacy conversion row(s)", conversions.len()));
     Some(CONVERSIONS.get_or_init(|| conversions))
 }
 
@@ -215,7 +216,13 @@ mod tests {
         assert_eq!((space, map), (60, Some(MapId::Overworld)));
     }
 
-    fn row(src: (u8, u8, u8), src_pos: [f32; 2], dst: (u8, u8, u8), dst_pos: [f32; 2], base_point: bool) -> Conversion {
+    fn row(
+        src: (u8, u8, u8),
+        src_pos: [f32; 2],
+        dst: (u8, u8, u8),
+        dst_pos: [f32; 2],
+        base_point: bool,
+    ) -> Conversion {
         Conversion { src, src_pos, dst, dst_pos, base_point }
     }
 
@@ -229,15 +236,20 @@ mod tests {
             row((13, 0, 0), [0.0, 0.0], (60, 54, 53), [0.0, 0.0], true),
         ];
         let (position, area) =
-            legacy_conversion(&farum_azula, BlockId::from_parts(13, 0, 0, 0), [116.66, 161.07]).unwrap();
+            legacy_conversion(&farum_azula, BlockId::from_parts(13, 0, 0, 0), [116.66, 161.07])
+                .unwrap();
         assert_eq!(area, 60);
-        assert!((position[0] - 15645.56).abs() < 0.1 && (position[1] - 11837.4).abs() < 0.1, "{position:?}");
+        assert!(
+            (position[0] - 15645.56).abs() < 0.1 && (position[1] - 11837.4).abs() < 0.1,
+            "{position:?}"
+        );
         // Stormveil Castle: every point on the same spot, the nearest one decides as before.
         let stormveil = [
             row((10, 0, 0), [100.0, 50.0], (60, 42, 36), [10.0, 20.0], true),
             row((10, 0, 0), [100.0, 50.0], (60, 42, 36), [10.0, 20.0], true),
         ];
-        let (position, area) = legacy_conversion(&stormveil, BlockId::from_parts(10, 0, 0, 0), [110.0, 70.0]).unwrap();
+        let (position, area) =
+            legacy_conversion(&stormveil, BlockId::from_parts(10, 0, 0, 0), [110.0, 70.0]).unwrap();
         assert_eq!(area, 60);
         assert_eq!(position, [20.0 + 42.0 * 256.0, 40.0 + 36.0 * 256.0]);
     }
@@ -295,10 +307,7 @@ mod tests {
                 ];
                 for variant in [0, 10] {
                     assert_eq!(
-                        locate(
-                            BlockId::from_parts(area, 18, 16, variant + lod),
-                            [12.0, -9.0]
-                        ),
+                        locate(BlockId::from_parts(area, 18, 16, variant + lod), [12.0, -9.0]),
                         (expected, i32::from(area), Some(map)),
                     );
                 }

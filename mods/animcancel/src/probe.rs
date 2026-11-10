@@ -1,22 +1,14 @@
-//! Research probes, off by default (`[Logging]` `CancelProbe` / `FlagProbe`,
-//! read every frame so a hot reload switches them). They only write to the
-//! log, to see why an animation doesn't cancel.
-//!
-//! - `CancelProbe`: a `WINDOW` line whenever the animation, the cancel windows
-//!   or the pressed actions change (animation and progress, its group `grp=`
-//!   and the queue id's group `qgrp=` that the mod goes by, what the mod did
-//!   `mod=`, the masks, and the queue entries `qin`/`qcan` for the queue id),
-//!   plus a `STYLE` line when the grip or the equipped weapons change.
-//! - `FlagProbe`: a `FLAG` line for every word of `CSChrActionFlagModule` that
-//!   changes (the flags animation events set).
-//!
-//! Runs at `ChrIns_PostPhysics`, after this frame's windows are final.
+//! Research probes, off by default (`Logging.CancelProbe` / `FlagProbe`), to see in the log why an
+//! animation doesn't cancel. `CancelProbe` writes a `Probe: window` line whenever the animation, the
+//! cancel windows or the pressed actions change, and a `Probe: style` line when the grip or the equipped
+//! weapons change. `FlagProbe` writes a `Probe: flag` line for every word of `CSChrActionFlagModule` that
+//! changes. Both run at `ChrIns_PostPhysics`, after this frame's windows are final.
 
 use bitfield::BitRange;
 use eldenring::cs::{ActionQueueEntry, CSTaskGroupIndex, ChrActions, ChrIns};
 
-use common::anim::{current_anim, format_anim_id, group_of};
-use common::logger;
+use shared::anim::{current_anim, format_anim_id, group_of};
+use shared::logger;
 
 use crate::cancel;
 use crate::config;
@@ -28,18 +20,14 @@ const TAE_CANCEL_DISABLE: u32 = 1 << 11;
 /// Size of `CSChrActionFlagModule` (fromsoftware-rs test_size_of).
 const ACTION_FLAG_SIZE: usize = 0x258;
 
-/// An action set as one number, for the log.
 fn mask(actions: &ChrActions) -> u64 {
     actions.bit_range(63, 0)
 }
 
-/// The bits of `entries` for the animation `id`.
 fn entry_mask(entries: &[ActionQueueEntry], id: i32) -> u64 {
     entries.iter().find(|e| e.tae_id == id).map_or(0, |e| mask(&e.actions))
 }
 
-/// Logs the cancel windows when they (or the animation) change, and every new
-/// press (a press is what the windows are for).
 #[derive(Default)]
 struct WindowProbe {
     last: Option<Snapshot>,
@@ -91,7 +79,7 @@ impl WindowProbe {
             return;
         }
         logger::log(&format!(
-            "WINDOW {} t={:.2}/{:.2} grp={:?} qgrp={:?} mod={} inputs={:#x} cancels={:#x} queued={:#x} ready={:#x} press={:#x} tae={:#x} disabled={:#x} q={} qin={:#x} qcan={:#x} held={:#x} gblock={}",
+            "Probe: window {} t={:.2}/{:.2} grp={:?} qgrp={:?} mod={} inputs={:#x} cancels={:#x} queued={:#x} ready={:#x} press={:#x} tae={:#x} disabled={:#x} q={} qin={:#x} qcan={:#x} held={:#x} gblock={}",
             format_anim_id(now.anim),
             anim.play_time,
             anim.anim_length,
@@ -116,9 +104,6 @@ impl WindowProbe {
     }
 }
 
-/// Logs what the player holds when it changes: arm style, selected slots and
-/// the weapon param IDs (to see what holding two weapons looks like, where
-/// guard is an attack).
 #[derive(Default)]
 struct StyleProbe {
     last: String,
@@ -130,14 +115,12 @@ impl StyleProbe {
             return;
         };
         if now != self.last {
-            logger::log(&format!("STYLE {now}"));
+            logger::log(&format!("Probe: style {now}"));
             self.last = now;
         }
     }
 }
 
-/// Logs every 4-byte word of the player's `CSChrActionFlagModule` that
-/// changed since the last frame (skipping the vftable and owner pointer).
 #[derive(Default)]
 struct FlagProbe {
     prev: Vec<u8>,
@@ -147,14 +130,20 @@ impl FlagProbe {
     fn tick(&mut self, chr: &ChrIns) {
         let module = &*chr.modules.action_flag;
         // SAFETY: `ACTION_FLAG_SIZE` is the module's size, and it is read-only here.
-        let now = unsafe { std::slice::from_raw_parts(module as *const _ as *const u8, ACTION_FLAG_SIZE) };
+        let now = unsafe {
+            std::slice::from_raw_parts(module as *const _ as *const u8, ACTION_FLAG_SIZE)
+        };
         if self.prev.len() == ACTION_FLAG_SIZE {
             let anim = current_anim(chr);
             for off in (0x10..ACTION_FLAG_SIZE).step_by(4) {
                 let old = u32::from_le_bytes(self.prev[off..off + 4].try_into().unwrap());
                 let new = u32::from_le_bytes(now[off..off + 4].try_into().unwrap());
                 if old != new {
-                    logger::log(&format!("FLAG {} t={:.2} +{off:#x} {old:#x}->{new:#x}", format_anim_id(anim.anim_id), anim.play_time));
+                    logger::log(&format!(
+                        "Probe: flag {} t={:.2} +{off:#x} {old:#x}->{new:#x}",
+                        format_anim_id(anim.anim_id),
+                        anim.play_time
+                    ));
                 }
             }
         }
@@ -167,13 +156,12 @@ impl FlagProbe {
     }
 }
 
-/// Registers the probe task (returns at once).
 pub fn start() {
-    let cs_task = common::task::wait_for_cs_task();
+    let cs_task = shared::task::wait_for_cs_task();
     let mut windows = WindowProbe::default();
     let mut style = StyleProbe::default();
     let mut flags = FlagProbe::default();
-    common::task::run_recurring_safe(
+    shared::task::run_recurring_safe(
         cs_task,
         "Probe",
         CSTaskGroupIndex::ChrIns_PostPhysics,

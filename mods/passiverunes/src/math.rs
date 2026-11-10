@@ -6,6 +6,8 @@
 /// stop at `u32::MAX`.
 pub const MAX_HELD_RUNES: u32 = 999_999_999;
 
+/// The template's default, kept here to test that it parses.
+#[cfg(test)]
 pub const DEFAULT_MILESTONES: &str =
     "1800:5000,3600:10000,7200:25000,10800:40000,21600:100000,43200:500000,86400:1000000";
 
@@ -16,7 +18,7 @@ pub struct Milestone {
 }
 
 /// Parses `seconds:bonus` pairs separated by commas into milestones sorted by
-/// time (so "the next one due" is an advancing index, whatever order the ini
+/// time (so "the next one due" is an advancing index, whatever order the config
 /// lists them in). Entries that don't parse are skipped, so an empty value
 /// gives an empty list; a negative time is skipped too, it would fire the
 /// instant the player enters the world.
@@ -50,7 +52,7 @@ pub fn level_up_cost(level: u32) -> f64 {
     ((x + 0.1) * l * l + 1.0).floor()
 }
 
-/// `Rune.Passive.Percent`: `percent`% of `cost` (the next level-up cost),
+/// `[Passive] Percent`: `percent`% of `cost` (the next level-up cost),
 /// truncated toward 0 but at least 1 rune whenever `percent != 0`, so a tiny
 /// percent at a low level never rounds down to nothing.
 pub fn percent_amount(cost: f64, percent: f64) -> i64 {
@@ -60,7 +62,7 @@ pub fn percent_amount(cost: f64, percent: f64) -> i64 {
     (((cost * percent.abs() / 100.0).floor() as i64).max(1)) * percent.signum() as i64
 }
 
-/// Carried state of `Rune.Passive.Interest` between ticks.
+/// Carried state of `[Passive] Interest` between ticks.
 #[derive(Default)]
 pub struct InterestState {
     /// Fractional runes left over: 0.1% of 1,500 is 1.5, and truncating every
@@ -73,7 +75,7 @@ pub struct InterestState {
 }
 
 impl InterestState {
-    /// `Rune.Passive.Interest`: `percent`% of the `held` runes (compound
+    /// `[Passive] Interest`: `percent`% of the `held` runes (compound
     /// interest; a negative percent is compound decay), carrying the
     /// fraction over. No cap and no minimum: holding 0 runes earns 0.
     pub fn amount(&mut self, held: u32, percent: f64) -> i64 {
@@ -99,7 +101,7 @@ impl InterestState {
 pub struct Clock {
     /// Never resets: drives the milestones.
     session_ms: f64,
-    /// Resets each time it reaches `Rune.Passive.Interval`.
+    /// Resets each time it reaches `[Passive] Interval`.
     interval_ms: f64,
     next_milestone: usize,
 }

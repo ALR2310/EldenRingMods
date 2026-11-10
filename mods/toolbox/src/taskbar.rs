@@ -12,7 +12,7 @@ use std::ffi::c_void;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::time::Duration;
 
-use common::logger;
+use shared::logger;
 
 use crate::config;
 use crate::resize::find_game_window;
@@ -52,13 +52,26 @@ pub fn override_icon() -> Option<isize> {
 
 /// Clears the "needs attention" flash of the taskbar button.
 fn stop_flash(hwnd: Hwnd) {
-    let info = FlashInfo { size: std::mem::size_of::<FlashInfo>() as u32, hwnd, flags: FLASHW_STOP, count: 0, timeout: 0 };
+    let info = FlashInfo {
+        size: std::mem::size_of::<FlashInfo>() as u32,
+        hwnd,
+        flags: FLASHW_STOP,
+        count: 0,
+        timeout: 0,
+    };
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     unsafe { FlashWindowEx(&info) };
 }
 
 #[link(name = "gdi32")]
 unsafe extern "system" {
-    fn CreateBitmap(width: i32, height: i32, planes: u32, bits_per_pixel: u32, bits: *const c_void) -> isize;
+    fn CreateBitmap(
+        width: i32,
+        height: i32,
+        planes: u32,
+        bits_per_pixel: u32,
+        bits: *const c_void,
+    ) -> isize;
     fn DeleteObject(object: isize) -> i32;
 }
 
@@ -95,10 +108,17 @@ const IDI_APPLICATION: usize = 32512;
 fn blank_icon() -> isize {
     let mask = [0xFFu8; 128];
     let pixels = [0u8; 32 * 32 * 4];
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     unsafe {
         let mask_bitmap = CreateBitmap(32, 32, 1, 1, mask.as_ptr() as *const c_void);
         let color_bitmap = CreateBitmap(32, 32, 1, 32, pixels.as_ptr() as *const c_void);
-        let info = IconInfo { is_icon: 1, x_hotspot: 0, y_hotspot: 0, mask: mask_bitmap, color: color_bitmap };
+        let info = IconInfo {
+            is_icon: 1,
+            x_hotspot: 0,
+            y_hotspot: 0,
+            mask: mask_bitmap,
+            color: color_bitmap,
+        };
         let icon = CreateIconIndirect(&info);
         DeleteObject(mask_bitmap);
         DeleteObject(color_bitmap);
@@ -107,12 +127,14 @@ fn blank_icon() -> isize {
 }
 
 fn default_icon() -> isize {
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     unsafe { LoadIconW(std::ptr::null_mut(), IDI_APPLICATION as *const u16) }
 }
 
 fn send(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> usize {
     let mut result = 0usize;
     // A timeout so a busy game window never blocks this thread.
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     unsafe { SendMessageTimeoutW(hwnd, msg, wparam, lparam, SMTO_ABORTIFHUNG, 1000, &mut result) };
     result
 }
@@ -122,6 +144,7 @@ fn send(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> usize {
 struct Icons(isize, isize, isize, isize);
 
 fn read(hwnd: Hwnd) -> Icons {
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     unsafe {
         Icons(
             send(hwnd, WM_GETICON, ICON_BIG, 0) as isize,
@@ -135,6 +158,7 @@ fn read(hwnd: Hwnd) -> Icons {
 fn write(hwnd: Hwnd, icons: Icons) {
     send(hwnd, WM_SETICON, ICON_BIG, icons.0);
     send(hwnd, WM_SETICON, ICON_SMALL, icons.1);
+    // SAFETY: plain Win32 calls on the game window with valid pointers.
     unsafe {
         SetClassLongPtrW(hwnd, GCLP_HICON, icons.2);
         SetClassLongPtrW(hwnd, GCLP_HICONSM, icons.3);
@@ -154,7 +178,9 @@ fn parse(text: &str) -> Mode {
         "default" => Mode::Default,
         "game" | "" => Mode::Game,
         other => {
-            logger::warn(&format!("Taskbar: Icon = \"{other}\" is not Game, Blank or Default, keeping the game's icon"));
+            logger::warn(&format!(
+                "Taskbar: Icon = \"{other}\" is not Game, Blank or Default, keeping the game's icon"
+            ));
             Mode::Game
         }
     }
@@ -221,7 +247,11 @@ pub fn run() {
             }
         }
         if mode != last_mode {
-            logger::log(if mode == Mode::Blank { "Taskbar: icon blanked" } else { "Taskbar: default icon set" });
+            logger::log(if mode == Mode::Blank {
+                "Taskbar: icon blanked"
+            } else {
+                "Taskbar: default icon set"
+            });
         }
         last_mode = mode;
     }

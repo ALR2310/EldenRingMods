@@ -1,52 +1,99 @@
-# Xung đột với Seamless Co-op: đổi đích `call` thay vì sửa byte
+# Seamless Co-op: redirect a `call` instead of rewriting bytes
 
-**Status 2026-10-08: sửa ở 1.1.4, đã test với Seamless Co-op 2.0.1 và offline. Quy tắc cho mọi patch code của mod này. Mã: `common::codepatch::{rel32_target, redirect_rel32}`.**
+Status: **Confirmed** with Seamless Co-op 2.0.1 and offline. This is the rule for every code patch of this
+mod. Conventions: [research notes](../../../docs/research/README.md). Code:
+`shared::codepatch::{rel32_target, redirect_rel32}`.
 
-## Sự cố
+## Question
 
-Từ 1.1.0 tới 1.1.3, game dừng ngay với Seamless Coop 2.0.1 "Fatal Error: No such pattern `E8 ? ? ? ? 83 F8 02 41 0F 44 FC` ... signatures.cpp 1426". Đó là chỗ tính HP cost `0x1403C0C2F` (`call GetBuddyState; cmp eax,2; cmovz edi,r12d`) mà patch FP/HP của MultiSpirit thay bằng `jmp` inline (`E8` → `E9` + NOP). Seamless tìm chỗ patch của nó bằng chữ ký byte và **tự huỷ game** khi không khớp. Từ 1.0.0 tới lúc đó toàn test offline nên không lộ.
+Why did the game stop at start-up with Seamless Co-op installed, and how must code be patched so that it
+does not?
 
-## Điều tra
+## The incident
 
-- `ersc.dll` (13 MB, không có version resource): database IDA ở `dumps/ersc/fcd11a18/` (gitignore). Chuỗi gần như đều mã hoá; `ersc\buddy\buddy.cpp` chỉ là cấp slot spirit (65 slot / người chơi, `sub_18008A7D0`).
-- Dump crash: chữ ký của Seamless chỉ được giải mã lúc dùng → không liệt kê được hết → phải giả định bất kỳ byte nào quanh chỗ patch đều có thể nằm trong 1 chữ ký của họ.
+Some early versions of the mod exited at once with Seamless Co-op 2.0.1: `Fatal Error: No such pattern
+E8 ? ? ? ? 83 F8 02 41 0F 44 FC ... signatures.cpp 1426`. That site is the HP cost calculation
+(`0x1403C0C2F`: `call GetBuddyState; cmp eax,2; cmovz edi,r12d`) which the MultiSpirit cost patch had
+replaced with an inline `jmp` (`E8` became `E9`, plus NOPs). Seamless finds its patch sites by byte
+signature and **terminates the game** when one does not match. It was not noticed earlier because every
+test had been offline.
 
-## Quy tắc
+The Seamless DLL is not readable enough to list its signatures: strings are almost all encrypted, and
+the signatures are decrypted only when used. So assume that **any byte around a patch site may be part of one of its signatures**.
 
-Chỉ ghi lại 4 byte displacement của 1 lệnh `call`/`jmp rel32` sẵn có sang stub gần đó; opcode và mọi byte xung quanh giữ nguyên (chữ ký Seamless wildcard đúng phần `E8 ? ? ? ?`). Nếu mod khác đã đổi đích cùng lệnh, `rel32_target` trả về stub của họ → 2 mod nối tiếp nhau. Stub là "hàm được gọi": vào với `rsp % 16 == 8`, tự `sub rsp,28h/38h` trước mỗi lời gọi bên trong, kết thúc bằng `ret` hoặc tail `jmp`.
+## Rule
 
-Đã chuyển: `multi_spirit.rs` (UI x3, CanUseItem, FP/HP x2, recall, DoSummon, DisappearAll), `buddy_stone.rs` (stateInfo call/tail, in-range). Hai patch inline cũ (giữ bia đá 8 byte, xoá `+0x38` 7 byte) bỏ, logic chuyển vào stub (`decide_state`, stub stateInfo). `band.rs` giữ nguyên (đã chạy với Seamless từ 1.0.0).
+Write only the four displacement bytes of an existing `call` or `jmp rel32` so that it points to a nearby
+stub; keep the opcode and every surrounding byte (Seamless's signatures wildcard exactly the
+`E8 ? ? ? ?` part). If another mod already redirected the same instruction, `rel32_target` returns its
+stub, so the two mods chain. A stub is "a called function": it is entered with `rsp % 16 == 8`, does
+`sub rsp,28h/38h` before every inner call, and ends with `ret` or a tail `jmp`.
 
-## Test
+Applied in `multi_spirit.rs` (UI x3, CanUseItem, FP/HP x2, recall, DoSummon, DisappearAll) and
+`buddy/stone.rs` (stateInfo call and tail, in-range). Two older inline patches (keeping the stone, 8 bytes;
+clearing `+0x38`, 7 bytes) were dropped and their logic moved into stubs. `band.rs` was unchanged: it had
+worked with Seamless from the start.
 
-Seamless 2.0.1 (`ersc.dll` nạp): game không còn bị huỷ, mọi dòng cài đặt `was` trỏ về hàm gốc của game; MultiSpirit gọi nhiều Ash và cho về từng Ash (cả Ash nâng cấp `258001`, Ash 15 spirit `240000`); SummonAnywhere dùng bia dự phòng `10000100`. Offline: 12 patch cài đủ. Reforged (`reforged.dll` nạp): 12 patch, không lỗi.
+## Verification
 
-## Seamless còn gây
+With Seamless 2.0.1 loaded the game is no longer terminated, every `was` line of the log points at the
+game's original function; MultiSpirit summons several Ashes and sends them back one by one (an upgraded Ash
+`258001`, a 15-spirit Ash `240000`); SummonAnywhere uses the fallback stone `10000100`. Offline: all 12
+patches install. With Reforged loaded: 12 patches, no error.
 
-Spirit mất màu ma khi chơi Seamless (hook `sub_1403F0C20`): [open_issues.md](open_issues.md).
+## `MaxSpirits > 60` made Seamless stop with "No such pattern"
 
-## Không triệu hồi lại được với Seamless (Nexus, 2026-10-10)
+Status: **Fixed** (`band.rs`, `seamless_loaded`); the failure was reproduced, the fix was not re-tested in
+game.
 
-**Status 2026-10-10: không tái hiện được, không phải lỗi của mod (đã kiểm tra). Dừng điều tra; nếu có thêm báo cáo cùng lỗi thì xem "Hướng tiếp".**
+Seamless showed `Fatal Error: No such pattern "BA 00 05 00 00 41 B8 08 00 00 00 FF 50 50 48 89 46 18"`
+when installed with this mod and `MaxSpirits > 60`. That pattern is the start of `CAPACITY_INIT_AOB` (the
+init of the spirit ChrSet): Seamless scans it to raise the capacity to 1000, while the capacity patch of
+this mod overwrote `BA 00 05 00 00` (the allocation size), so Seamless could not find it. The capacity
+patch broke the rule above.
 
-Người dùng (TechnoMonkeyDJ) báo không triệu hồi lại được sau khi đuổi spirit về / spirit chết, với mọi nhân vật; chỉ xảy ra khi bật Seamless, và theo họ Seamless một mình cũng chặn (nên họ quay lại mod cũ "Resummon Spirit Ashes For Seamless Co-op"). Ở máy tác giả, kể cả dùng ME3 và ERSS (DLSS frame generation) như họ, triệu hồi lại luôn được. Log của họ không có lỗi nào từ mod.
+Fix: with `MaxSpirits > 60` wait up to 10 seconds (on a separate thread, not in `DllMain`) to see whether
+`ersc.dll` loads. If it does, skip the capacity patch and let Seamless raise it (the band is still
+`MaxSpirits` wide, `band_layout` splits by the real capacity); if not, patch as before. The patch only has
+to finish before the world is created, so waiting a few seconds is fine. **Remaining**: if `ersc.dll` loads
+after 10 seconds the old failure still happens.
 
-Manh mối bên ngoài: tác giả Seamless trả lời các mod spirit rằng "SpEffect `2147300000`" là cách sửa; mod đổi animation chuông phải gộp nó vào `c0000` (TAE); mod tham chiếu `zibinha_infinite_summoning` (giải ngược trong `D:\tmp\zibinha_infinite_summon`) sửa dòng `503045` thành `2147300000` trong bảng param nội bộ của `ersc.dll`; người dùng báo ép `2147300000` bằng Cheat Engine ~1 giây sau khi đuổi spirit thì triệu hồi lại được.
+## Other effects of Seamless
 
-Đã kiểm tra bằng log chẩn đoán (`SlotProbe=true`: các SpEffect của người chơi mỗi lần đổi, và dòng param của `503045`, `2147300000`), có và không có Seamless:
+- Spirits lose the ghost colour (a Seamless hook): [open_issues.md](open_issues.md).
+- Seamless also redirects `call sub_1403F21B0` and the update function that
+  [persist_spirits.md](persist_spirits.md) patches; the mod checks and re-applies there.
 
-- `SpEffectParam 2147300000`: **không có dòng** (cả khi có Seamless) → không phải hiệu ứng thật của game, là mã hiệu Seamless tự xử lý trong code.
-- `503045`: hiệu ứng vanilla trống, thời gian vô hạn; xuất hiện ~1 s sau khi vào game (cả khi **không** có Seamless), mất khi nạp lại map. Không đổi khi triệu hồi / đuổi về / spirit chết → không phải marker của Seamless.
-- Quanh lần triệu hồi chỉ có `232000` (SpEffect của Ash) và `6518201`, `9540`.
+## Report that could not be reproduced: cannot summon again with Seamless
 
-Nên cơ chế chặn nằm trong code của Seamless, không thấy được từ SpEffect; áp `2147300000` bằng `apply_speffect` rất có thể không có tác dụng (không có dòng param). Không giải mã `ersc.dll` (packer/VM): tốn công, và lỗi không tái hiện được nên không kiểm chứng được bản sửa.
+Status: **Not reproduced, not caused by the mod** (checked). Investigation stopped; if more reports of the
+same appear, see "Next".
 
-**Hướng tiếp (nếu có thêm báo cáo):** tra trong `dumps/seamless-diff/.../seamless_only_ida.txt` các vá nằm trên đường triệu hồi (DoSummon, `sub_1404B92B0`, `sub_1404BAEA0`, kiểm tra stone/`stateInfo`), rồi dùng breakpoint phần cứng/log xem Seamless đọc cờ nào lúc bấm triệu hồi lại, thay vì đọc mã của nó.
+A user reported that after sending spirits back or after they died they could not summon again, with any
+character, only with Seamless installed (they went back to an older "resummon for Seamless" mod). On the
+author's machine, even with the same ME3 setup and a DLSS frame generation mod, summoning again always
+worked; their log held no error from this mod.
 
-## MaxSpirits > 60 làm Seamless dừng "No such pattern" (2026-10-18)
+Outside hints: the Seamless author answered other spirit mods that "SpEffect `2147300000`" is the fix; a
+third-party mod rewrites a row `503045` to `2147300000` in the internal param table of `ersc.dll`; the
+user reported that forcing `2147300000` with a memory editor about 1 second after sending spirits back
+let them summon again.
 
-**Status 2026-10-18: đã sửa (`band.rs`, `seamless_loaded`); đã tái hiện lỗi, chưa test lại bản sửa trong game.**
+Checked with diagnostic logging (`Logging.EffectProbe`: player SpEffects on every change and the rows `503045` and
+`2147300000`), with and without Seamless:
 
-Seamless 2.0.1 hiện hộp thoại `Fatal Error: No such pattern "BA 00 05 00 00 41 B8 08 00 00 00 FF 50 50 48 89 46 18"` (`ersc\signatures\signatures.cpp`) khi cài cùng mod này với `MaxSpirits` > 60. Mẫu đó là phần đầu của `CAPACITY_INIT_AOB` (khởi tạo ChrSet của spirit, `sub_1404954B0`): Seamless quét nó để nới capacity lên 1000, còn phép vá capacity của mod viết đè `BA 00 05 00 00` (kích thước cấp phát) nên Seamless không tìm thấy. Quy tắc cũ ở trên (không đụng chữ ký của Seamless) bị phép vá này vi phạm.
+- `SpEffectParam 2147300000`: **no such row** even with Seamless, so it is not a real game effect but a code
+  Seamless handles itself.
+- `503045`: an empty vanilla effect with infinite duration; appears about 1 s after entering the game
+  (also **without** Seamless) and disappears on a map reload. It does not change on summon, send-back or
+  death, so it is not a Seamless marker.
+- Around a summon only `232000` (the Ash's SpEffect), `6518201` and `9540` appear.
 
-Cách sửa: khi `MaxSpirits` > 60, đợi tối đa 10 giây (thread riêng, không phải `DllMain`) xem `ersc.dll` có nạp không; có thì bỏ phép vá capacity và để Seamless nới (dải slot vẫn rộng `MaxSpirits`, `band_layout` chia theo capacity thật); không có thì vá như cũ. Phép vá chỉ cần xong trước khi thế giới được tạo nên chờ vài giây không sao. Còn sót: nếu `ersc.dll` nạp sau 10 giây thì lỗi cũ vẫn xảy ra.
+**Inferred**: the block lives in Seamless code and cannot be seen from SpEffects; applying `2147300000` with
+`apply_speffect` most likely does nothing (no param row). Decompiling `ersc.dll` (packed or virtualised)
+was not worth it, and a fix could not be verified without a reproduction.
+
+**Next, if reports continue**: look in a code diff of the game in RAM against the executable for Seamless
+patches on the summon path (DoSummon, the update function, the spawn routine, the stone and `stateInfo`
+checks), then use hardware breakpoints or logging to see which flag Seamless reads at the summon press,
+instead of reading its code.

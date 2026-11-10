@@ -7,12 +7,13 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use common::{logger, memscan};
+use shared::{logger, memscan};
 
 /// `mov rax, [rip+singleton]; test rax,rax; jnz +5; call getter; movzx eax,
 /// byte [rax+0x88E]; test al,al; jz ...` in the pad poller. UNIQUE on
 /// 2.6.2.0, 2.7.0.0, 2.7.1.0 and 2.7.2.0 (`scripts/ida/run.ps1 aob`).
-const PATTERN: &str = "48 8b 05 ?? ?? ?? ?? 48 85 c0 75 05 e8 ?? ?? ?? ?? 0f b6 80 8e 08 00 00 84 c0 74 20";
+const PATTERN: &str =
+    "48 8b 05 ?? ?? ?? ?? 48 85 c0 75 05 e8 ?? ?? ?? ?? 0f b6 80 8e 08 00 00 84 c0 74 20";
 
 const OFF_ACTIVE: usize = 0x88D;
 const OFF_FOREGROUND_ONLY: [usize; 3] = [0x88E, 0x88F, 0x890];
@@ -21,12 +22,16 @@ const OFF_FOREGROUND_ONLY: [usize; 3] = [0x88E, 0x88F, 0x890];
 static SLOT: AtomicUsize = AtomicUsize::new(0);
 
 pub fn resolve() -> bool {
-    let Some(hit) = memscan::wait_for_pattern_in_module(PATTERN, Duration::from_millis(500), Duration::from_secs(60))
-    else {
+    let Some(hit) = memscan::wait_for_pattern_in_module(
+        PATTERN,
+        Duration::from_millis(500),
+        Duration::from_secs(60),
+    ) else {
         logger::error("Gate: pattern not found");
         return false;
     };
     // rip-relative operand: disp32 at +3, next instruction at +7.
+    // SAFETY: plain reads of the game's input singleton, found by pattern and null-checked.
     let slot = unsafe {
         let disp = (hit.add(3) as *const i32).read_unaligned();
         hit.add(7).offset(disp as isize) as usize
@@ -41,6 +46,7 @@ fn singleton() -> Option<usize> {
     if slot == 0 {
         return None;
     }
+    // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
     let obj = unsafe { (slot as *const usize).read_volatile() };
     (obj != 0).then_some(obj)
 }
@@ -50,6 +56,7 @@ pub fn apply() {
     let Some(obj) = singleton() else { return };
     for off in OFF_FOREGROUND_ONLY {
         let p = (obj + off) as *mut u8;
+        // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
         unsafe {
             if p.read_volatile() != 0 {
                 p.write_volatile(0);
@@ -61,6 +68,13 @@ pub fn apply() {
 /// `active/pad/keyboard/mouse` flag bytes for the log, `-` before resolve.
 pub fn state() -> String {
     let Some(obj) = singleton() else { return "-".to_string() };
+    // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
     let b = |off: usize| unsafe { ((obj + off) as *const u8).read_volatile() };
-    format!("{}/{}/{}/{}", b(OFF_ACTIVE), b(OFF_FOREGROUND_ONLY[0]), b(OFF_FOREGROUND_ONLY[1]), b(OFF_FOREGROUND_ONLY[2]))
+    format!(
+        "{}/{}/{}/{}",
+        b(OFF_ACTIVE),
+        b(OFF_FOREGROUND_ONLY[0]),
+        b(OFF_FOREGROUND_ONLY[1]),
+        b(OFF_FOREGROUND_ONLY[2])
+    )
 }

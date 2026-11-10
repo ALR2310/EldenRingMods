@@ -1,34 +1,97 @@
-# Regen Per Hit: hook, phân loại đòn, ExcludeAow
+# Restoring on hit
 
-**Status 2026-10-10: hoạt động (hit_hook.rs, viết lại 2026-09-12), đã test trong game, kể cả Ash dạng Stance (Unsheathe, Square-Off). Mã: `src/hit_hook.rs`, `src/regen.rs`.**
+Status: **Confirmed** in game on 2.7.1.0, including stance weapon arts. Conventions:
+[research notes](../../../docs/research/README.md).
 
-## Hook hiện tại (`src/hit_hook.rs`)
+## Question
 
-Hook thẳng vào **entry point thật** của `FUN_140448910(ctx, attacker, hit_info, _, flag)` (hàm hit-resolution, prologue chuẩn 15 byte đúng ranh giới lệnh; AOB `HIT_APPLY_PATTERN`, mới verify trên bản 2.7.1.0/1.17.1). Dời nguyên 15 byte prologue ra buffer riêng, nối `mov rax, <return>; jmp rax` (12 byte; **buffer phải đủ chỗ cho cả đoạn jmp**, thiếu thì CPU chạy lố sang `.data` và crash `ACCESS_VIOLATION` ở hit đầu tiên). Hook chỉ "nghe" `rcx/rdx/r8/r9` (lưu ra stack, gọi callback Rust, khôi phục) rồi để hàm gốc chạy tiếp.
+How to know when the player lands a hit, how much damage it did, whether it was melee or ranged, and
+whether it came from a weapon art, without breaking the game's own hit handling?
 
-Dữ liệu đọc: `hit_info+0x228` = damage (xác nhận bằng decompile), `hit_info+0x1D8` = source object → vfunc `vtable+0x10` cho `sourceType` (`1` = trực tiếp/cận chiến, `3` = đạn/projectile). `rsi`/attacker so với `main_player`. Offset `hp`/`max_hp`/... lấy bằng `offset_of!` trên `CSChrDataModule` của fromsoftware-rs.
+## Mechanism
 
-Cách tìm hàm (Ghidra headless trên bản copy `eldenring.exe` ở đường dẫn không dấu cách; cờ `-analyze` không hợp lệ trong Ghidra 12.1.2): quét >1000 chỗ ghi vào offset `hp`, đối chiếu BFS 3 tầng từ hàm hit-resolution → ra `SetHp` → `ApplyHpDelta(module, delta)` → `FUN_140448910`.
+`src/hit_hook.rs` hooks the entry of the game's hit-resolution function `(ctx, attacker, hit_info, _,
+flag)`. The hook runs before the real function and only observes. The function is found by a pattern of
+its whole prologue (15 relocatable bytes, then `SUB RSP,0x148`); it was checked on 2.7.1.0 only. The
+first 15 bytes are moved to a buffer from `shared::codepatch::alloc_executable` that ends with a jump
+back, and the entry is overwritten with `mov rax, trampoline; jmp rax`. The trampoline saves the four
+argument registers, calls the Rust callback, restores them and jumps to the relocated prologue.
 
-## Mode, DamageType
+Data read:
 
-- `Regen.PerHit.Mode`: 0 điểm cố định, 1 % max stat, 2 % sát thương gây ra (lifesteal). Ban đầu `HpOnDamage` bị hiểu sai thành "hồi cố định khi bị đánh"; ý đồ thật là % damage gây ra.
-- `DamageType`: 0 chỉ cận chiến (`sourceType==1`), 1 chỉ tầm xa/phép, 2 cả hai - chung cho cả 3 stat (user muốn "cast rẻ hồi FP để cast đắt"). Hạn chế: phép có động tác cận chiến (Carian Greatsword) đọc ra `sourceType==1`.
-- 3 cách phân loại vũ khí/phép đã bỏ: (1) ngưỡng `atkParamId` 100.000 (sai Glintstone Nail, dash/jump/backstab); (2) đọc `atkPhys`/`atkMag` của AtkParam (nhiều vũ khí lấy damage qua SpEffect, vũ khí yểm tố dùng chung dòng AtkParam); (3) Stamina vừa giảm (sai với Bestial Incantations).
+| What | Where |
+|---|---|
+| Damage | `hit_info + 0x228` |
+| Source object | `hit_info + 0x1D8`; its vtable slot `+0x10` returns `sourceType`: 1 direct (melee), 3 projectile |
+| Attacker | the second argument, compared with the main player |
+| Target | `[ctx + 8]`, compared with the main player |
 
-## ExcludeAow
+The hook marks combat activity for the player's hits and for hits taken. For the player's own hits it
+restores HP, FP and Stamina per `[PerHit]`, and adds the amounts to counters that the tick logs: file I/O
+inside hit resolution can disturb tightly timed animations. Nothing in the hook allocates or locks; its
+settings are atomics.
 
-Không có ngưỡng `atkId` hay field `AtkParam` nào phân biệt được Ash of War (so ~200 field giữa nhóm `[AOW]` và `Default` trong `AtkParam_Pc.csv`, field tốt nhất vẫn overlap 44.6%; Beast Claw heavy thường nằm chung dải ID với nhiều AoW). Hướng dùng: input pad qua `CSChrActionRequestModule` - Weapon Art luôn bằng `L2`. Chỉ đọc `l2` tại lúc trúng thì sót (nút đã nhả từ lâu), nên **chốt (latch) theo lần bấm mới nhất** mỗi frame qua `new_action_presses`: `R1`/`R2`/`L1` → "đòn thường"; `L2` → "Weapon Art"; giữ tới lần bấm kế (`LAST_ATTACK_WAS_SKILL`, `update_last_attack_input()` trong `regen.rs`). `L1` gộp vào đòn thường vì không bao giờ kích hoạt Weapon Art.
+The function was found by scanning the game for writes to the HP field (over a thousand sites) and
+walking up three levels from the hit resolution: `SetHp`, `ApplyHpDelta(module, delta)`, then this
+function.
 
-**Ash dạng Stance (Nexus, Brokensword7, 2026-10-04/10):** Unsheathe, Square-Off, Stomp vào tư thế bằng `L2` rồi chém bằng `R1`/`R2`, nên latch nút bấm bị ghi đè thành "đòn thường" và FP vẫn hồi. Ash bấm `L2` một lần (Spinning Slash...) thì latch vẫn đúng. Sửa bằng lớp thứ hai: **prefix TAE** `aXXX` của anim đang chạy (`CSChrTimeActModule`, `is_skill_anim()` trong `regen.rs`). Prefix 600-999 là Sword Art (tra `mods/speedmultiplier/docs/tae-ids.md`), trừ 6 bộ chiêu vũ khí đặc biệt (a831, a832, a839, a852, a935, a953) có đòn thường cũng nằm trong dải đó; cùng quy tắc và cùng danh sách với `speedmultiplier::speed::group_of`. Một hit bị loại nếu latch báo Skill **hoặc** anim thuộc dải Sword Art.
+## Modes
 
-Bằng chứng (log probe, 2026-10-10): Unsheathe = `a614_040060`, Square-Off = `a615_040060/040070`, tất cả `latchSkill=false` nhưng đều bị loại; đòn thường (`a029_0320x0`, `atkId` 900200-900240) vẫn hồi. Chưa test riêng Stomp và Ash `L2` đơn. Hạn chế: Ash của 6 vũ khí trên vẫn dựa vào latch. Đã thử/bỏ: SpEffect `45` xuất hiện lúc trúng đòn Unsheathe nhưng chưa rõ nghĩa, không dùng.
+- `Mode`: 0 fixed points, 1 percent of the maximum, 2 percent of the damage dealt. An early version read
+  the old `HpOnDamage` as "heal a fixed amount when hit"; the intent was a percent of the damage dealt.
+- `DamageType`: 0 melee only (`sourceType == 1`), 1 ranged and spells only, 2 both; one setting for the
+  three stats. A spell with a melee motion (the Carian Greatsword, for one) reads as `sourceType == 1`.
 
+## Excluding weapon arts
 
-## Lỗi đã gặp (bài học)
+No `atkId` threshold and no `AtkParam` field tells a weapon art from a normal attack: about 200 fields
+were compared between the `[AOW]` group and the default one in `AtkParam_Pc`, and the best field still
+overlapped by 44.6%. A heavy attack of some weapons shares an id range with many arts.
 
-- **Mất animation đâm lén/chí mạng khi bật hook (2026-09-03):** hàm hit nhận **5 tham số**, tham số thứ 5 (1 byte, tính từ `hitInfo+0xd9==2`) truyền qua stack `[rsp+0x20]` và quyết định có chạy khối xác định chí mạng/đâm lén hay không. Trampoline cũ chỉ forward 4 tham số rồi `sub rsp,0x20` tạo shadow space mới nên `[rsp+0x20]` là rác. Tắt `Enabled` không hết lỗi vì patch vẫn cài. Sửa: đọc `byte ptr [rsp+0x20]` vào `r10b` làm lệnh đầu tiên trong trampoline rồi ghi lại sau khi tạo shadow space (cũng áp dụng ở sometweaks). Chẩn đoán nhờ log 2 dòng "dealt damage" liên tiếp (0 rồi damage thật).
-- **Crash vào Volcano Manor (v2.4.0, 2026-09-12):** lỗi thật của mod, không phải ModEngine2 (crash dump `cdb`: `STATUS_INVALID_HANDLE` trong critical section, không có frame AutoRegen → kết luận sai ban đầu). Build tạm bỏ đoạn forward tham số thứ 5 hết crash → nguyên nhân là trampoline tay hijack giữa call-site (nghi thiếu unwind metadata `.pdata`/`.xdata` cho vùng JMP-hijack, exception nội bộ của engine đi qua tính sai stack frame). Giải pháp: viết lại thành `hit_hook.rs` hook ở entry point hàm (hết crash, cùng máy/save).
-- **Xung đột Seamless Co-op (bản C++ cũ, 2026-08-07):** Seamless dùng đúng AOB `OnAttack` (`45 0F B6 CE 4C 8B C3 48 8B D6 48 8B CF E8`) và tự huỷ game khi không khớp ("No such pattern"). Sửa bằng cài hook lần đầu khi đã vào game (sau khi mọi mod khác quét xong). Hook mới ở entry point khác nên không dùng lại AOB đó.
-- Trampoline cũ crash do lệch alignment RSP (align rồi `push` làm lệch 8 byte, `movaps` fault); sửa bằng lưu RSP gốc vào `r12`. Hàm chứa `__try` không được gọi `Logger::Log("literal")` (MSVC C2712) - chuyện của bản C++.
-- Log mỗi đòn trúng (kể cả khi `PerHit` tắt) làm tràn file log. Dòng dò lỗi đó (cùng `read_atk_id()`/`HITINFO_ATK_PARAM_ID_OFFSET`) đã bị xoá khỏi `hit_hook.rs` (2026-10-22); cần dò lại damage/`atkId`/`sourceType` thì viết lại tạm, hoặc dùng `scripts/ida/fieldaccess.py`. Dòng log hồi hiện tại (`Hit: +N HP ...`) chỉ ghi khi thật sự hồi và khi `LogFile` bật.
+What works is the pad input in `CSChrActionRequestModule`: a weapon art is always `L2`. Reading `L2` at
+the moment of the hit misses it (the button was released long ago), so the **latest press** is latched:
+`R1`, `R2` or `L1` means a normal attack, `L2` a weapon art, kept until the next press. `L1` counts as
+normal because it never starts a weapon art.
+
+Stance arts enter the stance with `L2` and strike with `R1` or `R2`, so the latch reads "normal attack"
+and the hit still restored FP. The second layer is the **TAE prefix** of the animation playing: 600 to
+999 is a weapon art, except six weapons with their own move set (`a831`, `a832`, `a839`, `a852`,
+`a935`, `a953`) whose normal attacks sit in that range. It is the same rule and the same list as
+`shared::anim::group_of`. A hit is excluded when the latch says weapon art **or** the animation does.
+
+Probe evidence: Unsheathe is `a614_040060`, Square-Off `a615_040060` and `040070`, all with the latch at
+"normal" and all excluded; normal attacks (`a029_0320x0`, `atkId` 900200 to 900240) still restore. A
+single-press art (Spinning Slash) stays correct through the latch. Not tested: Stomp. The arts of the six
+weapons above still depend on the latch alone.
+
+## Rejected paths and failures
+
+- **Classifying weapons and spells by `atkParamId` above 100000**: wrong for the Glintstone Nail, dash,
+  jump and backstab.
+- **Reading `atkPhys` and `atkMag` of `AtkParam`**: many weapons get their damage from a SpEffect and
+  enchanted weapons share an `AtkParam` row.
+- **"Stamina just dropped" as the sign of melee**: wrong for the Bestial Incantations.
+- **Lost backstab and critical animations (2.3.0).** The function takes five arguments; the fifth (one
+  byte, from `hitInfo + 0xD9 == 2`) is passed on the stack at `[rsp + 0x20]` and decides whether the
+  critical-hit block runs. A trampoline that forwards four and creates its own shadow space leaves garbage
+  there. Switching the feature off did not help because the patch stayed. The fix reads that byte first
+  and writes it back after the shadow space. The current trampoline hooks the entry and leaves the stack
+  arguments where the caller put them.
+- **Crash entering Volcano Manor (2.4.0).** A real fault of the mod: a hand-written trampoline that
+  hijacked a call site in the middle of the function, probably without unwind data for the hijacked
+  range. A build without the fifth-argument forwarding did not crash. Hooking the entry of the function
+  fixed it.
+- **Conflict with Seamless Co-op (the C++ version).** Seamless scans for the same pattern as the old hook
+  and aborts the game when it does not match. The hook is now installed once in game, after the other
+  mods have scanned, and it uses a different site.
+- A trampoline that aligned `rsp` and then pushed left it 8 bytes off and `movaps` faulted; the current
+  one saves the original `rsp` in `r12`.
+- A relocation buffer too short for its jump back let the CPU run on into the next data and crash with
+  an access violation on the first hit. `RELOCATED_BUF_LEN` covers the jump.
+- Logging every hit, even with `PerHit` off, flooded the log. The tick now logs one line per frame that
+  restored something.
+
+## Open risks
+
+The pattern is verified on one game build. When it is not found the install is retried every ten seconds
+and the mod logs one error after 15 seconds; the per-tick part keeps working.

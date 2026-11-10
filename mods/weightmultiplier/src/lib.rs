@@ -1,17 +1,13 @@
 #![allow(non_snake_case)] // crate name is "WeightMultiplier" to control the output DLL's filename
 
+mod config;
 mod hook;
 mod menu;
 
-use common::{config, dll_dir, logger};
-
-// The default config, embedded verbatim: the single source of truth for keys
-// and defaults.
-const DEFAULT_INI: &str = include_str!("../WeightMultiplier.ini");
+use shared::{dll_dir, logger};
 
 /// # Safety
-/// This is exposed this way so the library loader can call it. Do not call it
-/// yourself.
+/// Called by the loader only.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
     const DLL_PROCESS_ATTACH: u32 = 1;
@@ -21,21 +17,22 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
 
     std::thread::spawn(move || {
         let dir = dll_dir(hmodule);
-        let ini_path = format!("{dir}\\WeightMultiplier.ini");
-        let added_keys = config::load_or_create_default(&ini_path, DEFAULT_INI);
+        let name = shared::dll_stem(hmodule);
+        let path = format!("{dir}\\{name}.toml");
+        config::adopt_ini(&path, &format!("{dir}\\{name}.ini"));
+        let report = config::init(&path);
 
-        // `LogFile` gates the log file entirely, see common::logger.
-        logger::init(&dir, "WeightMultiplier.log");
+        logger::set_enabled(config::get().logging.log_file);
+        logger::init(&dir, &format!("{name}.log"));
         logger::install_panic_hook();
-        if added_keys > 0 {
-            logger::log(&format!("WeightMultiplier.ini: added {added_keys} key(s) from the template"));
-        }
 
-        // Registers right away: the host only accepts menu registrations at
-        // startup, before `hook::run` sleeps for `LoadDelay`.
-        menu::start(hmodule, ini_path.clone());
+        // The menu host accepts registrations only in its first seconds, before `hook::run`
+        // sleeps for `LoadDelay`.
+        menu::start(hmodule);
 
-        hook::run(ini_path);
+        report.log(&format!("{name}.toml"));
+
+        hook::run(&name);
     });
 
     true

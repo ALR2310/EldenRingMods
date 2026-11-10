@@ -1,33 +1,59 @@
-# AnimCancel: antivirus gắn cờ trên VirusTotal
+# Antivirus detections
 
-**Status 2026-10-19: đã xử lý, Nexus nhận bản `AnimCancelV1.toml` (VirusTotal còn 1 cờ ESET-NOD32).** Trước đó DLL bị
-13 đến 16 hãng gắn cờ (phần lớn họ `Gen:Variant.Doina.132093`, engine BitDefender) và bị Nexus chặn.
+Status: **Confirmed** on VirusTotal, one scan per variant below. Conventions:
+[research notes](../../../docs/research/README.md).
 
-## Nguyên nhân tìm được
+## Question
 
-1. **Chuỗi đường dẫn `AnimCancel.toml` trong DLL** (tên file cấu hình mod mở lúc chạy). Cùng một mã,
-   đổi chuỗi này thành `AnimCancelV1.toml` (mã, log, mẫu nhúng) thì họ Doina biến mất: 14 xuống 6 cờ.
-   Đổi riêng tên file log, tên DLL, số phiên bản, metadata PE hay câu log thì không có tác dụng; chuỗi
-   `AnimCancel.toml` nằm trong câu log mà đường dẫn đã đổi cũng không bị bắt. Cơ chế chưa rõ (có thể độ giống
-   với các mẫu `AnimCancel` đã bị gắn cờ trước đó).
-2. **`GetKeyState` + `diag`**: `common::reload` từng gọi `eldenring::util::input::is_key_pressed`
-   (`GetKeyState`); cộng với `common::diag` (liệt kê module, đọc phiên bản) thì thêm nhóm 4 hãng Avast, AVG, Avira,
-   WithSecure (`MalwareX-gen`, `TR/W64.Agent`). Đổi sang `common::input::is_key_pressed` (`GetAsyncKeyState`
-   cùng kiểm tra cửa sổ nền) thì nhóm này biến mất: RuneMultiplier 6 xuống 2 cờ (chỉ Cynet, ESET), trong khi
-   `diag` vẫn nguyên. Mới đo trên hai mod; SpiritMultiplier 1.3.2 có cả hai mà chỉ 0 đến 1 cờ nên không phải quy luật chắc.
+A straight port of AnimCancel was detected by 13 engines, while mods of similar size had one. Which
+strings in the DLL cause it, and can they be removed without renaming the mod, its DLL or its config
+file?
 
-## Đã loại trừ (đừng thử lại)
+## Results
 
-- Thư viện TOML (`toml`, `toml_edit`, `basic-toml`, bộ đọc tự viết, phiên bản cũ và mới), menu `erui`,
-  `crash.rs`, probe, mã cắt animation, mã migration, nhúng mẫu cấu hình, cờ build (`strip`, `opt-level`,
-  `panic = "abort"`).
-- Dựng lại `cancel.rs` / `weapon.rs` / `probe.rs` cho sạch (ghi bitfield có kiểu) không tự làm hết Doina:
-  bản dựng lại chỉ sạch khi đồng thời đổi tên file cấu hình. Mã mới vẫn đáng giữ (ít `unsafe`, có test).
+Rows build on the one above unless they say otherwise. The DLL is always named `AnimCancel.dll`.
 
-## Cần biết khi quét
+| Variant | Detections | Engines |
+|---|---:|---|
+| Straight port | 13 | `Doina` family on 7 engines, CTX, Cynet, ESET, K7 (2), Malwarebytes |
+| Config and log file names built at run time from the DLL's own name, so `AnimCancel.toml` is not a string in the DLL | 5 | `Doina` and CTX gone |
+| Same, with the menu, probes, weapon rule and cancel code switched off | 5 | no change, so it is not the logic |
+| That minimal build with every identity string changed to `Zeta` | 1 | Cynet |
+| Run-time file names, PDB path changed to `mod.pdb` | 1 | Malwarebytes `RiskWare.GameMod` only |
+| + `InternalName` and `OriginalFilename` changed | 1 | Malwarebytes only |
+| + `ProductName` changed, `FileDescription` kept as `Anim Cancel - Elden Ring mod` | 1 | Malwarebytes only |
+| Run-time file names, PDB path changed, `FileDescription` changed to `Elden Ring mod` | **0** | none |
 
-- Kết quả VirusTotal **trôi theo thời gian**: các hãng thêm chữ ký rồi áp lên file cũ (SpeedMultiplier 1.1.0
-  từng 0/68, quét lại 18/67 cùng một file). `scripts/vt-scan.py` tra theo hash nên trả kết quả cũ lưu sẵn; muốn
-  số hiện tại phải bấm Reanalyze trên web.
-- Các bản gần giống nhau có thể chênh vài cờ; nên quét đúng file sẽ phát hành.
-- Cynet gắn cờ gần như mọi DLL hook game và ESET (`GameHack_AGen`) gắn cờ hầu hết mod; hai cờ này là mức nền.
+The last row is what the repository builds: `ProductName`, `InternalName` and `OriginalFilename` keep the
+mod's name.
+
+## What each string does
+
+| String in the DLL | Detections it caused |
+|---|---|
+| the literal config file name `AnimCancel.toml` | `Doina` family (7 engines) and CTX |
+| the PDB path `AnimCancel.pdb` in the debug directory | K7 (2), Cynet, ESET |
+| the mod's name in `FileDescription` | Malwarebytes `RiskWare.GameMod` |
+
+The mechanism is not known; these are the engines' reactions to the strings, measured one at a time.
+An earlier investigation had found only the file name; the other two appear as engines add signatures.
+
+## Rules this gives
+
+- Build a mod's file names from `shared::dll_stem` at run time, never spell `<Mod>.toml` or
+  `<Mod>.log` out.
+- Give the linker a neutral PDB path (`/PDBALTPATH:mod.pdb` in `build.rs`).
+- Keep the mod's name out of `FileDescription`; `ProductName` can carry it.
+
+## Rejected
+
+- Renaming the config file to `AnimCancelV1.toml` (the earlier workaround) removes the `Doina` family
+  only. It costs users a file name that no longer matches the DLL.
+- Imports are not the cause: the import table of AnimCancel is a subset of the one of a mod that has
+  one detection.
+- Removing code (menu, probes, weapon rule, the cancel logic itself) changed nothing.
+
+## Open risks
+
+- Results drift as engines add signatures; scan the exact file before relying on a number. A fresh
+  scan also lacks the engines that have not finished.

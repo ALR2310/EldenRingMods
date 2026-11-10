@@ -1,88 +1,77 @@
-# Công cụ IDAPython cho `eldenring.exe`
+# IDAPython tools for `eldenring.exe`
 
-Bộ script dùng lại được để hỏi database IDA có sẵn (`dumps/eldenring/<version>/eldenring.exe.i64`)
-những câu lặp đi lặp lại khi viết mod: hàm này làm gì, ai gọi nó, AOB này có
-duy nhất ở mọi bản exe không, field `+0x17C8` bị ai đọc ghi. Mỗi lần chạy mất
-~15 giây (mở lại database, không phân tích lại).
+Reusable scripts that query an existing IDA database
+(`dumps/eldenring/<version>/eldenring.exe.i64`) for the questions that keep coming up while
+writing mods: what does this function do, who calls it, is this AOB unique in every exe
+version, who reads or writes the field at `+0x17C8`. A run takes about 15 seconds (it opens
+the database, it does not re-analyze).
 
-## Chạy
+`dumps/` is a local folder that is not tracked by git. Put your own databases there. For
+Ghidra, a few general scripts are in `scripts/ghidra/`.
+
+## Running
 
 ```powershell
-pwsh scripts/ida/run.ps1 <script> [-Version <ver|all>] <tham số...>
+pwsh scripts/ida/run.ps1 <script> [-Version <ver|all>] <arguments...>
 ```
 
-- `-Version`: thư mục trong `dumps/eldenring/` (vd. `2.7.1.0` = patch 1.17.1,
-  `2.7.0.0` = 1.17, `2.6.2.0` = 1.16.2); `all` chạy lần lượt mọi version;
-  bỏ trống = version mới nhất.
-- Output ghi vào `dumps/eldenring/<version>/out/` (cùng file log `<script>.log`),
-  không vào git. Địa chỉ trong output đều là **RVA**.
-- Địa chỉ nhập vào: RVA (`1e92100`), VA (`0x141e92100`) hoặc tên symbol. Địa
-  chỉ nằm giữa hàm cũng được (vd. địa chỉ crash `exe+0x1E92100`).
-- Cần đóng IDA GUI trước (database không mở được 2 chỗ). idat mặc định ở
-  `D:\Programs\IDA Professional 9.3\idat.exe`; đổi bằng biến môi trường
-  `ER_IDAT`.
-- Script chỉ đọc, không đổi tên hay type trong database. Mỗi lần thoát idat vẫn
-  ghi lại file `.i64` (~1,4 GB, kích thước thay đổi không đáng kể).
+- `-Version`: a folder in `dumps/eldenring/` (for example `2.7.1.0`); `all` runs every
+  version in turn; omitted means the latest version.
+- Output goes to `dumps/eldenring/<version>/out/` (with a `<script>.log` file). Addresses in
+  the output are **RVAs**.
+- Addresses you pass can be an RVA (`1e92100`), a VA (`0x141e92100`) or a symbol name. An
+  address in the middle of a function is fine (for example a crash address `exe+0x1E92100`).
+- Close the IDA GUI first: a database cannot be open in two places. `idat` is taken from the
+  `ER_IDAT` environment variable, otherwise from `PATH`.
+- Scripts only read the database; they do not rename or retype anything. idat still writes
+  the `.i64` file back on exit (about 1.4 GB, the size barely changes).
 
-## Công cụ
+## Tools
 
-| Script | Dùng để | Ví dụ |
+| Script | Use | Example |
 |---|---|---|
-| `decompile.py` | Decompile hàm, kèm callee ngắn / string tham chiếu | `run.ps1 decompile 1e92100 --callees --strings` |
-| `disasm.py` | Disasm kèm byte thô (dựng AOB, chọn độ dài patch) | `run.ps1 disasm 25e0e0:30` hoặc `... --func` |
-| `xrefs.py` | Nơi gọi và tham chiếu dữ liệu, nhiều tầng | `run.ps1 xrefs 25e0e0 --depth=2 --decompile` |
-| `imports.py` | Import khớp một chuỗi (DLL hoặc tên), kèm nơi gọi | `run.ps1 imports dinput xinput GetForegroundWindow` |
-| `strings.py` | Từ string tìm ra hàm (ASCII lẫn UTF-16) | `run.ps1 strings "Warping to" --decompile` |
-| `aob.py` | Một mẫu AOB có duy nhất không, ở những bản exe nào | `run.ps1 aob -Version all "48 8B 05 ?? ?? ?? ?? 48 85 C0"` |
-| `vtable.py` | Slot của vtable theo tên class RTTI hoặc địa chỉ | `run.ps1 vtable CSChrBehaviorModule --slots=40` |
-| `callpath.py` | Có đường gọi trực tiếp từ A tới B không | `run.ps1 callpath <đích> <gốc>... --depth=4` |
-| `fieldaccess.py` | Mọi lệnh truy cập `[reg+offset]` (~1 phút) | `run.ps1 fieldaccess 17c8 --float` |
-| `switches.py` | Switch lớn trong cây gọi (bộ phân loại theo ID) | `run.ps1 switches <gốc> --depth=3 --min-cases=15` |
-| `decompile_range.py` | Decompile mọi hàm trong 1 dải RVA, lọc theo chuỗi (hàm không đi qua vtable) | `run.ps1 decompile_range 406000 40A000 --grep=a,b` |
-| `buddy_hud_check.py` | Kiểm các chỗ patch của `HubHpBars` (mẫu duy nhất, điểm đến đúng quan hệ); sửa mẫu ở đây khi sửa `buddy_hud.rs`. Cần một tham số giả (run.ps1 thêm khoảng trắng cuối đường dẫn khi không có tham số) | `run.ps1 buddy_hud_check -Version all --all` |
-| `export_all.py` | Xuất cả exe ra text để grep (rất nặng, vài giờ) | `run.ps1 export_all --asm` |
+| `decompile.py` | Decompile functions, with short callees and referenced strings | `run.ps1 decompile 1e92100 --callees --strings` |
+| `disasm.py` | Disassemble with raw bytes (build an AOB, pick a patch length) | `run.ps1 disasm 25e0e0:30` or `... --func` |
+| `xrefs.py` | Callers and data references, several levels | `run.ps1 xrefs 25e0e0 --depth=2 --decompile` |
+| `imports.py` | Imports matching a string (DLL or name), with call sites | `run.ps1 imports dinput xinput GetForegroundWindow` |
+| `strings.py` | Find functions from a string (ASCII and UTF-16) | `run.ps1 strings "Warping to" --decompile` |
+| `aob.py` | Is an AOB pattern unique, and in which exe versions | `run.ps1 aob -Version all "48 8B 05 ?? ?? ?? ?? 48 85 C0"` |
+| `vtable.py` | Vtable slots by RTTI class name or address | `run.ps1 vtable CSChrBehaviorModule --slots=40` |
+| `callpath.py` | Is there a direct call path from A to B | `run.ps1 callpath <target> <root>... --depth=4` |
+| `fieldaccess.py` | Every `[reg+offset]` access (about 1 minute) | `run.ps1 fieldaccess 17c8 --float` |
+| `switches.py` | Large switches in a call tree (ID dispatchers) | `run.ps1 switches <root> --depth=3 --min-cases=15` |
+| `decompile_range.py` | Decompile every function in an RVA range, filtered by strings (for functions not reached through a vtable) | `run.ps1 decompile_range 406000 40A000 --grep=a,b` |
+| `buddy_hud_check.py` | Checks the patch sites of SpiritMultiplier's `HubHpBars` (patterns unique, function relations) | `run.ps1 buddy_hud_check -Version all` |
+| `export_all.py` | Export the whole exe to text for grep (very heavy, hours) | `run.ps1 export_all --asm` |
 
-Tham số có khoảng trắng (mẫu AOB, chuỗi tìm) đặt trong nháy kép. Tham số mỗi
-công cụ ghi ở docstring đầu file.
+Quote arguments that contain spaces (AOB patterns, search strings). Each tool documents its
+arguments in the docstring at the top of the file.
 
-`aob.py` in dòng `RESULT UNIQUE|MULTI(n)|NONE ...` cho từng mẫu, nên
-`-Version all` cho ra bảng so sánh ngay trên console. Đây là bước kiểm tra
-trước khi đưa mẫu vào `common::memscan::find_pattern_in_module`: mẫu phải
-`UNIQUE` ở mọi bản exe mod hỗ trợ. Ví dụ, 1 mẫu thử trong hàm `0x25E0E0`
-(2.7.x) khớp đúng 1 chỗ ở cả 3 bản exe nhưng ở RVA `25E121` trên 2.6.2.0 so với
-`25E101` trên 2.7.0.0/2.7.1.0 - RVA lệch giữa các bản nên mod chỉ dùng AOB,
-không hard-code RVA.
+`aob.py` prints a `RESULT UNIQUE|MULTI(n)|NONE ...` line per pattern, so `-Version all`
+gives a comparison table on the console. Run it before putting a pattern into
+`common::memscan::find_pattern_in_module`: the pattern must be `UNIQUE` in every exe version
+the mod supports. RVAs shift between versions, which is why mods use AOB patterns and never
+hard-coded RVAs.
 
-## Viết thêm script
+## Writing a new script
 
-Thêm file `.py` vào thư mục này với khung:
+Add a `.py` file to this folder with this skeleton:
 
 ```python
 import os, sys, idc
 sys.path.insert(0, os.path.dirname(os.path.abspath(idc.ARGV[0])))
 import common
 
-common.init()                       # auto_wait + Hex-Rays + thư mục output
-pos, flags = common.parse_args()    # tham số vị trí + --cờ / --khóa=giá-trị
+common.init()                       # auto_wait + Hex-Rays + output folder
+pos, flags = common.parse_args()    # positional arguments + --flag / --key=value
 ...                                 # common.decompile / callees / callers / open_out
 common.finish()
 ```
 
-Lưu ý: giữ nguyên `import common` (không đổi thành `scripts.ida.common`). Chỉ thư mục
-chứa script nằm trong `sys.path` của idat, và công cụ di chuyển file của IDE có thể
-tự viết lại import khi chuyển thư mục.
+Keep `import common` as written (not `scripts.ida.common`). Only the script's own folder is
+on idat's `sys.path`, and an IDE's move-file refactoring may rewrite the import.
 
-Quy ước: script nhận tham số dòng lệnh (không sửa hằng số trong code), ghi
-output vào `common.OUT_DIR`, không đổi database, và có docstring ghi cách dùng.
-Probe một lần chỉ phục vụ 1 câu hỏi thì cứ viết ở scratchpad - nhưng nếu thấy
-mình viết lại lần thứ 2, hãy đưa nó vào đây dưới dạng có tham số.
-
-## Nguồn gốc
-
-Các công cụ này được rút ra từ ~110 script probe dùng một lần của các phiên
-nghiên cứu 2026-09-16 đến 2026-10-06 (warp/GameMan, spirit summon, FasterRevival,
-phantom/animation, crash dump). Probe gốc vốn chỉ nằm trong scratchpad tạm của
-từng phiên nên không được lưu; bản khôi phục từ transcript nằm ở
-`tmp/ida-scripts-recovered/` (không vào git, xoá được bất kỳ lúc nào), kèm
-`index.csv` ghi phiên và ngày. Giai đoạn trước dùng Ghidra: 6 script tổng quát còn giữ ở `scripts/ghidra/`
-chỉ để tham khảo, các script Ghidra một lần đã xoá hẳn.
+Conventions: take arguments on the command line (no constants to edit in the code), write
+output to `common.OUT_DIR`, never modify the database, and put usage in the docstring. A
+probe that answers one question once can live in a scratch folder, but the second time you
+write it again, add it here with parameters.

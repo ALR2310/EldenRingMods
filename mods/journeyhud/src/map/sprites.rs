@@ -29,7 +29,8 @@ pub struct Image {
 }
 
 /// The sheets of the layouts that hold the status icons, called `MENU_StatusIcon_<icon id>`.
-const STATUS_ICON_SHEETS: [&str; 4] = ["SB_Status_00", "SB_Status_01", "SB_Status_02", "SB_Status_03"];
+const STATUS_ICON_SHEETS: [&str; 4] =
+    ["SB_Status_00", "SB_Status_01", "SB_Status_02", "SB_Status_03"];
 
 /// What the sprites are read from, opened once: the layouts and the texture pack are
 /// decompressed a single time and each sheet is decoded at most once.
@@ -63,7 +64,10 @@ impl Menu {
     fn sprites(&mut self, refs: &[SpriteRef]) -> io::Result<Vec<Image>> {
         let rects = refs
             .iter()
-            .map(|r| sprite_rect(&self.layouts, r.sheet, r.name).ok_or_else(|| invalid(&format!("no sprite {}/{}", r.sheet, r.name))))
+            .map(|r| {
+                sprite_rect(&self.layouts, r.sheet, r.name)
+                    .ok_or_else(|| invalid(&format!("no sprite {}/{}", r.sheet, r.name)))
+            })
             .collect::<io::Result<Vec<_>>>()?;
         refs.iter().zip(rects).map(|(r, rect)| self.crop(r.sheet, rect)).collect()
     }
@@ -73,7 +77,11 @@ impl Menu {
         let mut found: Vec<(u32, &str, [u32; 4])> = Vec::new();
         for sheet in STATUS_ICON_SHEETS {
             for (name, rect) in sheet_sprites(&self.layouts, sheet) {
-                let Some(id) = name.strip_prefix("MENU_StatusIcon_").and_then(|n| n.parse::<u32>().ok()) else { continue };
+                let Some(id) =
+                    name.strip_prefix("MENU_StatusIcon_").and_then(|n| n.parse::<u32>().ok())
+                else {
+                    continue;
+                };
                 if !found.iter().any(|(known, ..)| *known == id) {
                     found.push((id, sheet, rect));
                 }
@@ -88,8 +96,13 @@ impl Menu {
         let mut found: Vec<(u16, &str, [u32; 4])> = Vec::new();
         for sheet in MAP_ICON_SHEETS {
             for (name, rect) in sheet_sprites(&self.layouts, sheet) {
-                let named = NAMED_MAP_ICONS.iter().find(|(sprite, _)| *sprite == name).map(|(_, id)| *id);
-                let Some(id) = named.or_else(|| name.strip_prefix("MENU_MAP_").and_then(|n| n.parse::<u16>().ok())) else { continue };
+                let named =
+                    NAMED_MAP_ICONS.iter().find(|(sprite, _)| *sprite == name).map(|(_, id)| *id);
+                let Some(id) = named
+                    .or_else(|| name.strip_prefix("MENU_MAP_").and_then(|n| n.parse::<u16>().ok()))
+                else {
+                    continue;
+                };
                 if !found.iter().any(|(known, ..)| *known == id) {
                     found.push((id, sheet, rect));
                 }
@@ -104,7 +117,9 @@ impl Menu {
 fn read_menu_file(game_dir: &Path, archive_path: &str) -> io::Result<Vec<u8>> {
     match std::fs::read(game_dir.join(archive_path.trim_start_matches('/'))) {
         Ok(data) => Ok(data),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => archive::open(game_dir, archive_path)?.read_all(),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            archive::open(game_dir, archive_path)?.read_all()
+        }
         Err(error) => Err(error),
     }
 }
@@ -124,13 +139,19 @@ pub struct Sprites {
 /// seconds and a few hundred MB while it runs, so call it once on a background thread.
 pub fn load(game_dir: &Path, refs: &[SpriteRef]) -> io::Result<Sprites> {
     let mut menu = Menu::open(game_dir)?;
-    Ok(Sprites { icons: menu.sprites(refs), map_icons: menu.map_icons(), status_icons: menu.status_icons() })
+    Ok(Sprites {
+        icons: menu.sprites(refs),
+        map_icons: menu.map_icons(),
+        status_icons: menu.status_icons(),
+    })
 }
 
 /// The sprites of `sheet` in the layouts: name (without `.png`) and `[x, y, width, height]`.
 fn sheet_sprites(layouts: &[u8], sheet: &str) -> Vec<(String, [u32; 4])> {
     let text = String::from_utf8_lossy(layouts);
-    let Some(atlas) = text.find(&format!("<TextureAtlas imagePath=\"{sheet}.png\">")) else { return Vec::new() };
+    let Some(atlas) = text.find(&format!("<TextureAtlas imagePath=\"{sheet}.png\">")) else {
+        return Vec::new();
+    };
     let atlas = &text[atlas..];
     let atlas = &atlas[..atlas.find("</TextureAtlas>").unwrap_or(atlas.len())];
     atlas.lines().filter_map(parse_sub_texture).collect()
@@ -149,7 +170,10 @@ fn parse_sub_texture(line: &str) -> Option<(String, [u32; 4])> {
 
 /// `[x, y, width, height]` of `name` in the layout of `sheet`.
 fn sprite_rect(layouts: &[u8], sheet: &str, name: &str) -> Option<[u32; 4]> {
-    sheet_sprites(layouts, sheet).into_iter().find(|(sprite, _)| sprite == name).map(|(_, rect)| rect)
+    sheet_sprites(layouts, sheet)
+        .into_iter()
+        .find(|(sprite, _)| sprite == name)
+        .map(|(_, rect)| rect)
 }
 
 /// The sheets of the layouts that hold the world map's icons: the base game's two and the expansion's.
@@ -176,7 +200,11 @@ impl Image {
             return Image { width: self.width, height: self.height, rgba: self.rgba.clone() };
         }
         let rect = [min[0], min[1], max[0] - min[0] + 1, max[1] - min[1] + 1];
-        crop(self, rect).unwrap_or_else(|_| Image { width: self.width, height: self.height, rgba: self.rgba.clone() })
+        crop(self, rect).unwrap_or_else(|_| Image {
+            width: self.width,
+            height: self.height,
+            rgba: self.rgba.clone(),
+        })
     }
 
     /// This image reduced by a whole factor (box filter, alpha-weighted) until neither side is
@@ -195,18 +223,16 @@ impl Image {
                     for sx in x * factor..((x + 1) * factor).min(self.width) {
                         let at = ((sy * self.width + sx) * 4) as usize;
                         let a = u32::from(self.rgba[at + 3]);
-                        for c in 0..3 {
-                            sum[c] += u32::from(self.rgba[at + c]) * a;
+                        for (c, total) in sum.iter_mut().enumerate() {
+                            *total += u32::from(self.rgba[at + c]) * a;
                         }
                         alpha += a;
                         count += 1;
                     }
                 }
-                if alpha == 0 {
-                    rgba.extend_from_slice(&[0, 0, 0, 0]);
-                } else {
-                    rgba.extend_from_slice(&[(sum[0] / alpha) as u8, (sum[1] / alpha) as u8, (sum[2] / alpha) as u8, (alpha / count) as u8]);
-                }
+                // A fully transparent block has no colour: all four channels come out 0.
+                rgba.extend(sum.map(|c| c.checked_div(alpha).unwrap_or(0) as u8));
+                rgba.push((alpha / count) as u8);
             }
         }
         Image { width, height, rgba }
@@ -237,9 +263,15 @@ fn decode_dds(dds: &Reader<'_>) -> io::Result<Image> {
     let (height, width) = (dds.u32(0xC)? as usize, dds.u32(0x10)? as usize);
     let mut pixels = vec![0u32; width * height];
     let result = match (dds.bytes(0x54, 4)?, dds.u32(0x80)?) {
-        (b"DX10", 98 | 99) => texture2ddecoder::decode_bc7(&dds.0[0x94..], width, height, &mut pixels),
-        (b"DX10", 71 | 72) => texture2ddecoder::decode_bc1(&dds.0[0x94..], width, height, &mut pixels),
-        (b"DX10", 77 | 78) => texture2ddecoder::decode_bc3(&dds.0[0x94..], width, height, &mut pixels),
+        (b"DX10", 98 | 99) => {
+            texture2ddecoder::decode_bc7(&dds.0[0x94..], width, height, &mut pixels)
+        }
+        (b"DX10", 71 | 72) => {
+            texture2ddecoder::decode_bc1(&dds.0[0x94..], width, height, &mut pixels)
+        }
+        (b"DX10", 77 | 78) => {
+            texture2ddecoder::decode_bc3(&dds.0[0x94..], width, height, &mut pixels)
+        }
         (b"DXT1", _) => texture2ddecoder::decode_bc1(&dds.0[0x80..], width, height, &mut pixels),
         (b"DXT5", _) => texture2ddecoder::decode_bc3(&dds.0[0x80..], width, height, &mut pixels),
         _ => return Err(invalid("unsupported texture format")),
@@ -337,71 +369,5 @@ mod tests {
         let part = crop(&sheet, [1, 0, 2, 2]).unwrap();
         assert_eq!(part.rgba.iter().step_by(4).copied().collect::<Vec<_>>(), vec![1, 2, 4, 5]);
         assert!(crop(&sheet, [2, 0, 2, 1]).is_err());
-    }
-}
-
-#[cfg(test)]
-mod extract {
-    use super::*;
-
-    /// Research: writes the HUD movie to `ER_GFX_OUT` for a look at its clip tree. Needs the game
-    /// (`ER_GAME_DIR`, default the Steam install). `cargo test -p journeyhud --release -- --ignored hud_movie --nocapture`.
-    #[test]
-    #[ignore]
-    fn hud_movie_from_the_installed_game() {
-        let dir = std::path::PathBuf::from(
-            std::env::var("ER_GAME_DIR").unwrap_or_else(|_| r"E:\SteamLibrary\steamapps\common\ELDEN RING\Game".to_string()),
-        );
-        let out = std::env::var("ER_GFX_OUT").expect("set ER_GFX_OUT");
-        let oodle = Oodle::load(&dir.join("oo2core_6_win64.dll")).unwrap();
-        for path in ["/menu/01_000_fe.gfx.dcx", "/menu/hi/01_000_fe.gfx.dcx", "/menu/01_000_fe.gfx", "/menu/hi/01_000_fe.gfx"] {
-            match archive::open(&dir, path) {
-                Ok(mut file) => {
-                    let raw = file.read_all().unwrap();
-                    let data = if path.ends_with(".dcx") { oodle.decompress_dcx(&raw).unwrap() } else { raw };
-                    println!("{path}: {} bytes", data.len());
-                    std::fs::write(&out, data).unwrap();
-                    return;
-                }
-                Err(e) => println!("{path}: {e}"),
-            }
-        }
-        panic!("no HUD movie found");
-    }
-
-    /// Research: writes the HUD bar sprites (`MENU_HP_Base*`, `MENU_FL_*Bar*`...) as PNG files into
-    /// `ER_SPRITE_OUT`, one per sprite named `<sheet>__<name>.png`, with their `[x, y, w, h]` printed.
-    /// `cargo test -p journeyhud --release -- --ignored hud_bar_sprites --nocapture`.
-    #[test]
-    #[ignore]
-    fn hud_bar_sprites_from_the_installed_game() {
-        let dir = std::path::PathBuf::from(
-            std::env::var("ER_GAME_DIR").unwrap_or_else(|_| r"E:\SteamLibrary\steamapps\common\ELDEN RING\Game".to_string()),
-        );
-        let out = std::path::PathBuf::from(std::env::var("ER_SPRITE_OUT").expect("set ER_SPRITE_OUT"));
-        std::fs::create_dir_all(&out).unwrap();
-        let mut menu = Menu::open(&dir).unwrap();
-        let text = String::from_utf8_lossy(&menu.layouts).into_owned();
-        let sheets: Vec<String> = text
-            .split("<TextureAtlas imagePath=\"")
-            .skip(1)
-            .filter_map(|part| part.split(".png\"").next().map(str::to_owned))
-            .collect();
-        let wanted = ["HP_Base", "FL_BarDeco", "FL_HP", "FL_BarEdge", "HP_Bar", "Bar_Loss", "Bar_Regain", "Condition", "CO_", "Gauge", "Waku", "Ruler", "Frame", "_FL_"];
-        for sheet in sheets {
-            for (name, rect) in sheet_sprites(&menu.layouts, &sheet) {
-                if !wanted.iter().any(|w| name.contains(w)) {
-                    continue;
-                }
-                println!("{sheet}/{name}: {rect:?}");
-                if let Ok(image) = menu.crop(&sheet, rect) {
-                    let file = std::fs::File::create(out.join(format!("{sheet}__{name}.png"))).unwrap();
-                    let mut encoder = png::Encoder::new(file, image.width, image.height);
-                    encoder.set_color(png::ColorType::Rgba);
-                    encoder.set_depth(png::BitDepth::Eight);
-                    encoder.write_header().unwrap().write_image_data(&image.rgba).unwrap();
-                }
-            }
-        }
     }
 }

@@ -1,12 +1,12 @@
 //! Keyboard and mouse injection into the game's DirectInput reads. The hooks themselves
-//! (`GetDeviceState`, `GetDeviceData`) belong to `common::overlay` (one hook per function, and
+//! (`GetDeviceState`, `GetDeviceData`) belong to `shared::overlay` (one hook per function, and
 //! the menu needs the same ones); this module registers an `InputExtension` with them.
 //! Findings and open questions: `docs/background_input.md`.
 
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU8, AtomicU32, Ordering};
 
-use common::overlay::{self, InputExtension};
+use shared::overlay::{self, InputExtension};
 
 const KEYBOARD_STATE_SIZE: u32 = 256;
 
@@ -30,7 +30,7 @@ pub static BACKGROUND: AtomicBool = AtomicBool::new(true);
 
 /// While the game window is not really in front, drop the real keyboard and
 /// mouse: with the foreground gate removed, DirectInput would otherwise feed
-/// the game everything the user types in other apps.
+/// the game everything typed in other apps.
 pub static ISOLATE: AtomicBool = AtomicBool::new(true);
 
 fn isolating() -> bool {
@@ -71,6 +71,7 @@ pub static DATA_FLAGS: AtomicU32 = AtomicU32::new(0);
 
 /// Adds the synthetic mouse to a mouse state buffer (at least 16 bytes).
 unsafe fn add_mouse(buf: *mut u8) {
+    // SAFETY: Win32 and DirectInput calls with the pointers the caller passed.
     unsafe {
         let axes = buf as *mut i32;
         let dx = MOUSE_DX_ONCE.swap(0, Ordering::Relaxed) + MOUSE_DX_RATE.load(Ordering::Relaxed);
@@ -93,6 +94,7 @@ fn filter_state(size: u32, data: *mut c_void, mut hr: i32) -> i32 {
         KEYBOARD_STATE_SIZE => {
             KEYBOARD.record(hr);
             if !data.is_null() {
+                // SAFETY: the buffer is the one the caller passed, of that size.
                 let buf = unsafe { std::slice::from_raw_parts_mut(data as *mut u8, 256) };
                 if hr < 0 && BACKGROUND.load(Ordering::Relaxed) {
                     buf.fill(0);
@@ -113,12 +115,15 @@ fn filter_state(size: u32, data: *mut c_void, mut hr: i32) -> i32 {
             MOUSE.record(hr);
             if !data.is_null() {
                 if hr < 0 && BACKGROUND.load(Ordering::Relaxed) {
+                    // SAFETY: the buffer is the one the caller passed, of that size.
                     unsafe { std::ptr::write_bytes(data as *mut u8, 0, size as usize) };
                     hr = 0;
                 } else if hr >= 0 && isolating() {
+                    // SAFETY: the buffer is the one the caller passed, of that size.
                     unsafe { std::ptr::write_bytes(data as *mut u8, 0, size as usize) };
                 }
                 if hr >= 0 {
+                    // SAFETY: the buffer is the one the caller passed, of that size.
                     unsafe { add_mouse(data as *mut u8) };
                 }
             }
@@ -137,6 +142,7 @@ fn filter_data(obj_size: u32, _data: *mut c_void, in_out: *mut u32, flags: u32, 
     DATA_FLAGS.store(flags, Ordering::Relaxed);
     DATA.record(hr);
     if hr >= 0 && !in_out.is_null() && isolating() {
+        // SAFETY: the buffer is the one the caller passed, of that size.
         unsafe { *in_out = 0 };
     }
     hr

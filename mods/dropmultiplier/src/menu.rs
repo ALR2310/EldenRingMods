@@ -1,65 +1,53 @@
-//! Optional in-game menu via the ERNativeUI host (see `common::erui`).
-//! Without `ERNativeUI.dll` the mod works exactly as before, from the ini
-//! file only. Layout (System > Game Options):
-//!
-//! ```text
-//! Drop Multiplier            -> opens a page with:
-//!   Drop Chance              -> Mode        Multiply chance / Fixed chance
-//!                               Multiplier  number 0..1000   (Mode: multiply)
-//!                               Percentage  slider 0..100    (Mode: fixed)
-//!   Materials                -> Crafting     number 0..1000
-//!                               Upgrade      number 0..1000
-//!                               Unique       number 0..1000
-//!   Log file                 on/off
-//! ```
-//!
-//! The multipliers are native sliders (0..10, step 0.5) when the host has
-//! them, else typed text rows (the ini holds decimals up to 1000); the
-//! percentage is a whole-percent slider. Changes are written to the ini once
-//! the player stops for a second, then re-applied from the original drop
-//! tables through the same path as the reload key.
+//! Optional in-game menu through the ERNativeUI host; without it the mod runs from the TOML file.
+//! Multipliers are sliders from 0 to 10 in steps of 0.5 (a text row up to 1000 on older hosts), the
+//! fixed chance a whole-percent slider. A change is saved a second after the player stops, then
+//! applied again from the original drop tables, like the reload key.
 
 use std::sync::OnceLock;
 
-use common::config;
-use common::erui::{self, MenuBuilder, NumberSetting, Setting};
-use common::i18n::Catalog;
+use shared::i18n::Catalog;
+use shared::menu::{self, MenuBuilder, NumberSetting, Setting};
 
-/// Upper bound of the typed multipliers (the mod only clamps at 0 below).
+use crate::config;
+
+/// Upper bound of a typed multiplier; the mod only clamps at 0 below.
 const MAX_MULTIPLIER: f64 = 1000.0;
 
-static MENU: OnceLock<erui::Menu> = OnceLock::new();
+static MENU: OnceLock<menu::Menu> = OnceLock::new();
 
-static MODE: Setting = Setting::int("Mode");
-static MULTIPLIER: NumberSetting = NumberSetting::new("Multiplier", 0.0, MAX_MULTIPLIER, None).slider(0.0, 10.0, 0.5);
-static PERCENTAGE: Setting = Setting::int("Percentage");
-static CRAFTING: NumberSetting = NumberSetting::new("Crafting", 0.0, MAX_MULTIPLIER, None).slider(0.0, 10.0, 0.5);
-static UPGRADE: NumberSetting = NumberSetting::new("Upgrade", 0.0, MAX_MULTIPLIER, None).slider(0.0, 10.0, 0.5);
-static UNIQUE: NumberSetting = NumberSetting::new("Unique", 0.0, MAX_MULTIPLIER, None).slider(0.0, 10.0, 0.5);
-static LOG_FILE: Setting = Setting::flag("LogFile");
+static MODE: Setting = Setting::int("Drop.Mode");
+static MULTIPLIER: NumberSetting =
+    NumberSetting::new("Drop.Multiplier", 0.0, MAX_MULTIPLIER, None).slider(0.0, 10.0, 0.5);
+// `Percentage` is a TOML float, so the slider's whole number is saved as `45.0`.
+static PERCENTAGE: Setting = Setting { key: "Drop.Percentage", format: float_text, apply: None };
+static CRAFTING: NumberSetting =
+    NumberSetting::new("Materials.Crafting", 0.0, MAX_MULTIPLIER, None).slider(0.0, 10.0, 0.5);
+static UPGRADE: NumberSetting =
+    NumberSetting::new("Materials.Upgrade", 0.0, MAX_MULTIPLIER, None).slider(0.0, 10.0, 0.5);
+static UNIQUE: NumberSetting =
+    NumberSetting::new("Materials.Unique", 0.0, MAX_MULTIPLIER, None).slider(0.0, 10.0, 0.5);
+static LOG_FILE: Setting = Setting::flag("Logging.LogFile");
 
-/// The menu texts, one file per language (`locales/`); English is the fallback.
 static TEXT: Catalog = Catalog::new(&[
     ("english", include_str!("../locales/en.json")),
     ("vietnamese", include_str!("../locales/vi.json")),
 ]);
 
-/// The text of `key` in the host language.
 fn t(key: &str) -> String {
     TEXT.tr(key)
 }
 
+fn float_text(value: u8) -> String {
+    format!("{value}.0")
+}
+
 fn mode_row() -> u8 {
-    config::get_int("Mode", 0).clamp(0, 1) as u8
+    config::get().drop.mode.clamp(0, 1) as u8
 }
 
-/// The fixed chance as a slider position (whole percent, 0..=100).
+/// The fixed chance as a slider position: a whole percent from 0 to 100.
 fn percentage_row() -> u8 {
-    config::get_double("Percentage", 50.0).round().clamp(0.0, 100.0) as u8
-}
-
-fn log_file_row() -> u8 {
-    config::get_bool("LogFile", false) as u8
+    config::get().drop.percentage.round().clamp(0.0, 100.0) as u8
 }
 
 fn build(b: &mut MenuBuilder) -> Result<(), String> {
@@ -68,78 +56,61 @@ fn build(b: &mut MenuBuilder) -> Result<(), String> {
     let materials = b.submenu(page, &t("materials.title"), &t("materials.help"))?;
 
     let modes = [t("mode.options.multiply"), t("mode.options.fixed")];
-    let mode_refs: Vec<&str> = modes.iter().map(String::as_str).collect();
-    b.choice(drops, &t("mode.label"), &t("mode.help"), &mode_refs, &MODE, mode_row)?;
-    b.number(
-        drops,
-        &t("multiplier.label"),
-        &t("multiplier.help"),
-        &MULTIPLIER,
-        || config::get_double("Multiplier", 2.0),
-    )?;
+    let modes: Vec<&str> = modes.iter().map(String::as_str).collect();
+    b.choice(drops, &t("mode.label"), &t("mode.help"), &modes, &MODE, mode_row)?;
+    b.number(drops, &t("multiplier.label"), &t("multiplier.help"), &MULTIPLIER, || {
+        config::get().drop.multiplier
+    })?;
     b.slider(
         drops,
         &t("percentage.label"),
         &t("percentage.help"),
-        0,
-        100,
+        (0, 100),
         &PERCENTAGE,
         percentage_row,
     )?;
-    b.number(
-        materials,
-        &t("crafting.label"),
-        &t("crafting.help"),
-        &CRAFTING,
-        || config::get_double("Crafting", 1.0),
-    )?;
-    b.number(
-        materials,
-        &t("upgrade.label"),
-        &t("upgrade.help"),
-        &UPGRADE,
-        || config::get_double("Upgrade", 1.0),
-    )?;
-    b.number(
-        materials,
-        &t("unique.label"),
-        &t("unique.help"),
-        &UNIQUE,
-        || config::get_double("Unique", 1.0),
-    )?;
-    b.toggle(page, &t("log.label"), &t("log.help"), &LOG_FILE, log_file_row)?;
-    Ok(())
+    b.number(materials, &t("crafting.label"), &t("crafting.help"), &CRAFTING, || {
+        config::get().materials.crafting
+    })?;
+    b.number(materials, &t("upgrade.label"), &t("upgrade.help"), &UPGRADE, || {
+        config::get().materials.upgrade
+    })?;
+    b.number(materials, &t("unique.label"), &t("unique.help"), &UNIQUE, || {
+        config::get().materials.unique
+    })?;
+    b.toggle(page, &t("log.label"), &t("log.help"), &LOG_FILE, || {
+        config::get().logging.log_file as u8
+    })
 }
 
-/// Registers the menu on a worker thread. Must start early: the host closes
-/// registration shortly after startup.
-pub fn start(hmodule: u64, ini_path: String) {
-    erui::start_saver(ini_path, Some(erui::reload_from_menu));
-    erui::spawn_menu(&MENU, hmodule, "drop-multiplier", "Drop Multiplier", build);
+/// Must start early: the host closes registration shortly after startup.
+pub fn start(hmodule: u64) {
+    menu::start_saver(config::save, Some(saved));
+    menu::spawn_menu(&MENU, hmodule, "drop-multiplier", "Drop Multiplier", build);
 }
 
-/// After an ini reload: show the reloaded values in the menu.
+/// A saved change takes effect like a reload, minus the menu refresh: the rows already show it.
+fn saved() {
+    shared::logger::set_enabled(config::get().logging.log_file);
+    crate::drop_rate::request_apply();
+}
+
 pub fn sync_from_config() {
-    erui::sync(&MENU);
+    menu::sync(&MENU);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Every key the menu passes to `t` is in every language file, and the files
-    /// have the same keys (nothing missing, nothing left over).
+    /// Every key the menu uses is in every language file, and the files have the same keys.
     #[test]
     fn language_files_match_the_menu_keys() {
         TEXT.assert_matches_source(include_str!("menu.rs"), 10);
     }
 
-    /// Every row meant to be a native slider has a valid range and step (else
-    /// it silently stays a typed row).
     #[test]
-    fn slider_rows_have_a_valid_range() {
-        for setting in [&MULTIPLIER, &CRAFTING, &UPGRADE, &UNIQUE] {
-            assert!(setting.has_slider(), "{} would not be a slider", setting.key);
-        }
+    fn the_fixed_chance_is_saved_as_a_float() {
+        assert_eq!((PERCENTAGE.format)(45), "45.0");
     }
 }

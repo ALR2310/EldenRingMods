@@ -1,66 +1,128 @@
-# Tự nhặt qua hook `ExecActionButton`
+# Auto pickup through `ExecActionButton`
 
-**Status 2026-10-26: đã thử trong game trên 2.7.2.0 và người dùng xác nhận chạy đúng (các nhóm, tầm nhặt, tạm dừng khi chiến đấu). Hook `CS::CSActionButtonManImp::ExecActionButton` trả "đã kích hoạt" cho ID ActionButtonParam của nhóm được bật; nới tầm bằng cách nhân `radius/height/baseHeightOffset`. Cờ "đang chiến đấu" lấy từ `CSSound` theo offset của Erd-Tools; chạy đúng trong game, nhưng chưa tự tìm được chỗ ghi byte `+4` trong exe.**
+Status: **Confirmed** in game on 2.7.2.0 for the groups, the pickup range and pausing in
+combat. The combat flag offset is **Inferred** (see below). Conventions:
+[research notes](../../../docs/research/README.md).
 
-## Nguồn tham khảo
+## Question
 
-Ba mod có cùng tính năng, cùng bốn nhóm và cùng quy tắc "chờ khi đang chiến đấu":
+How can a mod pick things up without the player pressing the interact button, while leaving
+levers, doors, graces and conversations alone?
 
-- **Elden_Ring_game_tools** (`tmp/repos/Elden_Ring_game_tools/Source/Features/AutoPickup.cpp` + `.asm`): có mã nguồn, là nguồn ID và offset của mod này. Chứa cả `Erd-Tools-CPP-main` nhưng thư mục đó chỉ còn README và minhook.
-- **Erd-Tools-CPP** (`tmp/repos/Erd-Tools-CPP`, bản dựng thành `ErdTools.dll` của Convergence; `Hook/FeHook.cpp`, `Hook/ParamHook.cpp`, `ASM/ExecActionButtonParamWrapper.asm`): có mã nguồn, là gốc của Elden_Ring_game_tools. Cùng mẫu AOB, cùng 4 nhóm ID, cùng cách nhân `radius/height/baseHeightOffset` (một lần lúc khởi động, không ghi lại mỗi frame). Mục `[FRONTEND] pickup_*`, `[PARAM] harvest/item/corpse_loot/lost_runes_*_multiplier` trong `erd_tools.ini`. Có thêm `lock_*` (chặn tương tác khi đang chiến đấu, mod này không có) và `vanilla_pickup_animations`: chỉ sửa `PlayerCommonParam` (`animeID_DropItemPick=60070`, `animeID_SleepCollectorItemPick=50250`, `animeID_MaterialItemPick=999999`), không liên quan tới cơ chế tự nhặt; mod này không đụng animation.
-- **Solid_Uncapper.dll**: chỉ có DLL, mục `Auto Pickup` trong ini; không đụng cần gạt, cửa, hội thoại.
+## Mechanism
 
-Chưa ai trong ba mod được dịch ngược ở đây; mod này chỉ lấy cơ chế và kiểm lại điểm hook trong exe. Solid Uncapper chỉ có DLL nên không đối chiếu được mã.
+`ExecActionButton(this, id, float, a4, ...)` is the function the game calls to ask whether
+the interaction `id` (a row of `ActionButtonParam`) is triggered. It returns 0 for no and 1
+for yes. The hook returns 1 for any `id` that belongs to an enabled group, without running
+the original function, so the game continues as if the player had pressed the button. Every
+other id runs the original function unchanged.
 
-## Cơ chế
+The groups are defined in `src/groups.rs`:
 
-`ExecActionButton(this, id, float, a4, ...)` là hàm game hỏi "tương tác `id` (dòng ActionButtonParam) có được kích hoạt không". Trả 0 = không, 1 = có. Hook trả 1 thẳng cho ID thuộc nhóm đang bật, không chạy hàm gốc; game tiếp tục như thể người chơi đã bấm nút nhặt. ID ngoài các nhóm (cần gạt, cửa, grace, nói chuyện) chạy hàm gốc như cũ.
+| Group | IDs | Default |
+|---|---:|---|
+| Materials | 112 | on |
+| Items on the ground | 14 | on |
+| Corpse loot and remains | 5 | on |
+| Dropped runes | 1000 | on |
+| Chests | 4300 | off (mimic chests open the same way) |
 
-Nhóm (ID trong `src/groups.rs`): nguyên liệu (112 ID), vật phẩm trên đất (14), đồ trên xác và hài cốt (5), rune rơi (1000), rương (4300, mặc định tắt).
+The ID lists were compared against the `ActionButtonParam` exports of vanilla and of a large
+overhaul mod; the 98 original IDs exist in both and are identical. Where this list differs
+from the one it started from:
 
-ID khởi đầu lấy từ `AutoPickup.cpp`, rồi đối chiếu với bảng `ActionButtonParam` export của vanilla và Convergence (`tmp/ActionButtonParam.csv`, `tmp/convergence_csv/`; 98 ID gốc đều có ở cả hai và giống hệt nhau). Chỉnh so với bản gốc:
+- The source array declared 78 elements but held 76 material IDs; the two trailing zeros broke
+  the sorted order a binary search needs.
+- `4300` ("Search treasure chest") was moved out of Items into its own group.
+- `4200-4202` ("Pillage remains") and `9532` ("Pillage corpse") moved from Items to corpse loot.
+- Added `207850`, `207860-207894` (36 DLC "Acquire materials" rows, parallel to `7850` and
+  `7860-7878`), plus `209210`, `209524` and `4261` ("Pick up item"). These additions rest on
+  row names and table structure and have not been tried in game (**Inferred**).
 
-- Mảng gốc khai báo 78 phần tử nhưng chỉ có 76 ID nguyên liệu, hai ô cuối là 0 làm `binary_search` của bản C++ chạy trên mảng không tăng dần.
-- `4300` ("Search treasure chest") nằm trong nhóm Items của bản gốc: tách thành nhóm `Chests`, mặc định tắt (rương mimic mở cùng cách).
-- `4200-4202` ("Pillage remains") và `9532` ("Pillage corpse") chuyển từ Items sang CorpseLoot.
-- Thêm `207850` và `207860-207894` ("Acquire materials", 36 dòng, nguyên liệu DLC; song song với `7850`, `7860-7878` của game gốc, bản gốc chỉ có tới `207844`), và `209210`, `209524`, `4261` ("Pick up item"; `4261` chỉ có ở Convergence). Các ID thêm này dựa vào tên và cấu trúc bảng, chưa thử trong game.
+The pickup range multiplies `radius`, `height` and `baseHeightOffset` of the enabled groups'
+rows by `Range`. The original values are stored on the first scan (`src/range.rs`), so changing
+`Range` or disabling a group always starts from the game's own numbers. The same values also
+decide how far away the pickup prompt appears.
 
-Tầm: nhân `radius`, `height`, `baseHeightOffset` của các dòng nhóm bật theo `Range`. Giá trị gốc lưu ở lần quét đầu (`src/range.rs`), nên đổi `Range` hay tắt nhóm luôn tính từ số gốc của game, không cộng dồn. Cùng giá trị này quyết định cả khoảng cách hiện gợi ý nhặt.
+## Hook point
 
-## Xung đột với mod khác
+The core function is `sub_140A64680` on 2.7.2.0 (it uses the string
+`CS::CSActionButtonManImp::ExecActionButton`): `a1` is the `CSActionButtonManImp`, `a2` the id.
+Two wrapper functions next to each other forward to it:
 
-Hook thay 16 byte đầu hàm bằng một lệnh nhảy. Nếu mod khác đã làm vậy trước (nạp trước), mẫu đầy đủ không còn khớp. `hook.rs::scan` khi đó tìm phần đuôi của mẫu (luôn cách đầu hàm đúng 0x10 byte, duy nhất ở cả 4 bản exe) và hỏi `common::conflict::foreign_hook_at` ở địa chỉ đầu hàm; có lệnh nhảy ra ngoài exe thì ghi log, hiện hộp thoại và tắt hook (cùng cách `weightmultiplier` làm, xem `shared/docs/conflict.md`). Chưa thử với mod xung đột thật: chỉ có test của `common` cho việc nhận dạng lệnh nhảy. Mod khác hook ở hàm bọc `A673D0`/`A674B0` (như bản Erd-Tools gốc) thì không xung đột, vì chúng gọi hàm lõi và hook ở đây vẫn chạy.
+- `A673D0` calls it directly and has 21 callers.
+- `A674B0` takes the lock at `a1 + 144` first, then calls it, and has 2 callers.
 
-## Probe (`Logging.PickupProbe`)
+A pattern taken from a wrapper matches both of them, so a hook there reaches only one. The mod
+hooks the core function to cover both.
 
-Tùy chọn log mặc định tắt (`src/probe.rs`): hook chỉ đẩy `(id, đã xử lý)` vào một vòng đệm atomic cố định (không cấp phát, không khoá, không ghi file), task mỗi frame đọc ra và ghi `Probe: picked <id> <nhóm> xN` (tối đa 1 lần/giây mỗi ID), `Probe: skipped <id> <nhóm>` (ID của nhóm đang tắt hoặc đang dừng vì chiến đấu, 1 lần) và `Probe: other <id>` (tương tác ngoài mọi nhóm, 1 lần mỗi ID; dùng để tìm ID của một vật phẩm mà mod không nhặt, ví dụ cử chỉ ở Stormhill). Khi `NoPickupAnimation` được áp dụng, probe còn ghi `Probe: animation ...` với giá trị đang có trong param sau khi ghi (chỉ cho biết param đã đổi, không cho biết game có bỏ animation).
+The 61-byte pattern in `src/hook.rs` is the core function's prologue and is unique on all
+four reference builds:
 
-## Giấy phép và ghi công
+| Build | RVA |
+|---|---|
+| 2.6.2.0 | `A62EE0` |
+| 2.7.0.0, 2.7.1.0 | `A641C0` |
+| 2.7.2.0 | `A64680` |
 
-Erd-Tools-CPP (Nordgaren) dùng GPLv3; README của nó cho phép dùng trong mod khác với điều kiện dẫn link về repo, và nói tác giả không cho đăng lại **mod của họ** lên Nexus. Mod này là mã Rust viết mới: lấy từ nguồn đó ý tưởng (hook hàm tương tác), danh sách ID ActionButtonParam (dữ liệu của game, đã đối chiếu và chỉnh) và offset của `CSSound`. Trang Nexus ghi công Erd-Tools-CPP và Elden_Ring_game_tools (ankerlcg1996) kèm link. Nếu tác giả phản đối thì gỡ trang, không đổi ghi công.
+The first 16 bytes (seven instructions, up to `SUB RSP,0F0h`) contain no RIP-relative
+operand, so they are relocated verbatim. The trampoline saves `rcx/rdx/r8/r9` and `xmm0-3`,
+calls `pickup_filter(this, id)` (two atomic reads, no allocation, no lock) and returns 1 when
+the result is non-zero. Otherwise it restores the registers and jumps into the relocated bytes,
+which live in memory allocated at install time (see [antivirus.md](antivirus.md) for why not in
+a static).
 
-## Điểm hook
+## Conflicts with other hooks
 
-Hàm lõi là `sub_140A64680` (2.7.2.0; chuỗi `CS::CSActionButtonManImp::ExecActionButton`): `a1` = CSActionButtonManImp, `a2` = ID. Hai hàm bọc cạnh nhau đều chuyển tiếp vào nó:
+The hook overwrites the first 16 bytes of the function with a jump. If another mod hooked it
+first, the full pattern no longer matches. `hook.rs::scan` then looks for the tail of the
+pattern, which always sits exactly 0x10 bytes after the function start and is unique on all
+four builds, and asks `common::conflict::foreign_hook_at` whether a jump leaving the
+executable is present. If so it logs the conflict, shows a message box and disables the hook.
+This is covered by unit tests of the jump detection; it has **not** been tried against a real
+conflicting mod. A mod that hooks the wrapper functions does not conflict, because the wrappers
+still call the core function.
 
-- `A673D0`: gọi thẳng, 21 nơi gọi.
-- `A674B0`: lấy khoá `a1 + 144` rồi gọi (qua `A64AA0`), 2 nơi gọi (`3DD060`, `577F90`).
+## Probe
 
-AOB của Erd-Tools (mã Elden_Ring_game_tools) khớp **cả hai hàm bọc** (2 kết quả ở mọi bản exe) và `modutils::scan` lấy kết quả đầu, nên bản C++ chỉ hook một trong hai. Mod này hook hàm lõi để bao phủ cả hai.
+`Logging.PickupProbe` is off by default (`src/probe.rs`). The hook only pushes `(id, handled)`
+into a fixed atomic ring buffer (no allocation, no lock, no file write). A per-frame task
+reads it and logs:
 
-Mẫu 61 byte ở `src/hook.rs` (prologue của hàm lõi) **duy nhất ở cả 4 bản exe**: 2.6.2.0 (`A62EE0`), 2.7.0.0 và 2.7.1.0 (`A641C0`), 2.7.2.0 (`A64680`). Kiểm bằng `scripts/ida/run.ps1 aob -Version all`. 16 byte đầu (7 lệnh, tới trước `SUB RSP,0F0h`) không có lệnh RIP-relative nên relocate nguyên văn.
+- `Probe: picked <id> <group> xN`, at most once per second per id;
+- `Probe: skipped <id> <group>` for an id of a disabled group or one paused by combat, once;
+- `Probe: other <id>` for an interaction outside every group, once per id. This is how to find
+  the id of an item the mod does not pick up.
 
-Trampoline lưu `rcx/rdx/r8/r9` và `xmm0-3`, gọi `pickup_filter(this, id)` (chỉ đọc hai atomic, không cấp phát, không khoá). Trả khác 0 thì `eax = 1; ret`, ngược lại khôi phục thanh ghi và nhảy vào 16 byte đã relocate.
+## Combat flag
 
-## Lỗi đã gặp: nhảy về bằng `rax` (2026-10-26)
+`CSSound` singleton, `+0x328` points to a struct whose byte `+4` is "in combat". The offsets
+match those published by a third-party tool. The pattern
+`48 8B 05 ?? ?? ?? ?? 48 85 C0 ?? ?? 83 CD 02 83 B8 ?? ?? ?? ?? 00 89 6C 24 ?? 0F 95 C1` finds the
+pointer; it is unique on all four builds and on 2.7.2.0 lies in `sub_1404395D0` (RVA `439A63`),
+which reads global `143D8AD68` and compares `[+0x314]` with 0.
 
-Lần thử đầu crash 3 giây sau khi vào thế giới: `illegal instruction at eldenring.exe+0xA64678`, `rdx=0x17D5` (ID 6101, "Rest at site of grace", ngoài mọi nhóm nên hook cho chạy hàm gốc). Nguyên nhân: đường nhảy về sau 16 byte relocate dùng `mov rax, imm64; jmp rax`, trong khi prologue của hàm để `rax` = `rsp` lúc vào và nửa sau hàm lưu thanh ghi theo `rax` (`mov [rax+8], rbx`, `[rax+10h]`, `movaps [rax-38h], xmm6`). Với `rax` = địa chỉ code thì các lệnh đó ghi đè lên chính code của hàm (trang đã là RWX sau khi patch), và hàm chạy vào đoạn hỏng. `hit_hook` của autoregen không dính vì hàm của nó dùng `r11`. Sửa: nhảy về bằng `mov r11, imm64; jmp r11` (13 byte, `hook.rs::jmp_via_r11`). Quy tắc khi relocate prologue: trước khi chọn thanh ghi cho lệnh nhảy, kiểm hàm còn dùng thanh ghi đó sau prologue không.
+**Inferred.** It has not been proven that `143D8AD68` is the singleton registered under the
+name `CSSound`, and no writer of the `+4` byte was found (`fieldaccess 328` points to stubs of
+another class, `CSSoundImp`). In game, pausing in combat behaves correctly. The flag is read
+every frame in a `FrameBegin` task, not inside the hook, because singleton lookup is not safe
+in a hook, and the pointer is validated before use.
 
-## Cờ chiến đấu
+## Rejected paths and failures
 
-`CSSound` (singleton theo tên, đăng ký ở `sub_1400B0470`) `+0x328` -> struct, byte `+4` = đang chiến đấu. Offset giống hệt nhau ở Erd-Tools-CPP (`ErdTools_globals.h`: `CSSound.undefined[0x328]` rồi `soundCombatStruct`, `SoundCombatStruct.undefined[4]` rồi `isInCombat`) và Elden_Ring_game_tools. Erd-Tools tìm con trỏ `CSSound` bằng AOB `48 8B 05 ?? ?? ?? ?? 48 85 C0 ?? ?? 83 CD 02 83 B8 ?? ?? ?? ?? 00 89 6C 24 ?? 0F 95 C1`; mẫu này duy nhất ở cả 4 bản exe và trên 2.7.2.0 rơi vào `sub_1404395D0` (RVA `439A63`), đọc global `143D8AD68` rồi so `[+0x314]` với 0, nên đúng là một đối tượng có các field quanh `+0x314..+0x328`. **Chưa tự xác nhận**: chưa chứng minh `143D8AD68` chính là singleton đăng ký tên `CSSound`, và chưa tìm được chỗ ghi byte `+4`; `fieldaccess 328` chỉ ra các stub của CSSoundImp (class khác). Đọc mỗi frame ở task `FrameBegin` (không trong hook: tra singleton không an toàn trong hook) và kiểm con trỏ hợp lệ. Cần xác nhận trong game: vào trận, xem log/hành vi `PauseInCombat`.
+- **Returning to the original code through `rax`.** The first build crashed three seconds after
+  entering the world with `illegal instruction at eldenring.exe+0xA64678`, `rdx=0x17D5`
+  (id 6101, "Rest at site of grace", outside every group, so the hook let the original run).
+  The jump back after the 16 relocated bytes used `mov rax, imm64; jmp rax`, but the prologue
+  leaves `rax` equal to the entry `rsp` and the second half of the function stores registers
+  through `rax` (`mov [rax+8], rbx`, `movaps [rax-38h], xmm6`). With `rax` holding a code
+  address those stores overwrote the function's own code. The fix is `mov r11, imm64; jmp r11`
+  (`hook.rs::jmp_via_r11`). When relocating a prologue, check that the function does not use
+  the register chosen for the jump after the prologue.
 
-## Rủi ro chưa kiểm
+## Open risks
 
-- Trả 1 bỏ qua cả điều kiện của hàm gốc (`a4` hoặc `sub_140A656D0(a1)` trả 0 sớm). Mọi mod tham khảo làm vậy; nếu thấy nhặt khi đang mở menu, cutscene hay đang ngồi ngựa thì thêm điều kiện ở đây.
-- Chưa thử cùng `Solid_Uncapper`/`ErdTools.dll`: tắt `Auto Pickup` ở các DLL đó khi thử (xem quy tắc "tin kết quả thử có điều kiện" ở `AGENTS.md`).
+- Returning 1 skips the original function's own conditions (`a4`, or `sub_140A656D0(a1)`
+  returning 0 early). If pickup happens while a menu is open, during a cutscene or on
+  horseback, add that condition here.
+- Not tested together with other DLLs that offer auto pickup; disable those when testing.

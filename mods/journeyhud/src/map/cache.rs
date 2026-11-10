@@ -17,7 +17,12 @@ impl<K: PartialEq + Copy, T> Refreshed<K, T> {
     /// The items for `key`: the ones kept if they were built for the same key less than `max_age`
     /// ago, else what `build` returns. `build` returns `None` when it cannot yet (then nothing
     /// is kept and the next call asks it again).
-    pub fn get(&mut self, key: K, max_age: Duration, build: impl FnOnce() -> Option<Vec<T>>) -> &[T] {
+    pub fn get(
+        &mut self,
+        key: K,
+        max_age: Duration,
+        build: impl FnOnce() -> Option<Vec<T>>,
+    ) -> &[T] {
         let fresh = self.key == Some(key) && self.at.is_some_and(|at| at.elapsed() < max_age);
         if !fresh {
             match build() {
@@ -46,9 +51,27 @@ mod tests {
         let mut cache = Refreshed::new();
         let mut builds = 0;
         let long = Duration::from_secs(60);
-        assert_eq!(cache.get(1, long, || { builds += 1; Some(vec![1]) }), [1]);
-        assert_eq!(cache.get(1, long, || { builds += 1; Some(vec![2]) }), [1]);
-        assert_eq!(cache.get(2, long, || { builds += 1; Some(vec![3]) }), [3]);
+        assert_eq!(
+            cache.get(1, long, || {
+                builds += 1;
+                Some(vec![1])
+            }),
+            [1]
+        );
+        assert_eq!(
+            cache.get(1, long, || {
+                builds += 1;
+                Some(vec![2])
+            }),
+            [1]
+        );
+        assert_eq!(
+            cache.get(2, long, || {
+                builds += 1;
+                Some(vec![3])
+            }),
+            [3]
+        );
         assert_eq!(builds, 2);
     }
 

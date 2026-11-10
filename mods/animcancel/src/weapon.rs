@@ -1,22 +1,18 @@
-//! What the player holds, for the guard rule: guard (L1) only cancels an
-//! animation while L1 really guards. With a twin blade, or one weapon in each
-//! hand (dual wielding), L1 is an attack, and letting it cut the animation
-//! shortens the combo instead.
-//!
-//! The shield test is the weapon's `wepmotionCategory` (the animation set:
-//! 47 greatshield, 48 small shield, 49 medium shield, 57 shield-like), read
-//! from `EquipParamWeapon`.
+//! What the player holds, for the guard rule: guard (L1) only cancels an animation while L1 really
+//! guards. With a twin blade, or one weapon in each hand, L1 is an attack and letting it cut the
+//! animation would shorten the combo. The shield test is `EquipParamWeapon.wepmotionCategory`
+//! (47 greatshield, 48 small shield, 49 medium shield, 57 shield-like).
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use eldenring::cs::{ChrAsm, ChrAsmArmStyle, ChrAsmSlot, EquipParamWeapon, SoloParamRepository, WorldChrMan};
+use eldenring::cs::{
+    ChrAsm, ChrAsmArmStyle, ChrAsmSlot, EquipParamWeapon, SoloParamRepository, WorldChrMan,
+};
 use fromsoftware_shared::FromStatic;
 
-/// `wepmotionCategory` values of shields.
 const SHIELD_MOTIONS: [u8; 4] = [47, 48, 49, 57];
 
-/// The `EquipParamWeapon` fields that decide what L1 does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Weapon {
     pub dual_blade: bool,
@@ -29,19 +25,19 @@ impl Weapon {
     }
 }
 
-/// `EquipParamWeapon` ID -> row index, built on first use.
 static ROWS: Mutex<Option<HashMap<u32, usize>>> = Mutex::new(None);
 
-/// The equipped ID's row: rows exist per affinity (hundreds); the upgrade
-/// level is the last two digits of the equipped ID (9080009 = row 9080000 +9).
+/// Rows exist per affinity (hundreds); the upgrade level is the last two digits of the equipped ID
+/// (9080009 = row 9080000 +9).
 fn weapon(id: i32) -> Option<Weapon> {
     if id <= 0 {
         return None;
     }
+    // SAFETY: called from game tasks; `instance_mut` is `Err` until the singleton exists.
     let repo = unsafe { SoloParamRepository::instance_mut() }.ok()?;
     let mut rows = ROWS.lock().unwrap_or_else(|e| e.into_inner());
     if rows.is_none() {
-        let ids = common::params::row_ids::<EquipParamWeapon>(repo)?;
+        let ids = shared::params::row_ids::<EquipParamWeapon>(repo)?;
         *rows = Some(ids.into_iter().enumerate().map(|(index, id)| (id, index)).collect());
     }
     let map = rows.as_ref()?;
@@ -50,36 +46,38 @@ fn weapon(id: i32) -> Option<Weapon> {
     Some(Weapon { dual_blade: row.is_dual_blade(), motion: row.wepmotion_category() })
 }
 
-/// The main player's equipment (`ChrAsm`), only once in game.
 fn chr_asm<'a>() -> Option<&'a ChrAsm> {
+    // SAFETY: called from game tasks; `instance_mut` is `Err` until the singleton exists.
     let world_chr_man = unsafe { WorldChrMan::instance_mut() }.ok()?;
     let player = world_chr_man.main_player.as_mut()?;
+    // SAFETY: the player's game data pointer is non-null while the player exists.
     let data = unsafe { player.player_game_data.as_ref() };
     Some(&data.equipment.chr_asm)
 }
 
-/// The param IDs of the active left and right weapons.
 fn active_weapon_ids(asm: &ChrAsm) -> (i32, i32) {
     let id = |slot: ChrAsmSlot| asm.equipment_param_ids[slot as usize];
     (id(asm.equipment.active_left_weapon_slot()), id(asm.equipment.active_right_weapon_slot()))
 }
 
-/// How the weapons are held and which ones (param IDs): arm style, the
-/// active left and right weapons.
 fn held() -> Option<(ChrAsmArmStyle, i32, i32)> {
     let asm = chr_asm()?;
     let (left, right) = active_weapon_ids(asm);
     Some((asm.equipment.arm_style, left, right))
 }
 
-/// What the player holds as one line, for the probe's log: arm style, selected
-/// slots and the weapon param IDs with what `EquipParamWeapon` says of them.
+/// What the player holds as one line, for the probe's log.
 pub fn describe_held() -> Option<String> {
     let asm = chr_asm()?;
     let equipment = &asm.equipment;
     let (left, right) = active_weapon_ids(asm);
     let info = |id: i32| match weapon(id) {
-        Some(w) => format!("dual={} motion={} shield={}", w.dual_blade as u8, w.motion, w.is_shield() as u8),
+        Some(w) => format!(
+            "dual={} motion={} shield={}",
+            w.dual_blade as u8,
+            w.motion,
+            w.is_shield() as u8
+        ),
         None => "no row".to_string(),
     };
     Some(format!(
@@ -94,11 +92,8 @@ pub fn describe_held() -> Option<String> {
     ))
 }
 
-/// Whether the guard button guards (not attacks) for these weapons:
-/// - a weapon held in both hands: yes (the other slot's weapon is put away,
-///   whatever it is), except a twin blade, which attacks with it;
-/// - one-handed: only with a shield in the left hand; two weapons, one in
-///   each hand, is dual wielding and the button attacks.
+/// Whether the guard button guards (not attacks): with a weapon in both hands, except a twin
+/// blade; one-handed, only with a shield in the left hand (two weapons is dual wielding).
 pub fn guard_possible(arm: ChrAsmArmStyle, left: Option<&Weapon>, right: Option<&Weapon>) -> bool {
     let two_handed = |held: Option<&Weapon>| held.is_some_and(|w| !w.dual_blade);
     match arm {
@@ -109,15 +104,12 @@ pub fn guard_possible(arm: ChrAsmArmStyle, left: Option<&Weapon>, right: Option<
     }
 }
 
-/// What is held: arm style, left and right weapon param IDs.
 type HeldKey = (u32, i32, i32);
 
-/// (what is held, answer) of the last check, so the params are read again
-/// only when the weapons or the grip change.
+// The last check, so the params are read again only when the weapons or the grip change.
 static LAST: Mutex<Option<(HeldKey, bool)>> = Mutex::new(None);
 
-/// Whether the guard button guards right now (see [guard_possible]). False
-/// when it can't be told (data not loaded): then guard cancels nothing.
+/// False when it can't be told (data not loaded): then guard cancels nothing.
 pub fn guard_button_guards() -> bool {
     let Some((arm, left_id, right_id)) = held() else {
         return false;
@@ -150,18 +142,14 @@ mod tests {
     fn guard_rules_by_grip() {
         use ChrAsmArmStyle::*;
         let (shield, katana, greatsword) = (weapon(49), weapon(29), weapon(21));
-        // One hand: only a shield in the left hand guards.
         assert!(guard_possible(OneHanded, Some(&shield), Some(&katana)));
         assert!(!guard_possible(OneHanded, Some(&katana), Some(&katana)));
         assert!(!guard_possible(OneHanded, None, Some(&katana)));
-        // One weapon in both hands: guards, whatever the other slot holds.
         assert!(guard_possible(RightBothHands, None, Some(&katana)));
         assert!(guard_possible(RightBothHands, Some(&katana), Some(&katana)));
         assert!(guard_possible(RightBothHands, Some(&shield), Some(&greatsword)));
         assert!(guard_possible(LeftBothHands, Some(&katana), Some(&katana)));
-        // Twin blades attack with the guard button.
         assert!(!guard_possible(RightBothHands, Some(&shield), Some(&twin_blades())));
-        // Unknown weapon or no weapon: nothing.
         assert!(!guard_possible(RightBothHands, Some(&katana), None));
         assert!(!guard_possible(EmptyHanded, None, None));
     }

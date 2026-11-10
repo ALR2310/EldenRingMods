@@ -1,73 +1,32 @@
-# task / task_hook: đăng ký tác vụ chạy theo frame không qua `rva::get()`
+# Per-frame tasks
 
-**Status 2026-10-13: hoạt động, mọi mod có tick theo frame đều dùng. Pattern đã kiểm chứng trên 1.16.2 và 1.17.0; chưa ghi nhận kiểm chứng trên các bản sau. Code ở `shared/src/task.rs`, `shared/src/task_hook.rs`.**
+Status: **Confirmed** in released mods of the old repository (not yet re-tested in game from this one). Conventions: [research notes](../../docs/research/README.md).
+Code: `shared/src/task.rs`.
 
-## Vấn đề
+## Question
 
-`fromsoftware_shared::task::SharedTaskImpExt::run_recurring` tìm hàm đăng ký task
-thật của game qua bảng RVA theo phiên bản (`rva::get().register_task`). Bảng đó
-chỉ chứa **một** chuỗi phiên bản mà crate được phát hành lần cuối, và panic
-thẳng với mọi phiên bản khác. Thử một mod trên bản game mới hơn bản
-`fromsoftware-rs` được ghim làm panic ngay lúc khởi động, thay vì chỉ một tính
-năng bị lỗi (câu chuyện đầy đủ ở `mods/autoregen/docs/task_and_startup.md`).
+How does a mod run code every frame on the game's task system, and survive a game update that the
+`fromsoftware-rs` address table does not know yet?
 
-## Giải pháp: AOB
+## Mechanism
 
-Kiểm chứng 2026-09-09: hàm game mà `register_task` trỏ tới giống từng byte (trừ
-toán hạng rip-relative của `call`/`lea`, vốn đổi theo lần link lại) giữa:
+- **`CSTaskImp` comes from its singleton lookup**, polled every 500 ms by `wait_for_cs_task`. It never
+  gives up and logs one error after 15 seconds, since the usual cause is a game update, not a slow start.
+- **The registration function is found by AOB** (`REGISTER_TASK_PATTERN`) instead of
+  `eldenring::rva::get()`. The crate's table holds one game version, and `CSTaskImp::wait_for_instance`
+  treats an invalid RVA as fatal, so on a newer build the mod panicked at once.
+- **A task is a fake C++ object**: a vtable pointer at offset 0 (built with `vtable-rs`) followed by the
+  Rust closure, which the game never looks at. It is leaked on purpose, since a task is never unregistered.
+- **`run_recurring_safe` wraps the closure in `catch_unwind`** and skips the frame when it panics. The
+  vtable functions `get_runtime_class` and `destructor` are no-ops, not `unimplemented!()`: the engine
+  calls them directly and a panic would unwind into its stack. This needs `panic = "unwind"`, the default.
 
-| Bản game | Nguồn RVA | RVA |
-|---|---|---|
-| 1.16.2 | `eldenring` 0.14.0 | `0xeb1fe0` |
-| 1.17.0 | `fromsoftware-rs` commit `acb2a19` | `0xeb3de0` |
+## Groups
 
-Kiểm tra thêm 2026-11-04 bằng `scripts/ida/run.ps1 aob -Version all` với đúng mẫu của `task_hook.rs`: duy nhất ở cả bốn bản exe trong `dumps/eldenring/`.
+A task runs in the `CSTaskGroupIndex` it is registered in. `FrameBegin` is where the main player is safe
+to change (`mods/autoregen`), `ChrIns_PreBehavior` runs before the behavior update
+(`mods/speedmultiplier`) and `ChrIns_PostPhysics` after it. Tasks of one group run in no fixed order.
 
-| Bản exe | RVA |
-|---|---|
-| 2.6.2.0 | `0xEB1FE0` |
-| 2.7.0.0 | `0xEB3DE0` |
-| 2.7.1.0 | `0xEB3E50` |
-| 2.7.2.0 (1.17.2) | `0xEB5540` |
+## Open risks
 
-Một pattern neo vào mọi byte **trừ** các toán hạng đó là duy nhất trong `.text`
-trên cả hai. Quét pattern bằng `common::memscan` (cùng kỹ thuật với `hit_hook`
-của autoregen) tìm ra hàm bất kể phiên bản nào làm nó dịch chỗ, tránh hẳn cổng
-phiên bản của `rva::get()` ở đúng chỗ gọi này. Địa chỉ được cache cho cả process
-(`CachedAddr`) nên nhiều tác vụ chỉ quét một lần.
-
-## Đối tượng tác vụ giả
-
-Lời gọi đăng ký vẫn phải đưa cho game một con trỏ **trông như** đối tượng task
-native của nó: một vtable C++ ở offset 0, được gọi khi nhóm task chạy.
-`fromsoftware_shared::task` làm đúng mẹo này cho địa chỉ được giải bằng bảng RVA,
-nhưng phần `RecurringTask` / `self_ref` của nó là private nên không dùng lại được
-cho một địa chỉ khác. `Task` trong `task_hook.rs` là bản độc lập của cùng mẹo (vtable
-giả dựng bằng crate `vtable-rs` mà `fromsoftware-shared` cũng dùng). Game chỉ đọc
-con trỏ vtable ở offset 0; phần sau (closure) với game là mờ, chỉ chạm tới qua
-`execute`, nên không cần phản chiếu bố cục `RecurringTask`.
-
-`get_runtime_class` và `destructor` là hàm rỗng vô hại, **không** phải
-`unimplemented!()`. Đến 2026-09-12 hai hàm này còn panic; nghi (chưa tái hiện
-được) là nguyên nhân giật hình sau khi autoregen 2.5.0 phát hành: nếu `CSTaskImp`
-có lúc gọi trực tiếp một trong hai (ví dụ một đợt duyệt/bảo trì danh sách task
-định kỳ), khác với `execute` luôn đi qua `catch_unwind` của người gọi, panic sẽ
-unwind thẳng vào frame C++ của game vốn không có landing pad: hành vi không xác
-định. Task này bị `Box::leak`, sống suốt đời DLL và không bao giờ bị duyệt hay huỷ,
-nên không hàm nào cần làm gì thật.
-
-## `task.rs`
-
-- `wait_for_cs_task` tìm `CSTaskImp` bằng tra singleton theo tên của Dantelion2 (không
-  qua bảng RVA), thử lại mỗi 500 ms, không bao giờ bỏ cuộc, và ghi **một** dòng
-  lỗi nếu quá 15 giây (thường là game cần bản cập nhật mod, không chỉ khởi động
-  chậm). Địa chỉ cache cho cả process để `common::reload` và tính năng của mod chờ
-  một lần.
-- `run_recurring_safe` bọc tác vụ trong `catch_unwind` và ghi `tag` của tính năng
-  khi một tick panic (tick đó bị bỏ qua). Cần `panic = "unwind"` ở `[profile.release]`,
-  vì `catch_unwind` không bắt được gì khi panic làm process abort.
-
-Gom từ `autoregen::regen` (2026-09-11/12), thay cho kiểu cũ: chờ
-`wait_for_system_init` rồi thử lại `CSTaskImp::wait_for_instance` qua
-`SystemInitError::InvalidRva`. Tra singleton theo tên tránh hẳn lớp lỗi đó thay vì
-thử lại cho qua. `tag` lấy từ bản `task.rs` của `sometweaks`/`risearcher`.
+If the registration pattern is not found within 60 seconds the feature stays off and one error is logged.

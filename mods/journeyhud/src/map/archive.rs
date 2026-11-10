@@ -6,6 +6,7 @@
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use aes::Aes128;
 use aes::cipher::{BlockDecrypt, KeyInit, generic_array::GenericArray};
@@ -36,15 +37,36 @@ struct Entry {
     aes_ranges: Vec<(usize, usize)>,
 }
 
+/// The decrypted headers read so far, by archive name. Decrypting one is the slow part of a lookup
+/// (RSA over every 256 bytes of it) and every file the mod reads asks for the same ones, from two
+/// threads: the lock is held while one is decrypted, so the other waits for it instead of repeating
+/// the work. A few MB for the session.
+static HEADERS: Mutex<Vec<(&'static str, Header)>> = Mutex::new(Vec::new());
+type Header = Arc<Vec<u8>>;
+
+/// The decrypted header of archive `name`, `None` when the game has no such archive.
+fn header(game_dir: &Path, name: &'static str, key: &str) -> io::Result<Option<Header>> {
+    let mut cache = HEADERS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, header)) = cache.iter().find(|(cached, _)| *cached == name) {
+        return Ok(Some(header.clone()));
+    }
+    let Ok(bhd) = std::fs::read(game_dir.join(format!("{name}.bhd"))) else {
+        return Ok(None);
+    };
+    let header = Arc::new(rsa_decrypt(&bhd, key)?);
+    cache.push((name, header.clone()));
+    Ok(Some(header))
+}
+
 /// Finds `path` by searching the game's archives in order. Each archive's header has
-/// to be decrypted to be searched, so stopping at the first hit saves seconds.
+/// to be decrypted (once, see [HEADERS]) to be searched, so stopping at the first hit saves seconds.
 pub fn open(game_dir: &Path, path: &str) -> io::Result<ArchiveFile> {
     let hash = path_hash(path);
     for (name, key) in ARCHIVES {
-        let Ok(bhd) = std::fs::read(game_dir.join(format!("{name}.bhd"))) else {
+        let Some(header) = header(game_dir, name, key)? else {
             continue;
         };
-        if let Some(entry) = find_in_bhd5(&rsa_decrypt(&bhd, key)?, hash)? {
+        if let Some(entry) = find_in_bhd5(&header, hash)? {
             let bdt = File::open(game_dir.join(format!("{name}.bdt")))?;
             return Ok(ArchiveFile { bdt, entry });
         }
@@ -57,7 +79,7 @@ impl ArchiveFile {
         let mut data = self.read_raw(0, self.entry.size)?;
         let cipher = Aes128::new(GenericArray::from_slice(&self.entry.aes_key));
         for &(start, end) in &self.entry.aes_ranges {
-            for block in data[start..end].chunks_exact_mut(16) {
+            for block in data[start..end].as_chunks_mut::<16>().0 {
                 cipher.decrypt_block(GenericArray::from_mut_slice(block));
             }
         }
@@ -66,12 +88,7 @@ impl ArchiveFile {
 
     /// Reads part of the file. Encrypted ranges have to be read whole with `read_all`.
     pub fn read_at(&mut self, offset: usize, len: usize) -> io::Result<Vec<u8>> {
-        if self
-            .entry
-            .aes_ranges
-            .iter()
-            .any(|&(start, end)| start < offset + len && offset < end)
-        {
+        if self.entry.aes_ranges.iter().any(|&(start, end)| start < offset + len && offset < end) {
             return Err(io::Error::new(
                 io::ErrorKind::Unsupported,
                 "partial read of an encrypted range",
@@ -82,14 +99,10 @@ impl ArchiveFile {
 
     fn read_raw(&mut self, offset: usize, len: usize) -> io::Result<Vec<u8>> {
         if offset + len > self.entry.size {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "read past end of file",
-            ));
+            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "read past end of file"));
         }
         let mut data = vec![0; len];
-        self.bdt
-            .seek(SeekFrom::Start(self.entry.offset + offset as u64))?;
+        self.bdt.seek(SeekFrom::Start(self.entry.offset + offset as u64))?;
         self.bdt.read_exact(&mut data)?;
         Ok(data)
     }
@@ -99,9 +112,7 @@ fn path_hash(path: &str) -> u64 {
     path.to_lowercase()
         .replace('\\', "/")
         .bytes()
-        .fold(0u64, |hash, c| {
-            hash.wrapping_mul(0x85).wrapping_add(u64::from(c))
-        })
+        .fold(0u64, |hash, c| hash.wrapping_mul(0x85).wrapping_add(u64::from(c)))
 }
 
 /// The headers are "decrypted" by raising each 256 byte block to the public exponent,
@@ -111,9 +122,7 @@ fn rsa_decrypt(data: &[u8], pem: &str) -> io::Result<Vec<u8>> {
     let block_size = key.size();
     let mut out = Vec::with_capacity(data.len());
     for block in data.chunks(block_size) {
-        let plain = BigUint::from_bytes_be(block)
-            .modpow(key.e(), key.n())
-            .to_bytes_be();
+        let plain = BigUint::from_bytes_be(block).modpow(key.e(), key.n()).to_bytes_be();
         out.resize(out.len() + block_size - 1 - plain.len(), 0);
         out.extend_from_slice(&plain);
     }
@@ -123,10 +132,7 @@ fn rsa_decrypt(data: &[u8], pem: &str) -> io::Result<Vec<u8>> {
 fn find_in_bhd5(data: &[u8], hash: u64) -> io::Result<Option<Entry>> {
     let r = Reader(data);
     if r.bytes(0, 4)? != b"BHD5" {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "not a BHD5 header",
-        ));
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "not a BHD5 header"));
     }
     let bucket_count = r.u32(0x10)? as usize;
     let buckets_offset = r.u32(0x14)? as usize;

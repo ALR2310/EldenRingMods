@@ -12,7 +12,7 @@ mod taskbar;
 mod torrent_anywhere;
 mod ui;
 
-use common::{dll_dir, logger};
+use shared::{dll_dir, logger};
 
 /// # Safety
 /// This is exposed this way so the library loader can call it. Do not call it
@@ -28,7 +28,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         let dir = dll_dir(hmodule);
         let report = config::init(&format!("{dir}\\Toolbox.toml"));
 
-        // `LogFile` gates the log file entirely, see common::logger.
+        // `LogFile` gates the log file entirely, see shared::logger.
         logger::set_enabled(config::get().logging.log_file);
         logger::init(&dir, "Toolbox.log");
         logger::install_panic_hook();
@@ -43,6 +43,8 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         // so give each one its own. To add a feature: new module with a
         // `run()`, one line here, one section in Toolbox.toml (and a widget in
         // `ui.rs` if it should appear in the GUI).
+        // First: the game builds its resolution list while the window opens.
+        std::thread::spawn(resize::resolution_list::run);
         std::thread::spawn(map_anywhere::run);
         std::thread::spawn(torrent_anywhere::run);
         std::thread::spawn(buildup::run);
@@ -54,7 +56,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
             std::thread::spawn(move || input::run(&dir));
         }
 
-        common::reload::run_with(
+        shared::reload::run(
             || config::get().general.reload_key.clone(),
             || config::get().general.reload_banner,
             || {

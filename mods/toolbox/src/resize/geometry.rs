@@ -60,8 +60,7 @@ impl Limits {
 }
 
 /// Resizes the dragged `rect` (outer window, screen coordinates) so its client
-/// area respects `limits`, moving only the edges the user is actually
-/// dragging.
+/// area respects `limits`, moving only the edges being dragged.
 pub fn constrain(edge: usize, rect: &mut Rect, frame: (i32, i32), limits: &Limits) {
     let (frame_w, frame_h) = frame;
     let (min_w, min_h) = limits.min;
@@ -102,7 +101,12 @@ pub fn constrain(edge: usize, rect: &mut Rect, frame: (i32, i32), limits: &Limit
 /// The client size to start with from `Width` / `Height` (0 = unset), or
 /// `None` if both are unset. With one set, the other follows the aspect (or
 /// keeps its `current` value without a lock). Never below the minimum.
-pub fn start_client_size(width: i32, height: i32, current: (i32, i32), limits: &Limits) -> Option<(i32, i32)> {
+pub fn start_client_size(
+    width: i32,
+    height: i32,
+    current: (i32, i32),
+    limits: &Limits,
+) -> Option<(i32, i32)> {
     let size = match (width > 0, height > 0) {
         (false, false) => return None,
         (true, true) => (width, height),

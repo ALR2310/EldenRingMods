@@ -1,0 +1,400 @@
+//! Spirit summoning pools (`BuddyStoneParam`), two hot-reload toggles:
+//! `NoRestResummon` (re-summon without resting, by clearing the pool's
+//! once-per-rest event flag) and `SummonAnywhere` (summon outside the vanilla
+//! areas: wide pool range plus redirected calls in `SummonBuddyManager`).
+//! Both re-implement what a third-party mod does. Rows are walked by index and
+//! the original values are snapshotted before the first write. Every patch only
+//! redirects an existing `call` / `jmp` (`codepatch::redirect_rel32`). The
+//! reverse engineering behind each part: `docs/summon_anywhere.md`.
+
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
+use std::time::Duration;
+
+use eldenring::cs::{
+    BuddyStoneParam, CSEventFlagMan, CSTaskGroupIndex, SoloParamRepository, WorldChrMan,
+};
+use fromsoftware_shared::FromStatic;
+
+use shared::{codepatch, logger, memscan};
+
+use crate::config;
+
+/// `mov edx,0x175; mov rcx,[rax+0x178]; call sub_1404FA370; test al,al; jz
+/// ..; mov eax,[rbx+0x38]` in `GetBuddyState` (0x1404B735C in 2.7.1.0,
+/// unique; rbx = manager). The `call` is at +12.
+const STATE_CALL_AOB: &str =
+    "BA 75 01 00 00 48 8B 88 78 01 00 00 E8 ?? ?? ?? ?? 84 C0 74 10 8B 43 38";
+const STATE_CALL_OFFSET: usize = 12;
+/// Same check as a tail call in `sub_1404B7610` (0x1404B7655, unique):
+/// `... add rsp,0x28; jmp sub_1404FA370`. The `jmp` is at +16.
+const STATE_TAIL_AOB: &str = "BA 75 01 00 00 48 8B 88 78 01 00 00 48 83 C4 28 E9";
+const STATE_TAIL_OFFSET: usize = 16;
+/// `movaps xmm1,xmm10; mov rcx,r15; call sub_1404B8EB0; movaps xmm1,xmm10;
+/// mov rcx,r15; call sub_1404BD870; cmp qword [r15+0xE8],0` in
+/// `SummonBuddyManager::Update` (0x1404B8B1B, unique; r15 = manager). The
+/// second `call` is at +19.
+const INRANGE_AOB: &str = "41 0F 28 CA 49 8B CF E8 ?? ?? ?? ?? 41 0F 28 CA 49 8B CF E8 ?? ?? ?? ?? 49 83 BF E8 00 00 00 00";
+const INRANGE_OFFSET: usize = 19;
+
+const SCAN_RETRY_INTERVAL: Duration = Duration::from_millis(500);
+const SCAN_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// 1 = SummonAnywhere applied. Read by every stub.
+static ANYWHERE: AtomicU8 = AtomicU8::new(0);
+/// Stone written into an empty `+0x38` (2.) while Anywhere is on; 0 = none.
+static FALLBACK_STONE: AtomicU32 = AtomicU32::new(0);
+
+const TICK_INTERVAL_MS: f64 = 1000.0;
+
+const ANYWHERE_ACTIVATE_RANGE: u16 = u16::MAX;
+const ANYWHERE_RETURN_RANGE: i16 = -1;
+
+/// Original values of the fields this module writes, per row index.
+struct Original {
+    index: usize,
+    eliminate_target_entity_id: u32,
+    summoned_event_flag_id: u32,
+    activate_range: u16,
+    overwrite_return_range: i16,
+    overwrite_activate_region_entity_id: u32,
+}
+
+fn rel8(from_next: usize, to: usize) -> u8 {
+    (to as i64 - from_next as i64) as i8 as u8
+}
+
+/// `call qword [rip+2]; jmp +8; dq target` - an absolute call.
+fn push_call(c: &mut Vec<u8>, target: u64) {
+    c.extend_from_slice(&[0xFF, 0x15, 0x02, 0x00, 0x00, 0x00]);
+    c.extend_from_slice(&[0xEB, 0x08]);
+    c.extend_from_slice(&target.to_le_bytes());
+}
+
+/// `mov r11, &ANYWHERE; cmp byte [r11], 0; je <patched later>` - returns
+/// the offset of the `je` to patch.
+fn push_anywhere_check(c: &mut Vec<u8>, anywhere: u64) -> usize {
+    c.extend_from_slice(&[0x49, 0xBB]);
+    c.extend_from_slice(&anywhere.to_le_bytes());
+    c.extend_from_slice(&[0x41, 0x80, 0x3B, 0x00]);
+    let je = c.len();
+    c.extend_from_slice(&[0x74, 0]);
+    je
+}
+
+/// Destination of `GetBuddyState`'s `call` to the stateInfo check (args in
+/// rcx/edx, rbx = manager; entered by that `call`, rsp % 16 == 8): call
+/// it; while Anywhere is on answer `al = 1`, and fill an empty current
+/// stone `[rbx+0x38]` with [FALLBACK_STONE] (2.). r11 is volatile.
+fn build_state_call_stub(anywhere: u64, fallback: u64, check: u64) -> Vec<u8> {
+    let mut c = Vec::with_capacity(96);
+    c.extend_from_slice(&[0x48, 0x83, 0xEC, 0x28]); // sub rsp, 0x28
+    push_call(&mut c, check);
+    c.extend_from_slice(&[0x48, 0x83, 0xC4, 0x28]); // add rsp, 0x28
+    let je_ret = push_anywhere_check(&mut c, anywhere);
+    c.extend_from_slice(&[0xB0, 0x01]); // mov al, 1
+    c.extend_from_slice(&[0x83, 0x7B, 0x38, 0x00]); // cmp dword [rbx+0x38], 0
+    let jne_ret = c.len();
+    c.extend_from_slice(&[0x75, 0]); // jne ret (a real stone is set)
+    c.extend_from_slice(&[0x44, 0x8B, 0x5B, 0x3C]); // mov r11d, [rbx+0x3C] (active stone)
+    c.extend_from_slice(&[0x45, 0x85, 0xDB]); // test r11d, r11d
+    let jnz_write = c.len();
+    c.extend_from_slice(&[0x75, 0]); // jnz write (spirits out: reuse their stone)
+    c.extend_from_slice(&[0x49, 0xBB]); // mov r11, &FALLBACK_STONE
+    c.extend_from_slice(&fallback.to_le_bytes());
+    c.extend_from_slice(&[0x45, 0x8B, 0x1B]); // mov r11d, [r11]
+    let write = c.len();
+    c.extend_from_slice(&[0x44, 0x89, 0x5B, 0x38]); // mov [rbx+0x38], r11d
+    let ret = c.len();
+    c.push(0xC3); // ret
+    c[je_ret + 1] = rel8(je_ret + 2, ret);
+    c[jne_ret + 1] = rel8(jne_ret + 2, ret);
+    c[jnz_write + 1] = rel8(jnz_write + 2, write);
+    c
+}
+
+/// Destination of the tail `jmp` to the stateInfo check in
+/// `sub_1404B7610` (frame already torn down, rsp % 16 == 8): re-align +
+/// shadow space, call, same `al = 1` override, `ret` to the real caller.
+fn build_state_tail_stub(anywhere: u64, check: u64) -> Vec<u8> {
+    let mut c = Vec::with_capacity(56);
+    c.extend_from_slice(&[0x48, 0x83, 0xEC, 0x28]); // sub rsp, 0x28
+    push_call(&mut c, check);
+    c.extend_from_slice(&[0x48, 0x83, 0xC4, 0x28]); // add rsp, 0x28
+    let je_ret = push_anywhere_check(&mut c, anywhere);
+    c.extend_from_slice(&[0xB0, 0x01]); // mov al, 1
+    let ret = c.len();
+    c.push(0xC3); // ret
+    c[je_ret + 1] = rel8(je_ret + 2, ret);
+    c
+}
+
+/// Destination of `Update`'s `call sub_1404BD870` (rcx = r15 = manager,
+/// r15 callee-saved): call it, then while Anywhere is on force "in
+/// activation range" (`+0xB5` = 1) and clear "in warn range" (`+0xB7` = 0).
+fn build_inrange_stub(anywhere: u64, compute: u64) -> Vec<u8> {
+    let mut c = Vec::with_capacity(64);
+    c.extend_from_slice(&[0x48, 0x83, 0xEC, 0x28]); // sub rsp, 0x28
+    push_call(&mut c, compute);
+    c.extend_from_slice(&[0x48, 0x83, 0xC4, 0x28]); // add rsp, 0x28
+    let je_ret = push_anywhere_check(&mut c, anywhere);
+    // Only when spirits are out and the game found neither range (the
+    // active stone's object is unloaded) - see the doc on 3.
+    c.extend_from_slice(&[0x41, 0x80, 0xBF, 0xB4, 0x00, 0x00, 0x00, 0x00]); // cmp byte [r15+0xB4], 0
+    let je_ret2 = c.len();
+    c.extend_from_slice(&[0x74, 0]); // je ret (no spirit out)
+    c.extend_from_slice(&[0x41, 0x80, 0xBF, 0xB5, 0x00, 0x00, 0x00, 0x00]); // cmp byte [r15+0xB5], 0
+    let jne_ret = c.len();
+    c.extend_from_slice(&[0x75, 0]); // jne ret (in range, computed)
+    c.extend_from_slice(&[0x41, 0x80, 0xBF, 0xB7, 0x00, 0x00, 0x00, 0x00]); // cmp byte [r15+0xB7], 0
+    let jne_ret2 = c.len();
+    c.extend_from_slice(&[0x75, 0]); // jne ret (in warn range, computed)
+    c.extend_from_slice(&[0x41, 0xC6, 0x87, 0xB5, 0x00, 0x00, 0x00, 0x01]); // mov byte [r15+0xB5], 1
+    let ret = c.len();
+    c.push(0xC3); // ret
+    c[je_ret + 1] = rel8(je_ret + 2, ret);
+    c[je_ret2 + 1] = rel8(je_ret2 + 2, ret);
+    c[jne_ret + 1] = rel8(jne_ret + 2, ret);
+    c[jne_ret2 + 1] = rel8(jne_ret2 + 2, ret);
+    c
+}
+
+/// Finds `pattern` and redirects the 5-byte call/jmp at `offset` to
+/// `build(original destination)`.
+fn install(name: &str, pattern: &str, offset: usize, build: impl Fn(u64) -> Vec<u8>) -> bool {
+    let Some(anchor) =
+        memscan::wait_for_pattern_in_module(pattern, SCAN_RETRY_INTERVAL, SCAN_TIMEOUT)
+    else {
+        logger::error(&format!(
+            "SummonAnywhere: {name} pattern not found. Game may have been updated."
+        ));
+        return false;
+    };
+    // SAFETY: the offset stays inside the matched game code or the structure it belongs to.
+    let site = unsafe { anchor.add(offset) };
+    // SAFETY: reads the 5 bytes of a call/jmp found in the game image.
+    let Some(target) = (unsafe { codepatch::rel32_target(site) }) else {
+        // Not a call/jmp any more: another mod may have replaced it.
+        // SAFETY: `site` is code in the game image, readable for the length checked.
+        if !unsafe { crate::conflicts::check(site, &format!("SummonAnywhere ({name})")) } {
+            logger::error(&format!("SummonAnywhere: {name} site is not a call."));
+        }
+        return false;
+    };
+    // SAFETY: `site` is the scanned call in the game image; the length/offset is the one its pattern matched.
+    if (unsafe { codepatch::redirect_rel32(site, &build(target)) }).is_none() {
+        logger::error(&format!("SummonAnywhere: {name} redirect failed."));
+        return false;
+    }
+    true
+}
+
+fn install_patches() -> bool {
+    let flag = ANYWHERE.as_ptr() as u64;
+    let fallback = FALLBACK_STONE.as_ptr() as u64;
+    install("stateInfo check", STATE_CALL_AOB, STATE_CALL_OFFSET, |t| {
+        build_state_call_stub(flag, fallback, t)
+    }) && install("stateInfo tail check", STATE_TAIL_AOB, STATE_TAIL_OFFSET, |t| {
+        build_state_tail_stub(flag, t)
+    }) && install("in-range check", INRANGE_AOB, INRANGE_OFFSET, |t| build_inrange_stub(flag, t))
+}
+
+/// Stone used while none has been seen yet this session: the first row
+/// without a doping SpEffect (plain spirits), else the first row.
+fn default_stone(repo: &mut SoloParamRepository) -> Option<u32> {
+    let ids = shared::params::row_ids::<BuddyStoneParam>(repo)?;
+    let mut plain = None;
+    shared::params::for_each_row_mut::<BuddyStoneParam>(repo, |index, row| {
+        if plain.is_none() && ids[index] > 0 && row.doping_sp_effect_id() <= 0 {
+            plain = Some(ids[index]);
+        }
+    });
+    plain.or_else(|| ids.iter().copied().find(|&id| id > 0))
+}
+
+fn capture(repo: &mut SoloParamRepository) -> Option<Vec<Original>> {
+    if let Err(err) = shared::params::check::<BuddyStoneParam>(repo) {
+        logger::error(&format!("BuddyStone: {err} - not touching params."));
+        return None;
+    }
+    let mut rows = Vec::new();
+    shared::params::for_each_row_mut::<BuddyStoneParam>(repo, |index, row| {
+        rows.push(Original {
+            index,
+            eliminate_target_entity_id: row.eliminate_target_entity_id(),
+            summoned_event_flag_id: row.summoned_event_flag_id(),
+            activate_range: row.activate_range(),
+            overwrite_return_range: row.overwrite_return_range(),
+            overwrite_activate_region_entity_id: row.overwrite_activate_region_entity_id(),
+        });
+    });
+    let locked = rows.iter().filter(|r| r.summoned_event_flag_id != 0).count();
+    logger::log(&format!(
+        "BuddyStone: {} summoning pool row(s), {locked} with a once-per-rest flag.",
+        rows.len()
+    ));
+    Some(rows)
+}
+
+pub fn run() {
+    let patched = install_patches();
+    if patched {
+        logger::log("SummonAnywhere: patched");
+    } else {
+        logger::error("SummonAnywhere: patch failed, works only near loaded pools");
+    }
+    let cs_task = shared::task::wait_for_cs_task();
+
+    let mut elapsed_ms: f64 = 0.0;
+    // None = not captured yet; Some(None) = capture failed, stay off.
+    let mut originals: Option<Option<Vec<Original>>> = None;
+    let mut applied: Option<(bool, bool)> = None;
+    // Original summonedEventFlagId per stone entity id (row id).
+    let mut lock_flags: HashMap<u32, u32> = HashMap::new();
+    let mut locked = false;
+    // Last real current stone (+0x38) seen, else the default row.
+    let mut fallback_stone: Option<u32> = None;
+
+    let _handle = shared::task::run_recurring_safe(
+        cs_task,
+        "BuddyStone",
+        CSTaskGroupIndex::FrameBegin,
+        move |data: &eldenring::fd4::FD4TaskData| {
+            // Same in-world gate as every other param-touching feature.
+            if shared::player::main_player_chr_ins_ptr().is_none() {
+                return;
+            }
+
+            // Every frame: remember the last real stone as the fallback (2.).
+            if ANYWHERE.load(Ordering::Relaxed) != 0
+                // SAFETY: called from a game task; the accessor returns `Err` while the singleton does not exist.
+                && let Ok(world_chr_man) = unsafe { WorldChrMan::instance() }
+            {
+                let current = world_chr_man.summon_buddy_manager.buddy_stone_entity_id;
+                if current != 0 && Some(current) != fallback_stone {
+                    fallback_stone = Some(current);
+                    FALLBACK_STONE.store(current, Ordering::Relaxed);
+                }
+            }
+
+            // NoRestResummon=false: keep the vanilla once-per-rest lock (4.).
+            if let (Some((false, true)), true) = (applied, patched) {
+                // SAFETY: called from a game task; the accessor returns `Err` while the singleton does not exist.
+                let stone = unsafe { WorldChrMan::instance() }
+                    .ok()
+                    .filter(|w| !w.summon_buddy_manager.player_has_alive_summon)
+                    .map(|w| w.summon_buddy_manager.buddy_stone_entity_id)
+                    .map(
+                        |current| if current != 0 { current } else { fallback_stone.unwrap_or(0) },
+                    );
+                let now_locked = stone
+                    .and_then(|id| lock_flags.get(&id).copied())
+                    .filter(|&flag| flag != 0)
+                    .and_then(|flag| {
+                        // SAFETY: called from a game task; the accessor returns `Err` while the singleton does not exist.
+                        unsafe { CSEventFlagMan::instance() }
+                            .ok()
+                            .map(|m| m.virtual_memory_flag.get_flag(flag))
+                    })
+                    .unwrap_or(false);
+                if now_locked != locked {
+                    locked = now_locked;
+                    ANYWHERE.store(!locked as u8, Ordering::Relaxed);
+                    logger::log(&format!(
+                        "SummonAnywhere: once-per-rest lock {}.",
+                        if locked { "on" } else { "off" }
+                    ));
+                }
+            }
+
+            elapsed_ms += (data.delta_time.time as f64) * 1000.0;
+            if elapsed_ms < TICK_INTERVAL_MS {
+                return;
+            }
+            elapsed_ms = 0.0;
+            // SAFETY: called from a game task; the accessor returns `Err` while the singleton does not exist.
+            let Ok(repo) = (unsafe { SoloParamRepository::instance_mut() }) else {
+                return;
+            };
+
+            let no_rest = config::get().spirit.no_rest_resummon;
+            let anywhere = config::get().spirit.summon_anywhere;
+            let Some(rows) = originals.get_or_insert_with(|| capture(repo)) else {
+                return;
+            };
+            if lock_flags.is_empty()
+                && let Some(ids) = shared::params::row_ids::<BuddyStoneParam>(repo)
+            {
+                lock_flags =
+                    rows.iter().map(|r| (ids[r.index], r.summoned_event_flag_id)).collect();
+            }
+            if fallback_stone.is_none() {
+                fallback_stone = default_stone(repo);
+            }
+            if applied == Some((no_rest, anywhere)) {
+                return;
+            }
+
+            for original in rows.iter() {
+                let Some(row) = repo.get_row_by_index_mut::<BuddyStoneParam>(original.index) else {
+                    continue;
+                };
+                row.set_summoned_event_flag_id(if no_rest {
+                    0
+                } else {
+                    original.summoned_event_flag_id
+                });
+                if anywhere {
+                    row.set_activate_range(ANYWHERE_ACTIVATE_RANGE);
+                    row.set_overwrite_return_range(ANYWHERE_RETURN_RANGE);
+                    row.set_overwrite_activate_region_entity_id(0);
+                    row.set_eliminate_target_entity_id(0);
+                } else {
+                    row.set_activate_range(original.activate_range);
+                    row.set_overwrite_return_range(original.overwrite_return_range);
+                    row.set_overwrite_activate_region_entity_id(
+                        original.overwrite_activate_region_entity_id,
+                    );
+                    row.set_eliminate_target_entity_id(original.eliminate_target_entity_id);
+                }
+            }
+            let active = anywhere && patched;
+            locked = false;
+            ANYWHERE.store(active as u8, Ordering::Relaxed);
+            FALLBACK_STONE
+                .store(if active { fallback_stone.unwrap_or(0) } else { 0 }, Ordering::Relaxed);
+            if active {
+                logger::log(&format!(
+                    "SummonAnywhere: fallback stone {}.",
+                    fallback_stone.unwrap_or(0)
+                ));
+            }
+            logger::log(&format!(
+                "NoRestResummon={no_rest}, SummonAnywhere={anywhere}: applied to {} pool row(s).",
+                rows.len()
+            ));
+            applied = Some((no_rest, anywhere));
+        },
+    );
+
+    loop {
+        std::thread::sleep(Duration::from_secs(60));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_stub_builds_and_ends_in_a_jump() {
+        let stubs = [
+            build_state_call_stub(0x1122334455667788, 0x5566778899AABBCC, 0x1404FA370),
+            build_state_tail_stub(0x1122334455667788, 0x1404FA370),
+            build_inrange_stub(0x1122334455667788, 0x1404BD870),
+        ];
+        for stub in stubs {
+            assert!(stub.len() > 8 && stub.len() < 256, "{} bytes", stub.len());
+        }
+    }
+}

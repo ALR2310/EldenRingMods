@@ -48,8 +48,7 @@ const DIMOUSESTATE2_SIZE: u32 = 20;
 /// converts `lX/lY/lZ` into floats at `this + 0x800..0x80C`.
 /// Verified UNIQUE on 2.6.2.0, 2.7.0.0, 2.7.1.0, and 2.7.2.0 via
 /// `scripts/ida/run.ps1 aob -Version all`.
-const MOUSE_POLL_AOB: &str =
-    "40 53 48 83 ec 20 48 8b d9 48 8b 89 e0 07 00 00 48 85 c9 75 08 32 c0 48 83 c4 20 5b c3 80 bb fc 07 00 00 00";
+const MOUSE_POLL_AOB: &str = "40 53 48 83 ec 20 48 8b d9 48 8b 89 e0 07 00 00 48 85 c9 75 08 32 c0 48 83 c4 20 5b c3 80 bb fc 07 00 00 00";
 const MOUSE_STATE_OFFSET: usize = 0x7E8; // DIMOUSESTATE2 (20 bytes: lX, lY, lZ, rgbButtons[8])
 const MOUSE_FLOAT_AXES_OFFSET: usize = 0x800; // 3 x f32 (12 bytes: dx, dy, dz)
 
@@ -62,14 +61,29 @@ unsafe extern "system" {
     fn GetSystemDirectoryW(buf: *mut u16, size: u32) -> u32;
 }
 
-type DirectInput8CreateFn =
-    unsafe extern "system" fn(hinst: *mut c_void, version: u32, iid: *const Guid, out: *mut *mut c_void, outer: *mut c_void) -> i32;
-type CreateDeviceFn =
-    unsafe extern "system" fn(this: *mut c_void, guid: *const Guid, out: *mut *mut c_void, outer: *mut c_void) -> i32;
+type DirectInput8CreateFn = unsafe extern "system" fn(
+    hinst: *mut c_void,
+    version: u32,
+    iid: *const Guid,
+    out: *mut *mut c_void,
+    outer: *mut c_void,
+) -> i32;
+type CreateDeviceFn = unsafe extern "system" fn(
+    this: *mut c_void,
+    guid: *const Guid,
+    out: *mut *mut c_void,
+    outer: *mut c_void,
+) -> i32;
 type ReleaseFn = unsafe extern "system" fn(this: *mut c_void) -> u32;
-type GetDeviceStateFn = unsafe extern "system" fn(this: *mut c_void, size: u32, data: *mut c_void) -> i32;
-type GetDeviceDataFn =
-    unsafe extern "system" fn(this: *mut c_void, obj_size: u32, data: *mut c_void, in_out: *mut u32, flags: u32) -> i32;
+type GetDeviceStateFn =
+    unsafe extern "system" fn(this: *mut c_void, size: u32, data: *mut c_void) -> i32;
+type GetDeviceDataFn = unsafe extern "system" fn(
+    this: *mut c_void,
+    obj_size: u32,
+    data: *mut c_void,
+    in_out: *mut u32,
+    flags: u32,
+) -> i32;
 type MousePollFn = unsafe extern "C" fn(this: *mut u8) -> u8;
 
 // Up to 4 DirectInput vtable targets (system + proxy, W/A, mouse/keyboard).
@@ -97,6 +111,7 @@ fn is_mouse(this: *mut c_void) -> bool {
 }
 
 unsafe fn vtable_fn(obj: *mut c_void, slot: usize) -> usize {
+    // SAFETY: `obj` is a COM object, whose first field is its vtable; `slot` is in range for it.
     unsafe { *(*(obj as *const *const usize)).add(slot) }
 }
 
@@ -109,7 +124,8 @@ pub struct InputExtension {
     /// `hr` the result); returns the result to give the game. May edit `data`.
     pub device_state: fn(size: u32, data: *mut c_void, hr: i32) -> i32,
     /// Same for `GetDeviceData` (buffered reads): `in_out` is the event count.
-    pub device_data: fn(obj_size: u32, data: *mut c_void, in_out: *mut u32, flags: u32, hr: i32) -> i32,
+    pub device_data:
+        fn(obj_size: u32, data: *mut c_void, in_out: *mut u32, flags: u32, hr: i32) -> i32,
     /// Whether `ClipCursor` / `SetCursorPos` should be neutralized, as they are while the menu is open.
     pub unpin_cursor: fn() -> bool,
 }
@@ -131,9 +147,14 @@ fn menu_open() -> bool {
 }
 
 unsafe extern "C" fn mouse_poll_hook(this: *mut u8) -> u8 {
-    let orig = unsafe { std::mem::transmute::<usize, MousePollFn>(MOUSE_POLL_ORIG.load(Ordering::Relaxed)) };
+    // SAFETY: the slot holds the trampoline MinHook made for this function.
+    let orig = unsafe {
+        std::mem::transmute::<usize, MousePollFn>(MOUSE_POLL_ORIG.load(Ordering::Relaxed))
+    };
+    // SAFETY: the original function, called with the arguments the game passed.
     let ok = unsafe { orig(this) };
     if menu_open() && !this.is_null() {
+        // SAFETY: the buffer is the one the caller passed, at least that many bytes long.
         unsafe {
             std::ptr::write_bytes(this.add(MOUSE_STATE_OFFSET), 0, DIMOUSESTATE2_SIZE as usize);
             std::ptr::write_bytes(this.add(MOUSE_FLOAT_AXES_OFFSET), 0, 12);
@@ -145,7 +166,13 @@ unsafe extern "C" fn mouse_poll_hook(this: *mut u8) -> u8 {
 macro_rules! state_hook {
     ($name:ident, $i:expr) => {
         unsafe extern "system" fn $name(this: *mut c_void, size: u32, data: *mut c_void) -> i32 {
-            let orig = unsafe { std::mem::transmute::<usize, GetDeviceStateFn>(STATE_ORIGS[$i].load(Ordering::Relaxed)) };
+            // SAFETY: the address is a function of the signature it is cast to.
+            let orig = unsafe {
+                std::mem::transmute::<usize, GetDeviceStateFn>(
+                    STATE_ORIGS[$i].load(Ordering::Relaxed),
+                )
+            };
+            // SAFETY: the original function, called with the arguments the game passed.
             let mut hr = unsafe { orig(this, size, data) };
             if let Some(ext) = EXTENSION.get() {
                 hr = (ext.device_state)(size, data, hr);
@@ -153,6 +180,7 @@ macro_rules! state_hook {
             if matches!(size, DIMOUSESTATE_SIZE | DIMOUSESTATE2_SIZE) {
                 remember_mouse(this);
                 if hr >= 0 && menu_open() && !data.is_null() {
+                    // SAFETY: the buffer is the one the caller passed, at least that many bytes long.
                     unsafe { std::ptr::write_bytes(data as *mut u8, 0, size as usize) };
                 }
             }
@@ -174,12 +202,19 @@ macro_rules! data_hook {
             in_out: *mut u32,
             flags: u32,
         ) -> i32 {
-            let orig = unsafe { std::mem::transmute::<usize, GetDeviceDataFn>(DATA_ORIGS[$i].load(Ordering::Relaxed)) };
+            // SAFETY: the address is a function of the signature it is cast to.
+            let orig = unsafe {
+                std::mem::transmute::<usize, GetDeviceDataFn>(
+                    DATA_ORIGS[$i].load(Ordering::Relaxed),
+                )
+            };
+            // SAFETY: the original function, called with the arguments the game passed.
             let mut hr = unsafe { orig(this, obj_size, data, in_out, flags) };
             if let Some(ext) = EXTENSION.get() {
                 hr = (ext.device_data)(obj_size, data, in_out, flags, hr);
             }
             if hr >= 0 && menu_open() && !in_out.is_null() && is_mouse(this) {
+                // SAFETY: `in_out` is the non-null event count the caller passed.
                 unsafe { *in_out = 0 };
             }
             hr
@@ -195,9 +230,11 @@ fn hook(target: usize, detour: *mut c_void, orig: &AtomicUsize) -> bool {
     if target == 0 {
         return false;
     }
+    // SAFETY: `target` is a function of the game or a system DLL and `detour` has its signature.
     match unsafe { MhHook::new(target as *mut c_void, detour) } {
         Ok(h) => {
             orig.store(h.trampoline() as usize, Ordering::Relaxed);
+            // SAFETY: the hook was just created and is applied by `MH_ApplyQueued`.
             unsafe { h.queue_enable() }.is_ok()
         }
         Err(_) => false,
@@ -206,16 +243,26 @@ fn hook(target: usize, detour: *mut c_void, orig: &AtomicUsize) -> bool {
 
 /// Reads the device vtable's GetDeviceState/GetDeviceData for one DirectInput
 /// flavor (W or A) and device GUID (`GUID_SysMouse` or `GUID_SysKeyboard`).
-fn dinput_device_fns(create: DirectInput8CreateFn, iid: &Guid, dev_guid: &Guid) -> Option<(usize, usize)> {
+fn dinput_device_fns(
+    create: DirectInput8CreateFn,
+    iid: &Guid,
+    dev_guid: &Guid,
+) -> Option<(usize, usize)> {
+    // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
     unsafe {
         let hinst = GetModuleHandleA(std::ptr::null());
         let mut di: *mut c_void = std::ptr::null_mut();
-        if create(hinst, DIRECTINPUT_VERSION, iid, &mut di, std::ptr::null_mut()) < 0 || di.is_null() {
+        if create(hinst, DIRECTINPUT_VERSION, iid, &mut di, std::ptr::null_mut()) < 0
+            || di.is_null()
+        {
             return None;
         }
-        let create_device = std::mem::transmute::<usize, CreateDeviceFn>(vtable_fn(di, SLOT_CREATE_DEVICE));
+        let create_device =
+            std::mem::transmute::<usize, CreateDeviceFn>(vtable_fn(di, SLOT_CREATE_DEVICE));
         let mut dev: *mut c_void = std::ptr::null_mut();
-        let fns = if create_device(di, dev_guid, &mut dev, std::ptr::null_mut()) >= 0 && !dev.is_null() {
+        let fns = if create_device(di, dev_guid, &mut dev, std::ptr::null_mut()) >= 0
+            && !dev.is_null()
+        {
             let fns = (vtable_fn(dev, SLOT_GET_DEVICE_STATE), vtable_fn(dev, SLOT_GET_DEVICE_DATA));
             std::mem::transmute::<usize, ReleaseFn>(vtable_fn(dev, SLOT_RELEASE))(dev);
             Some(fns)
@@ -229,12 +276,14 @@ fn dinput_device_fns(create: DirectInput8CreateFn, iid: &Guid, dev_guid: &Guid) 
 
 fn load_system_dinput8() -> *mut c_void {
     let mut buf = [0u16; 260];
+    // SAFETY: the buffer is valid for the length passed.
     let len = unsafe { GetSystemDirectoryW(buf.as_mut_ptr(), buf.len() as u32) } as usize;
     if len == 0 || len >= buf.len() {
         return std::ptr::null_mut();
     }
     let dir = String::from_utf16_lossy(&buf[..len]);
     let full: Vec<u16> = format!("{dir}\\dinput8.dll\0").encode_utf16().collect();
+    // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
     unsafe { LoadLibraryW(full.as_ptr()) }
 }
 
@@ -256,6 +305,7 @@ fn install_dinput() -> usize {
     // dinput8.dll proxy that unloads itself after forwarding to System32), then
     // also probe the default `dinput8.dll` module.
     let sys_mod = load_system_dinput8();
+    // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
     let local_mod = unsafe { LoadLibraryA(c"dinput8.dll".as_ptr() as *const u8) };
 
     let mut hooked = 0;
@@ -263,10 +313,12 @@ fn install_dinput() -> usize {
         if module.is_null() {
             continue;
         }
+        // SAFETY: plain Win32 calls with NUL-terminated names and valid out pointers.
         let create = unsafe { GetProcAddress(module, c"DirectInput8Create".as_ptr() as *const u8) };
         if create.is_null() {
             continue;
         }
+        // SAFETY: the address is a function of the signature it is cast to.
         let create = unsafe { std::mem::transmute::<*mut c_void, DirectInput8CreateFn>(create) };
 
         for iid in [&IID_IDIRECTINPUT8W, &IID_IDIRECTINPUT8A] {
@@ -306,6 +358,7 @@ fn install_mouse_poll_hook() -> bool {
 pub fn install() {
     let poll = install_mouse_poll_hook();
     let dinput = install_dinput();
+    // SAFETY: applies the hooks queued above.
     let applied = unsafe { MH_ApplyQueued() }.ok().is_ok();
     if applied && (poll || dinput > 0) {
         logger::log(&format!(

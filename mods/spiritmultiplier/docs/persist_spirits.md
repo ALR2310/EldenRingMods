@@ -1,82 +1,116 @@
-# Giữ spirit qua grace và dịch chuyển (nghiên cứu)
+# Keeping spirits through a rest at a grace (`KeepSpiritsOnRest`)
 
-**Status 2026-11-03: ngồi grace giữ được spirit (đã test solo, 2.7.2.0): `KeepSpiritsOnRest` (`src/keep_on_rest.rs`) chặn hai chỗ, SpEffect 202 (`DisappearAll`) và lời gọi `sub_1404B83B0` trong hàm reset chr `sub_14050E0E0` (đánh cờ xoá mọi nhóm spirit); log: 2 nhóm còn nguyên, bộ đếm huỷ nhóm đều 0. Seamless host + sandbox cũng chạy (2026-11-03, sau khi mod vá lại chỗ bị Seamless ghi đè). Fast travel đã chốt không làm (xem mục cuối). Khoá của `groups` là id chủ spirit, không phải map id.**
+Status: **Confirmed** in game on 2.7.2.0: solo, and Seamless host plus a second instance. Resting at a grace
+keeps the spirits. Fast travel was investigated and **rejected**. Conventions:
+[research notes](../../../docs/research/README.md). Code: `src/keep_on_rest.rs`.
 
-Hai tính năng muốn làm (người dùng, 2026-10-26):
+## Question
 
-1. Ngồi grace thì spirit không mất.
-2. Dịch chuyển (fast travel...) sang nơi khác thì spirit đi theo.
+Resting at a grace resets the world and removes the spirits. Which game path removes them, and can it be
+blocked instead of summoning them again?
 
-Người dùng xác nhận ngồi grace làm thế giới reload, nên nhiều khả năng cả hai là một cơ chế.
+## How the game manages and removes spirits (2.7.1.0 and 2.7.2.0, from IDA)
 
-## Cách game quản lý và huỷ spirit (2.7.1.0, từ IDA)
+`SummonBuddyManager+120` is a `std::map` keyed by the **id of the player who owns the spirits** (the key is
+`*(PlayerIns+1408 -> +8)` through `sub_1406576E0`; it is not a map or block id). A node has the key at `+32`,
+the group list at `+48` and the group count at `+56`, so in co-op each player has their own key.
+Addresses below are 2.7.2.0 unless noted.
 
-`SummonBuddyManager+120` là `std::map` khoá theo **id của người chơi chủ spirit** (không phải map id/block như bản đầu ghi nhầm; kiểm lại 2026-11-03 trên 2.7.2.0): khoá = `*(PlayerIns+1408 -> +8)` qua `sub_1406576E0`, và `fromsoftware-rs` cũng ghi "maps character event id to groups it owns". Node: key `+32`, danh sách nhóm `+48`, số nhóm `+56`. Vì vậy co-op mỗi người một khoá riêng.
+- `DisappearAll` (`sub_1404B8240`; 2.7.1.0 `sub_1404B8160`) only marks groups for recall (`+49 = 1`,
+  `+52 = manager+140`, applies SpEffect 60505 or 1840 to the character) under the **local player's** key.
+  It does not delete characters.
+- The per-frame update `sub_1404B9390` (2.7.1.0 `sub_1404B92B0`) calls `DisappearAll` for four conditions:
+  1. the player has SpEffect 202 (`sub_1403F21B0(player, 202)`);
+  2. the recall flag `manager+0x28` (the Ash was pressed again);
+  3. "left the stone area": `manager+0x20 < 0` and the flags `+181` and `+183` are both off;
+  4. the player is in state 13 (`sub_1404B77F0()`) and HP <= 0 (`sub_140437B10`).
+- The same function, second loop: for every key that still has groups it looks the owner up with
+  `sub_140509480(WorldChrMan, key)` (walks `player_chr_set` at `WorldChrMan+69344`). When **no such
+  player is found the whole group is destroyed** through `sub_1404BBB80` (2.7.1.0 `sub_1404BBAA0`),
+  which removes the warp entry and then the character. This cleans up when **the owner leaves the
+  session**, not when a block unloads.
+- Third loop: a local group whose node has `+48` set (recalled) is removed when `+52` seconds run out.
+- Fourth loop: a local group with the node byte `+48` (= `group+0x20`, `warp_requested` in fromsoftware-rs)
+  is destroyed at once (`0x4B97D5`).
+- `sub_140C98CA0` (2.7.1.0 `sub_140C987E0`) calls `DisappearAll(local)` after a series of session clean-ups.
 
-- `DisappearAll` (2.7.2.0 `sub_1404B8240`, 2.7.1.0 `sub_1404B8160`): chỉ đánh dấu thu hồi (`+49 = 1`, `+52 = manager+140`, áp SpEffect 60505 hoặc 1840 lên chr) các nhóm dưới khoá của **người chơi local**. Nó không xoá chr.
-- `sub_1404B9390` (2.7.2.0; 2.7.1.0 `sub_1404B92B0`; cập nhật mỗi frame) gọi `DisappearAll` ở 4 điều kiện:
-  1. người chơi có SpEffect 202 (`sub_1403F21B0(player, 202)`);
-  2. cờ yêu cầu thu hồi `manager+0x28` (bấm lại Ash);
-  3. "rời khu bia đá": `manager+0x20 < 0` và cờ `+181`, `+183` đều tắt;
-  4. người chơi ở trạng thái 13 (`sub_1404B77F0()`) và HP <= 0 (`sub_140437B10`).
-- Cùng hàm, vòng thứ hai: với mỗi khoá còn nhóm, tra người chơi có id đó bằng `sub_140509480(WorldChrMan, key)` (duyệt `player_chr_set` ở `WorldChrMan+69344`, so `sub_1406576E0(player)` với khoá). **Không thấy người chơi đó thì huỷ cả nhóm** qua `sub_1404BBB80` (2.7.1.0 `sub_1404BBAA0`; gỡ mục warp rồi gỡ chr). Bản đầu hiểu nhầm đây là "block đã unload"; thực ra là dọn khi **chủ spirit rời phiên** (co-op: người chơi thoát thì spirit của họ bị dọn trên máy khác).
-- Vòng thứ ba: nhóm của người chơi local có `+48` (đã bị thu hồi) thì xoá khi hết `+52` giây.
-- `sub_140C98CA0` (2.7.2.0; 2.7.1.0 `sub_140C987E0`) gọi `DisappearAll(local)` sau một loạt thao tác dọn phiên; nơi gọi: `sub_14065BC30` (cập nhật người chơi, khi có SpEffect 405) và `sub_140B01E60` (bộ đếm > 10 giây).
+## Finding the real path
 
-Hệ quả: spirit không bị huỷ vì "unload block"; chúng nằm trong `summon_buddy_chr_set` toàn cục, và đường huỷ duy nhất ngoài thu hồi là chủ spirit biến mất khỏi `player_chr_set`. Ngồi grace reset thế giới (quái hồi sinh, vật phá hồi lại; hành vi mặc định) nhưng không rõ nó gọi `DisappearAll` (nhiều khả năng qua `sub_140C98CA0` hay điều kiện 3) hay làm gì khác với chr của spirit: cần `PersistProbe`.
+Passive logging of the manager and groups while resting solo:
 
-## Hướng khả thi: lưu snapshot rồi gọi lại
+- At the rest the player gains SpEffect `202` (with `100010`, then `9608`, `9609`, `9610`, `100690`). SpEffect
+  202 is a 0.1 s effect with nothing else in the row; its source is the grace's rest script.
+- Blocking only the SpEffect 202 branch (redirecting `call sub_1403F21B0(player, 202)` to a function that
+  returns "none") was **not enough**: no group got the `disappear` flag, yet both groups vanished together
+  about 3 seconds later, and their warp entries with them. So another path deletes them.
+- **Rejected**, one by one: a summon request (`manager+0x20` stayed -1, `dismiss` 0; the stone
+  fields only change after the group is gone, they are recomputed from the groups); the owner-leaves loop
+  (the owner id stayed `0` and the player stayed in `player_chr_set`; a test hook returning the local
+  player when the lookup failed logged no failure); `DisappearAll`; the TAE 2030 vanish event on the spirit
+  (`sub_1404B8440` through the TAE handler `sub_14040D190`, which sets the node byte of loop 4); a recall
+  SpEffect on the spirit (the spirit's SpEffects did not change from the rest to the loss, only the
+  summon-time `35, 5255, 290000`); no raw byte of any group flipped before the group disappeared.
+- **Confirmed** by counting calls at the four call sites of `sub_1404BBB80`: only site 2 (the loop of
+  groups carrying the `group+0x20` flag) ran, twice for the two groups. That flag is set in bulk for the
+  groups of **every** owner by `sub_1404B83B0(manager)`, called from `sub_14050E0E0(WorldChrMan)`
+  (2.7.2.0 `0x50E140`; 2.7.1.0 `0x50DE60`), the "reset every character" function that `sub_14050F220` runs
+  during the grace's world reset (it also calls slot `+0x50` of every ChrSet in the list at
+  `WorldChrMan+0x10DC8`, count at `+0x10ED8`). This matches the observation that other players' spirits
+  also vanish in Seamless even though those players are not reset.
 
-Không giữ được chr sống. Cách duy nhất là gọi lại spirit sau khi load xong:
+## Mechanism of the fix
 
-1. Theo dõi `groups` khi đang trong thế giới (`WorldChrMan.main_player` có), lưu snapshot: SpEffect kích hoạt của từng nhóm, số lượng đang sống, số bản Clone.
-2. Phân biệt "mất do reload" với "mất có chủ ý": nếu probe cho thấy nhóm bị gỡ không qua `DisappearAll` thì hook lời gọi `sub_1404BBB80`/`sub_1404BBAA0` (đổi đích `call`, `codepatch::redirect_rel32`, vì Seamless quét chữ ký byte); hook `DisappearAll` (đã có `disappear_all_hook` ở `0x1404B9587`) cho thu hồi, chết, Spirit-Severing Blade thì xoá snapshot.
-3. Sau khi load xong (có `main_player`, hết màn đen, chờ vài giây), gọi `DoSummon` (`sub_1404B85B0`) cho từng nhóm, cách nhau một khoảng, rồi để `Update` spawn như bình thường.
+`KeepSpiritsOnRest` (hot reload) redirects two `call`s with `codepatch::redirect_rel32`, both found by
+patterns unique on 2.6.2.0 to 2.7.2.0:
 
-Ghi chú:
+- the `call sub_1403F21B0(player, 202)` in the update function, answering "none" while on, so
+  `DisappearAll` does not run at the rest;
+- the `call sub_1404B83B0` in `sub_14050E0E0` (`RESET_AOB`), doing nothing while on, so the groups are not
+  flagged for removal.
 
-- Ngồi grace dễ hơn dịch chuyển: chỗ đứng không đổi, không lo điểm triệu hồi hay vùng cấm ở nơi đến. Spirit gọi lại đầy máu, hợp với việc nghỉ ngơi hồi máu.
-- Dịch chuyển cần `SummonAnywhere` bật, nếu không điều kiện "rời khu bia đá" thu hồi ngay.
-- `DoSummon` gọi trực tiếp **không tốn FP**, vì phí tính ở bước dùng item (`sub_1403C0930`). Cần chốt: miễn phí hay phải tính phí.
-- Phải tôn trọng chỗ game cấm triệu hồi (đấu trường: game cố ý không đăng ký spirit với warp manager ở đó).
-- Gọi lại số lượng lớn đúng lúc load dễ dính crash đồ hoạ giống Mimic Tear trong Seamless ([mimic_tear.md](mimic_tear.md)); trong Seamless còn có đồng bộ mạng chưa rõ. Đề xuất bản đầu chỉ offline.
-- Đăng ký sớm với `warp_manager` khi chr chưa tra được từng gây crash ([warp_research.md](warp_research.md)); gọi lại phải chờ `resolvable()`.
+With the feature off both call the originals.
 
-## Chưa biết
+### Seamless
 
-- Lúc ngồi grace game huỷ spirit bằng đường nào: vòng dọn khi chủ rời phiên (`sub_1404BBB80`; ít khả năng, người chơi vẫn còn), một lời gọi `DisappearAll` (điều kiện 1 hay 3 có thể bị kích khi cờ sự kiện bia đá reset), hay đường khác. Nếu là thu hồi có chủ ý thì chỉ cần chặn đúng lời gọi đó (như `+0x28` ở `multi_spirit.rs`), đơn giản hơn nhiều và giữ nguyên máu spirit.
-- Chr của spirit có sống sót qua lần reset thế giới của grace không (vị trí, vật lý, tải lại model), kể cả khi chặn được `DisappearAll`: probe chưa log trạng thái chr, cần thêm nếu cần.
-- SpEffect 202 là gì (tra Smithbox).
+Under Seamless the first block stopped working: only the SpEffect 202 counter rose (7 times on both machines,
+the 7 frames of the 0.1 s effect) and the destruction followed. A diff of the game code in RAM against the
+executable shows Seamless redirects the same `call sub_1403F21B0` (and puts an inline hook at the start of
+the update function); it initialises after this mod and overwrites the mod's target. `keep_on_rest.rs`
+therefore checks once a second whether the call still points at the mod's stub; if it was replaced, it
+patches again and chains to the new target (Seamless's stub) and logs `patch was replaced, applied again`.
+Tested host plus second instance: both players' spirits survive a rest.
 
-## Cập nhật 2026-11-03: thêm 2 nơi gọi `DisappearAll` và probe `PersistProbe`
+## Open risks
 
-Kiểm lại trên 2.7.2.0 (IDA): mọi hàm trên còn nguyên cấu trúc, chỉ lệch địa chỉ `+0xE0` (AOB `DISAPPEAR_CALL_AOB` của mod vẫn duy nhất, `0x4B965D`). Xref `DisappearAll`: 4 chỗ trong `sub_1404B9390` và `sub_140C98CA0` (`0xC98E43`). `sub_140C98CA0` (gọi `sub_1401D2610/2620`, kiểm `sub_1405F0210(0x40000000, ...)`, đặt cờ `+223/+224/+225` của một singleton) là ứng viên "kết thúc phiên"; chưa xác định nó có chạy lúc ngồi grace không. Chưa xác nhận bằng game.
+- SpEffect 202 may be applied elsewhere (fog gates, cutscenes, arenas that forbid summoning); those no longer
+  recall the spirits either. A few such situations should be tried.
+- **Not established**: whether slot `+0x50` of the ChrSets removes the spirit characters in the reset (whether
+  the summon ChrSet is in that list). The groups and characters survive in the solo and Seamless tests, so
+  this has not shown up.
+- Seamless remote copies of spirits also disappear through `sub_1404B7080` (removal on a network event of
+  `sub_14050E410`, only in a session); that path is not touched.
 
-Probe thụ động `PersistProbe` (ini `[Logging]`, mặc định tắt, `src/persist_probe.rs`, không hook): mỗi lần đổi, log block người chơi, từng khoá chủ spirit (id người chơi), từng nhóm trong `groups` (khoá, số nhóm, số `disappear_requested`, số HP <= 0) và SpEffect của người chơi. Spirit mất sau khi nhóm có cờ `disappear` = đường `DisappearAll` (xem SpEffect 405/202 lúc đó); nhóm biến mất không có cờ = đường chủ rời phiên (`sub_1404BBB80` từ vòng 2) hoặc đường khác chưa biết. Chưa chạy.
+## Diagnostics
 
-## Kết quả probe ngồi grace và `KeepSpiritsOnRest` (2026-11-03)
+`Logging.PersistProbe` (`src/probe/persist.rs`, off by default) logs on every change the block the player is in,
+the owner key of each spirit group (flags, HP, raw flag bytes), the player's and the first spirit's SpEffects and
+the manager's request fields, and counts the calls of the group-destroy and `DisappearAll` sites with counting
+stubs (a `call` redirect, nothing runs in Rust inside the hook). Reading it around a rest tells which path
+removed the spirits.
 
-Log solo (không Seamless): 2 nhóm sống; lúc ngồi grace SpEffect của người chơi có thêm `202` (kèm `100010`, rồi `9608/9609/9610/100690`); cùng nhịp cả 2 nhóm có cờ `disappear`, sau khoảng 1 giây nhóm biến mất khỏi `groups`. Không có nhóm nào biến mất mà không qua cờ `disappear`. Kết luận: đường `DisappearAll` điều kiện 1, không phải đường chủ rời phiên hay unload. SpEffect 202 (`SpEffectParam` base): hiệu ứng thời hạn 0,1 s, không có hiệu ứng nào khác trong hàng; nguồn gắn nó là script nghỉ của grace.
+## Fast travel: rejected
 
-`KeepSpiritsOnRest` (ini `[Spirit]`, mặc định `true`, hot reload): đổi đích `call sub_1403F21B0(player, 202)` trong hàm update (AOB duy nhất ở 2.6.2.0 - 2.7.2.0, `codepatch::redirect_rel32`) sang hàm trả "không có" khi bật, nên `DisappearAll` không chạy lúc ngồi grace; tắt thì gọi hàm gốc. Rủi ro chưa kiểm: SpEffect 202 có thể còn do nơi khác gắn (cửa sương, cắt cảnh, đấu trường cấm triệu hồi) và nơi đó cũng không còn thu hồi spirit; cần thử vài tình huống. Chưa rõ điều gì xảy ra với chr của spirit sau lần reset thế giới của grace (vị trí, vật lý): xem khi test.
+Solo test (summon, then fast travel to the very grace being rested at) with the diagnostics on: while the
+loading screen shows (`block 0xffffffff`) the whole `groups` map vanished (not even the key `0` entry,
+unlike a rest), the spirit characters were gone (`chr not found` in the warp log),
+`active_summon_speffect_id` became `-1` (a rest keeps it), and every `DisappearAll` and group-destroy counter
+stayed 0. The whole world and the spirit manager are destroyed and rebuilt through the loading screen, so
+there is no single removal command to block as there is for a rest. The only way left is to summon the Ashes
+again after the load (save the active Ash SpEffects, write them into `request_summon_speffect_id` at `+0x20`
+once the world is ready); spirits would reappear with the summon animation and full HP, which was judged
+not worth doing.
 
-**Test `KeepSpiritsOnRest` (2026-11-03, solo): vẫn mất.** SpEffect 202 vẫn xuất hiện nhưng không nhóm nào có cờ `disappear`; cả 2 nhóm biến mất cùng lúc khoảng 3 giây sau (`2 groups` → `0 groups`), mục warp cũng mất theo. Vậy có đường huỷ không qua cờ. Ứng viên (2.7.2.0): (a) `sub_1404B87B0` (cập nhật chính của manager, gọi `sub_1404BBA80(manager, local key)` tại `0x4B8A90` khi `manager+0x20 >= 0`, tức `request_summon_speffect_id` có yêu cầu triệu hồi, rồi triệu hồi lại bằng `sub_1404BBEB0`): xoá ngay mọi nhóm của người chơi local; (b) vòng chủ rời phiên của `sub_1404B9390` (`0x4B9517`, nhóm có khoá không còn người chơi tương ứng trong `player_chr_set`), nếu người chơi tạm không ở `player_chr_set` lúc reset thế giới; (c) chr bị gỡ bởi reset thế giới rồi mục nhóm bị dọn ở chỗ khác. Probe lần 2 (đọc đúng trường manager): lúc nhóm biến mất `req` (+0x20) vẫn -1, `dismiss` 0, không cờ `disappear`; bia (+0x38/+0x3C) và cờ vùng/`player_has_alive_summon` chỉ đổi SAU khi nhóm đã mất (chúng tính lại từ nhóm). Loại ứng viên (a) (yêu cầu triệu hồi) và đường `DisappearAll`; còn (b) chủ rời phiên và (c) chr bị gỡ. Probe lần 3 (đọc đúng): `players 6["0", null...]` và id chủ `0` giữ nguyên suốt lúc nhóm mất: ứng viên (b) bị loại, người chơi vẫn trong `player_chr_set` và khớp khoá nhóm. Còn (c) và đường loại 4 của `sub_1404B9390` (nhóm local có byte `+48` của node = `group+0x20`, trong `fromsoftware-rs` là `warp_requested`, thì bị huỷ ngay tại `0x4B97D5`; chưa tìm được nơi đặt byte đó). Probe lần 4 dump byte thô `+0x08..+0x2E` của từng nhóm mỗi lần đổi, để thấy byte nào lật trước khi mất. Probe lần 4 (byte thô): không byte nào của nhóm lật trước khi nhóm mất (kể cả `group+0x20`, `+0x21`); `+0x08` 0 → 1 và `+0x28` 0 → 1 chỉ lúc mới triệu hồi. Nhóm bị gỡ nguyên khối trong một frame. Vòng "chủ rời phiên" (b) vẫn là nghi phạm chính: probe chỉ đọc ở đầu frame nên có thể bỏ lỡ lúc người chơi vắng mặt giữa frame khi reset thế giới. Thử nghiệm: `keep_on_rest.rs` đổi đích thêm `call sub_140509480` ở `0x4B94FA` (AOB `OWNER_AOB`) sang `owner_lookup_hook`: nếu game không thấy người chơi cho khoá và khoá là id của người chơi local thì trả người chơi local (không huỷ nhóm); log 10 lần đầu `owner lookup found no player for key ...`. Kết quả: chưa test.
-Probe lần 5 (thử nghiệm chặn tra cứu chủ): không có dòng `owner lookup found no player` nào, tức tra cứu chủ chưa từng thất bại: (b) bị loại hẳn. Đường huỷ còn lại: sự kiện TAE 2030 phát trên chính chr của spirit (cờ chr `+457 & 4`, chr của buddy) gọi `sub_1404B8440(manager, handle)` (TAE handler `sub_14040D190` tại `0x40DC38`), đặt byte `+48` của node (= `group+0x20`); vòng 4 của `sub_1404B9390` (`0x4B97D5`) huỷ nhóm đó ngay. Đó là sự kiện cuối của hoạt ảnh biến mất; ở lượt probe trước cờ này được đặt và nhóm bị huỷ trong cùng frame nên probe không thấy. (`sub_1404B7080` là đường thứ tư, chỉ chạy trong phiên nhiều người, từ `sub_14050E410`.) Vậy ngồi grace buộc chr của spirit chạy hoạt ảnh biến mất bằng đường khác `DisappearAll` (thường qua SpEffect 60505/1840 trên chr). Probe giờ log SpEffect của chr spirit đầu tiên (`spirit fx`) để thấy hiệu ứng nào được gắn lúc đó.
-Probe lần 6 (`spirit fx`): SpEffect trên chr spirit đầu tiên không đổi từ lúc ngồi đến lúc nhóm mất (không có 60505/1840 hay hiệu ứng thu hồi nào; chỉ có hiệu ứng lúc mới triệu hồi `35, 5255, 290000`). Vậy chr và nhóm bị xoá trong cùng một frame bởi chính lần reset thế giới của grace (khoảng 1 giây sau khi người chơi nhận `9608/9609/9610`), không qua cờ, hiệu ứng hay sự kiện nào mà probe thấy được. Sau khi mất, `manager+0x24` (`active_summon_speffect_id`) vẫn giữ SpEffect của Ash (ví dụ `213000`): có thể gọi lại bằng đường của game (ghi `request_summon_speffect_id` ở `+0x20`, hàm update huỷ nhóm cũ rồi `sub_1404BBEB0` triệu hồi lại). Hướng thực tế: lưu snapshot các SpEffect Ash đang hoạt động, phát hiện "bị xoá bởi reset" (nhóm mất không cờ, người chơi vừa có SpEffect 202), rồi gọi lại sau khi thế giới sẵn sàng.
-**Tìm được đường huỷ (2026-11-03, bộ đếm tại 4 chỗ gọi `sub_1404BBB80`): chỉ chỗ số 2 (vòng nhóm có cờ `group+0x20`) chạy, 2 lần cho 2 nhóm.** Cờ được đặt hàng loạt cho nhóm của MỌI chủ bởi `sub_1404B83B0(manager)`, gọi từ `sub_14050E0E0(WorldChrMan)` (2.7.2.0, `0x50E140`; 2.7.1.0 `0x50DE60` vùng tương ứng), hàm "reset mọi chr" mà `sub_14050F220` chạy lúc reset thế giới của grace (cũng gọi slot `+0x50` của từng ChrSet trong danh sách `WorldChrMan+0x10DC8`, đếm ở `+0x10ED8`). Khớp quan sát của người dùng: spirit của người chơi khác cũng bị xoá trong Seamless, trong khi người chơi đó không bị reset. `KeepSpiritsOnRest` giờ đổi đích lời gọi `sub_1404B83B0` đó (AOB `RESET_AOB`, duy nhất ở 2.6.2.0 - 2.7.2.0) sang hàm không làm gì khi bật; bỏ hook tra cứu chủ (vô tác dụng). Chưa biết slot `+0x50` của ChrSet có xoá chr spirit hay không (summon ChrSet có trong danh sách đó không): nếu có, nhóm còn mà chr mất, probe/mod đọc `chr_ins` có thể lỗi. Chưa test.
-**Seamless (test 2026-11-03, host + sandbox): `KeepSpiritsOnRest` chưa đủ, ngồi grace bên nào cũng xoá hết spirit của cả hai.** Log: lúc bắt đầu nghỉ nhóm của chủ ngồi có cờ `disappear` (tức `DisappearAll` chạy dù đã chặn SpEffect 202; SpEffect 202 không có trong danh sách), cờ vùng của manager `[1,1,1,0]` → `[0,0,1,0]` (`+0xB5 = is_within_activation_range` về 0: điều kiện 3 "rời khu bia" = `+0x20 < 0` và `+0xB5`, `+0xB7` đều tắt có thể đúng), rồi chỗ huỷ số 2 chạy. Bản sao spirit từ xa (khoá của người kia) biến mất không qua `sub_1404BBB80` nên qua `sub_1404B7080` (gỡ theo sự kiện mạng của `sub_14050E410`, chỉ chạy trong phiên). Probe có thêm bộ đếm 5 chỗ gọi `DisappearAll` (202 / yêu cầu thu hồi / rời khu bia / người chơi chết / `sub_140C98CA0`) để xem chỗ nào chạy trong phiên. Log trong phiên Seamless lên tới ~470 KB vì dòng probe đổi mỗi frame.
-**Nguyên nhân trong Seamless tìm được (bộ đếm 5 chỗ gọi `DisappearAll`):** chỉ bộ đếm của nhánh SpEffect 202 tăng (7 lần, cả hai máy, đúng 7 frame của hiệu ứng 0,1 s), rồi chỗ huỷ số 2 chạy. Tức hook chặn 202 không còn tác dụng: file diff của Seamless (`dumps/seamless-diff/2.7.1.0-ersc-2.0.1/seamless_only_ida.txt`) liệt kê Seamless cũng đổi đích đúng lời gọi `sub_1403F21B0` đó (và đặt hook inline ở đầu hàm update); nó khởi tạo sau mod nên ghi đè đích lời gọi của mod. Sửa: `keep_on_rest.rs` kiểm mỗi giây xem lời gọi còn trỏ vào stub của mod không; nếu bị thay thì vá lại, nối chuỗi tới đích mới (stub của Seamless) và log `patch was replaced, applied again`. Đã test host + sandbox: spirit của cả hai còn nguyên sau khi ngồi grace; log có `patch was replaced, applied again`.
-Probe lần 3 log thêm id chủ của người chơi (`PlayerIns+1408 -> +8`, thứ vòng dọn so với khoá nhóm) để xem nó có đổi lúc reset không.
-`PersistProbe` log các trường manager: `+0x20` yêu cầu, `+0x24` đang hoạt động, `+0x28` cờ thu hồi, `+0x38/+0x3C` bia, `+0x88`, cờ `+0xB4..B7`; xem trường nào đổi ngay trước khi nhóm mất.
+## Related
 
-Fast travel chưa xử lý: chưa có log; điều kiện 3 (`manager+0x20 < 0`) hay SpEffect khác có thể kích khi dịch chuyển.
-
-## Bước tiếp theo (pha 0, probe, mặc định tắt)
-
-Thêm log chẩn đoán: lời gọi nào tới `DisappearAll` (điều kiện nào trong 4) và tới `sub_1404BBAA0`; map id người chơi; số nhóm theo từng map id. Test: ngồi grace, fast travel trong cùng map, fast travel xa, chết, đi xa trong overworld, một lần trong Seamless. Kết quả cho biết tín hiệu nhận biết reload, rồi mới viết tính năng.
-
-Tham chiếu: `src/multi_spirit.rs` (`disappear_all_hook`, `groups`), `src/buddy_stone.rs` (`NoRestResummon`, `SummonAnywhere`), `src/warp.rs`, [multi_spirit.md](multi_spirit.md), [summon_anywhere.md](summon_anywhere.md).
-
-## Fast travel: không làm được, đã chốt bỏ (2026-11-03)
-
-Test solo (triệu hồi rồi dịch chuyển tới chính grace đang ngồi) với `PersistProbe`: lúc màn hình tải (`block 0xffffffff`) cả map `groups` biến mất (không còn cả mục khoá 0, khác ngồi grace), chr của spirit không còn (`chr not found` ở log Warp), `active_summon_speffect_id` về `-1` (ngồi grace thì còn giữ), mọi bộ đếm `DisappearAll` và huỷ nhóm đều 0. Tức cả thế giới và manager spirit bị huỷ rồi dựng lại qua màn hình tải: không có lệnh xoá riêng nào để chặn như ngồi grace. Chỉ còn cách tự triệu hồi lại sau khi tải (lưu SpEffect Ash, ghi vào `request_summon_speffect_id` `+0x20` sau khi thế giới sẵn sàng); người dùng không muốn hướng đó (spirit hiện lại bằng hoạt ảnh triệu hồi, đầy máu), nên không làm.
+`src/multi_spirit.rs` (`disappear_all_hook`, `groups`), `src/buddy/stone.rs`, `src/warp.rs`,
+[multi_spirit.md](multi_spirit.md), [summon_anywhere.md](summon_anywhere.md), [mimic_tear.md](mimic_tear.md).

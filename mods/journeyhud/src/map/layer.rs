@@ -15,7 +15,7 @@ use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use hudhook::RenderContext;
 use hudhook::imgui::TextureId;
 
-use common::logger;
+use shared::logger;
 
 use super::mfg;
 use super::sprites::{self, Image, SpriteRef};
@@ -53,9 +53,17 @@ pub enum Icon {
 impl Icon {
     /// The icon of buildup `kind` (an index into `target::BUILDUP`).
     pub fn buildup(kind: usize) -> Option<Icon> {
-        [Icon::Poison, Icon::ScarletRot, Icon::Bleed, Icon::DeathBlight, Icon::Frostbite, Icon::Sleep, Icon::Madness]
-            .get(kind)
-            .copied()
+        [
+            Icon::Poison,
+            Icon::ScarletRot,
+            Icon::Bleed,
+            Icon::DeathBlight,
+            Icon::Frostbite,
+            Icon::Sleep,
+            Icon::Madness,
+        ]
+        .get(kind)
+        .copied()
     }
 }
 
@@ -126,6 +134,8 @@ pub struct MapLayer {
     map_icons: Option<MapIcons>,
     status_icons: Option<StatusIcons>,
     goblins: Goblins,
+    /// When the loader started, for the `Logging.MapProbe` timing line.
+    created: std::time::Instant,
 }
 
 impl MapLayer {
@@ -151,6 +161,7 @@ impl MapLayer {
             map_icons: None,
             status_icons: None,
             goblins: Goblins::Waiting,
+            created: std::time::Instant::now(),
         }
     }
 
@@ -197,6 +208,12 @@ impl MapLayer {
         if uploaded {
             if self.shown.is_none() {
                 logger::log("Map: first window uploaded");
+                if crate::settings::map_probe() {
+                    logger::log(&format!(
+                        "Map: first window uploaded {} ms after the loader started",
+                        self.created.elapsed().as_millis()
+                    ));
+                }
             }
             self.shown = Some((window.map, window.origin));
         } else {
@@ -370,7 +387,10 @@ impl MapLayer {
                 };
                 let uploaded = pack_goblins(&icons).and_then(|grid| {
                     let texture = ctx.load_texture(&grid.rgba, grid.width, grid.height).ok()?;
-                    logger::log(&format!("Map: {} Map for Goblins icon(s) uploaded", grid.cells.len()));
+                    logger::log(&format!(
+                        "Map: {} Map for Goblins icon(s) uploaded",
+                        grid.cells.len()
+                    ));
                     Some(GoblinIcons { texture, cells: grid.cells })
                 });
                 if uploaded.is_none() {
@@ -408,7 +428,8 @@ fn pack_goblins(icons: &[mfg::Icon]) -> Option<Grid> {
 /// Lays the images that fit a `cell` pixel square out in a grid of `columns` columns, each in its
 /// own cell, by id.
 fn pack_grid(items: &[(u32, &Image)], cell: u32, columns: u32) -> Option<Grid> {
-    let fitting: Vec<&(u32, &Image)> = items.iter().filter(|(_, image)| image.width <= cell && image.height <= cell).collect();
+    let fitting: Vec<&(u32, &Image)> =
+        items.iter().filter(|(_, image)| image.width <= cell && image.height <= cell).collect();
     if fitting.is_empty() {
         return None;
     }
@@ -421,7 +442,8 @@ fn pack_grid(items: &[(u32, &Image)], cell: u32, columns: u32) -> Option<Grid> {
         for row in 0..image.height {
             let from = (row * image.width * 4) as usize;
             let to = (((y + row) * width + x) * 4) as usize;
-            rgba[to..to + (image.width * 4) as usize].copy_from_slice(&image.rgba[from..from + (image.width * 4) as usize]);
+            rgba[to..to + (image.width * 4) as usize]
+                .copy_from_slice(&image.rgba[from..from + (image.width * 4) as usize]);
         }
         let uv = |px: u32, py: u32| [px as f32 / width as f32, py as f32 / height as f32];
         cells.insert(
@@ -439,8 +461,10 @@ fn pack_grid(items: &[(u32, &Image)], cell: u32, columns: u32) -> Option<Grid> {
 /// Shrinks every icon to at most `side` pixels and packs them in rows into an `ATLAS` square
 /// (RGBA), padded so filtering does not bleed one into the next. `None` if they do not fit.
 fn pack(icons: &[(u16, Image)], side: u32) -> Option<(Vec<u8>, HashMap<u16, MapIcon>)> {
-    let mut shrunk: Vec<(u16, [f32; 2], Image)> =
-        icons.iter().map(|(id, image)| (*id, [image.width as f32, image.height as f32], image.shrunk(side))).collect();
+    let mut shrunk: Vec<(u16, [f32; 2], Image)> = icons
+        .iter()
+        .map(|(id, image)| (*id, [image.width as f32, image.height as f32], image.shrunk(side)))
+        .collect();
     shrunk.sort_by_key(|(_, _, image)| std::cmp::Reverse(image.height));
     let mut rgba = vec![0u8; (ATLAS * ATLAS * 4) as usize];
     let mut cells = HashMap::new();
@@ -455,10 +479,18 @@ fn pack(icons: &[(u16, Image)], side: u32) -> Option<(Vec<u8>, HashMap<u16, MapI
         for line in 0..image.height {
             let from = (line * image.width * 4) as usize;
             let to = (((y + line) * ATLAS + x) * 4) as usize;
-            rgba[to..to + (image.width * 4) as usize].copy_from_slice(&image.rgba[from..from + (image.width * 4) as usize]);
+            rgba[to..to + (image.width * 4) as usize]
+                .copy_from_slice(&image.rgba[from..from + (image.width * 4) as usize]);
         }
         let uv = |px: u32, py: u32| [px as f32 / ATLAS as f32, py as f32 / ATLAS as f32];
-        cells.insert(*id, MapIcon { uv_min: uv(x, y), uv_max: uv(x + image.width, y + image.height), size: *size });
+        cells.insert(
+            *id,
+            MapIcon {
+                uv_min: uv(x, y),
+                uv_max: uv(x + image.width, y + image.height),
+                size: *size,
+            },
+        );
         x += image.width + ICON_PADDING;
         row = row.max(image.height);
     }
@@ -485,7 +517,9 @@ mod tests {
         // Every cell holds its own shade at its top-left pixel, so none was overwritten.
         for (id, shade) in [(4, 10), (5, 20), (6, 30)] {
             let cell = cells[&id];
-            let at = (((cell.uv_min[1] * ATLAS as f32) as u32 * ATLAS + (cell.uv_min[0] * ATLAS as f32) as u32) * 4) as usize;
+            let at = (((cell.uv_min[1] * ATLAS as f32) as u32 * ATLAS
+                + (cell.uv_min[0] * ATLAS as f32) as u32)
+                * 4) as usize;
             assert_eq!(rgba[at], shade, "icon {id}");
         }
     }
@@ -493,7 +527,8 @@ mod tests {
     #[test]
     fn goblin_icons_sit_in_their_own_cells_and_oversized_ones_are_left_out() {
         let icon = |id, side| mfg::Icon { id, image: square(side, id as u8) };
-        let Grid { rgba, width, cells, .. } = pack_goblins(&[icon(1, 40), icon(2, 96), icon(3, 200)]).unwrap();
+        let Grid { rgba, width, cells, .. } =
+            pack_goblins(&[icon(1, 40), icon(2, 96), icon(3, 200)]).unwrap();
         assert_eq!(cells.len(), 2);
         // The second icon starts in the second cell of the first row.
         assert!((cells[&2].uv_min[0] * width as f32 - GOBLIN_CELL as f32).abs() < 0.5);

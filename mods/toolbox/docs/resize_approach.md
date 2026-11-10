@@ -1,94 +1,95 @@
-# Resize cửa sổ (Toolbox): vì sao chỉ cần `WS_THICKFRAME` và subclass WndProc
+# Resizing the game window: `WS_THICKFRAME` and a window-procedure subclass
 
-**Status 2026-09-29: HOÀN THÀNH, đã xác nhận trong game (kéo resize hoạt động
-như mong đợi).** Code: `mods/toolbox/src/resize/window.rs`. Không cần dịch
-ngược: mod chỉ dùng Win32, không AOB/RVA, không đụng struct của game, nên
-không vỡ khi game cập nhật.
+Status: **Confirmed** in game: dragging the edges resizes as intended. Code: `src/resize/window.rs`. No reverse
+engineering was needed: the mod only uses Win32, no AOB or RVA and no game struct, so a game update cannot break
+it. Conventions: [research notes](../../../docs/research/README.md).
 
-## Câu hỏi gốc
+## Question
 
-Menu độ phân giải của game có mức nhỏ nhất 800x450 (trước đó 800x420). Có cần
-RE trong IDA để bỏ giới hạn này không? Trả lời: **không**. Thử từ bên ngoài
-bằng PowerShell trước khi mở IDA:
+The game's resolution menu has a smallest entry of 800x450 (earlier 800x420). Does lifting that limit need
+reverse engineering in IDA? **No.** It was tried from outside with PowerShell before opening IDA:
 
-1. `SetWindowPos` ép cửa sổ về 480x300: game **giữ nguyên** kích thước đó, vẫn
-   render đủ cảnh (DXGI tự co swapchain vào client area) và không tự kéo về.
-   Vậy không có chỗ nào trong game cần patch.
-   - Lần thử đầu tưởng thất bại: PowerShell không DPI-aware, màn hình để 150%
-     nên "480x300" thành 720x450 pixel thật. Phải `SetProcessDPIAware` trước
-     khi đo hay đặt kích thước.
-2. Style cửa sổ gốc là `0x14CA0000`, **không có `WS_THICKFRAME`**, nên vốn
-   không kéo resize được; 800x450 chỉ là mục nhỏ nhất trong list độ phân giải.
-3. Thêm `WS_THICKFRAME` từ ngoài: `WM_NCHITTEST` ở mép trả đúng
-   HTLEFT/HTRIGHT/HTBOTTOM/HTBOTTOMRIGHT, nhưng **không hiện mũi tên kéo**
-   vì game tự xử lý `WM_SETCURSOR` và ép con trỏ của nó.
+1. `SetWindowPos` forcing the window to 480x300: the game **keeps** that size, still renders the whole scene
+   (DXGI shrinks the swap chain into the client area) and does not pull it back. So nothing in the game needs a
+   patch.
+   - The first try looked like a failure: PowerShell is not DPI aware and the screen was at 150%, so "480x300"
+     became 720x450 real pixels. Call `SetProcessDPIAware` before measuring or setting sizes.
+2. The original window style is `0x14CA0000`, **without `WS_THICKFRAME`**, so it cannot be resized by dragging;
+   800x450 is just the smallest entry of the resolution list.
+3. Adding `WS_THICKFRAME` from outside: `WM_NCHITTEST` at the edge returns HTLEFT / HTRIGHT / HTBOTTOM /
+   HTBOTTOMRIGHT correctly, but **no resize arrow appears**, because the game handles `WM_SETCURSOR` itself and
+   forces its own cursor.
 
-Kết luận: (a) thêm `WS_THICKFRAME`, (b) subclass WndProc để trả `WM_SETCURSOR`
-ở vùng viền cho `DefWindowProcW`.
+Conclusion: (a) add `WS_THICKFRAME`, (b) subclass the window procedure to hand `WM_SETCURSOR` over the border to
+`DefWindowProcW`.
 
-## Thiết kế đã chọn
+## Design
 
-- **Tìm cửa sổ:** `EnumWindows` lấy cửa sổ visible của process hiện tại có
-  class bắt đầu bằng `ELDEN RING` (process còn có cửa sổ ẩn `IME`, `DIEmWin`).
-  Không dùng `soulsteleport::ui::game_window()` vì hàm đó chỉ trả về khi game
-  đang là foreground window.
-- **Subclass** bằng `SetWindowLongPtrW(GWLP_WNDPROC)`, không dùng
-  `SetWindowSubclass` vì hàm đó từ chối khi gọi từ thread khác thread tạo cửa
-  sổ (mod chạy trên worker thread).
-- **WndProc riêng**, chỉ can thiệp khi viền do mod thêm đang bật:
-  - `WM_SETCURSOR` với hit-test 10..=17: giao cho `DefWindowProcW` (hiện mũi
-    tên).
-  - `WM_GETMINMAXINFO`: `ptMinTrackSize` = `MinWidth/MinHeight` + khung.
-  - `WM_SIZING`: ép min và tỉ lệ `AspectWidth:AspectHeight` trên **client
-    area**, chỉ dịch cạnh đang kéo. Kéo cạnh trên/dưới thì chiều cao quyết
-    định chiều rộng; mọi cạnh/góc khác thì chiều rộng quyết định chiều cao.
-  - Kích thước khung tính bằng `AdjustWindowRectExForDpi` thay vì đọc rect
-    thật (rect = 0 khi cửa sổ đang minimize).
-- **Watchdog 1s:** game ghi đè style mỗi lần đổi screen mode hay độ phân giải
-  nên viền được thêm lại định kỳ; tự hook lại nếu cửa sổ bị tạo lại.
-  Fullscreen/Borderless (không có `WS_CAPTION`) thì bỏ qua. `Resizable=false`
-  gỡ viền, chỉ gỡ nếu chính mod đã thêm.
+- **Finding the window**: `EnumWindows` takes the visible window of the current process whose class starts with
+  `ELDEN RING` (the process also has hidden windows `IME` and `DIEmWin`). The overlay's `game_window()` is not
+  used because it only returns when the game is the foreground window.
+- **Subclassing** with `SetWindowLongPtrW(GWLP_WNDPROC)`, not `SetWindowSubclass`, which refuses a call from a
+  thread other than the window's creator (the mod runs on a worker thread).
+- **Own window procedure**, acting only while the border the mod added is on:
+  - `WM_SETCURSOR` with hit-test 10..=17: handed to `DefWindowProcW` (shows the arrow).
+  - `WM_GETMINMAXINFO`: `ptMinTrackSize` = `MinWidth` / `MinHeight` plus the frame.
+  - `WM_SIZING`: enforces the minimum and the aspect `AspectWidth:AspectHeight` on the **client area**, moving
+    only the dragged edge. Dragging the top or bottom edge lets the height decide the width; every other edge or
+    corner lets the width decide the height.
+  - The frame size comes from `AdjustWindowRectExForDpi`, not the real rect (the rect is 0 while minimised).
+- **A 1 s watchdog**: the game overwrites the style on every screen mode or resolution change, so the border is
+  added again periodically; the window is hooked again if it is recreated. Fullscreen and Borderless (no
+  `WS_CAPTION`) are skipped. `Resizable = false` removes the border, only if the mod added it.
 
-## Kích thước khởi động (`Width`/`Height`)
+## Start-up size (`Width` / `Height`)
 
-Hai key này là kích thước **client area** (pixel thật). Khi tìm thấy cửa sổ
-game, mod `SetWindowPos` về kích thước đó (giữ vị trí). Để trống cả 2 thì
-không đụng, giữ kích thước theo setting của game. Điền 1 key thì key còn lại
-tính theo `AspectWidth:AspectHeight` (nếu tắt tỉ lệ thì giữ kích thước hiện
-tại cho trục đó). Vẫn bị kẹp bởi `MinWidth/MinHeight`.
+Both keys are the size of the **client area** in real pixels. When the game window is found the mod calls
+`SetWindowPos` to that size (keeping the position). Both empty: untouched. One set: the other follows
+`AspectWidth:AspectHeight` (with the ratio off, that axis keeps its current size). Still clamped by `MinWidth` /
+`MinHeight`.
 
-- **Áp lại mỗi 1s trong 20 giây đầu** (`START_SIZE_WINDOW`) sau khi hook, vì mod
-  hook cửa sổ ngay lúc mới tạo, trước khi game kịp đặt độ phân giải trong
-  setting lên nó; áp 1 lần có thể bị game ghi đè ngay sau. Ban đầu là 10 giây,
-  tăng lên 20 sau khi test.
-- **Dừng áp ngay khi người chơi bắt đầu kéo viền** (`WM_ENTERSIZEMOVE` đặt
-  `USER_RESIZED`), để không giành lại kích thước họ vừa chọn.
-- **DPI:** thread của mod gọi `SetThreadDpiAwarenessContext(PER_MONITOR_AWARE_V2)`
-  nên `Width`/`Height` luôn là pixel thật, không bị Windows nhân theo scale
-  như lần test PowerShell. Game vốn đã DPI-aware (`GetDpiForWindow` = 144 ở
-  150%, bản unaware luôn trả 96), đây chỉ là phòng hờ. Khung cửa sổ khi đặt
-  kích thước khởi động đo từ rect thật (`GetWindowRect - GetClientRect`) để
-  cùng hệ toạ độ với `SetWindowPos`. Log lúc hook in DPI của cửa sổ để kiểm
-  tra.
+- **Applied every second for the first 20 seconds** (`START_SIZE_WINDOW`) after the hook, because the mod hooks
+  the window as soon as it is created, before the game applies the resolution of its settings to it; a single
+  apply can be overwritten right after (10 seconds at first, raised to 20 after testing).
+- **Stops as soon as the player starts dragging** (`WM_ENTERSIZEMOVE` sets `USER_RESIZED`), so it does not
+  take back the size the player just chose.
+- **DPI**: the mod's thread calls `SetThreadDpiAwarenessContext(PER_MONITOR_AWARE_V2)`, so `Width` / `Height` are
+  always real pixels, not multiplied by Windows scaling as in the PowerShell test. The game is already DPI aware
+  (`GetDpiForWindow` = 144 at 150%; an unaware window always returns 96), so this is only a precaution. The
+  window frame, when setting the start-up size, is measured from the real rects (`GetWindowRect -
+  GetClientRect`) so it is in the same coordinate system as `SetWindowPos`. The hook logs the window's DPI.
 
-## Đã bỏ: hot reload và log môi trường
+## Dropped: hot reload for this part
 
-Bỏ `ReloadKey` và `common::reload::run`, vì hot reload là phần duy nhất của mod
-đăng ký code vào hệ thống task của game (`CSTaskImp` qua `fromsoftware-rs`) và
-gọi hàm game (banner "Config reloaded"); phần resize chỉ dùng Win32. Bỏ đi để
-mod chạm vào game ít nhất có thể, nên đổi ini cần khởi động lại game. Bỏ luôn
-`common::diag::log_environment_when_game_ready` (chờ `CSTaskImp` rồi log
-phiên bản exe và DLL đang nạp): mod không cần log đó, và giờ không còn dùng gì
-của game lúc chạy. `window::run` tự poll tìm cửa sổ mỗi 1s nên không cần chờ
-game khởi động xong. Ini cũ còn `ReloadKey` được `config::migrate` tự chuyển
-vào `[Legacy]`.
+An earlier version had no reload key here: hot reload was the only part registering code in the game's task
+system and calling game functions (the "Config reloaded" banner), while the resize only uses Win32. Without it
+the mod touches the game as little as possible, so a config change needed a restart. The reload key now exists
+for the whole mod (hotkeys, the buildup amount and the window settings; the patches and the input bridge need a
+restart). `window::run` polls for the window every second, so it does not wait for the game to finish starting.
 
-## Chưa kiểm chứng / giới hạn
+## Open
 
-- Khi game đang focus, nó `ClipCursor` con trỏ vào client area (xem
-  `mods/soulsteleport/src/ui.rs`, phần "Cursor unpin"): có thể không rê chuột
-  tới viền được lúc đang chơi, khi đó phải click ra ngoài cửa sổ trước rồi mới
-  kéo viền. Nếu gây phiền thì cân nhắc hook `ClipCursor` để nới rect ra thêm
-  độ dày viền.
-- Game vẫn render ở độ phân giải trong setting rồi co lại, nên FPS không tăng
-  khi cửa sổ nhỏ.
+- While the game has focus it calls `ClipCursor` to trap the cursor in the client area, so it may be impossible
+  to reach the border with the mouse while playing: click outside the window first, then drag. If that is
+  annoying, hook `ClipCursor` to widen the rect by the border thickness.
+- The game still renders at the resolution of its settings and shrinks it, so FPS does not rise with a smaller
+  window.
+
+## Resolution list (`src/resize/resolution_list.rs`)
+
+Question: why does a window set to 2560x1080 still render at 1920x1080, stretched?
+
+- **Confirmed** (static analysis, builds 2.6.2.0 to 2.7.2.0): the windowed resolution list is not read from the
+  monitor. `sub_140E9A9D0` (RVA `0xE9A9D0` on 2.7.2.0) fills it from the minimum entry (800x450) plus a fixed table of
+  11 sizes, all 16:9, 1024x576 up to 3840x2160 (`.data`, RVA `0x3B50148`), and stops at the first size larger than the
+  desktop. The size from `GraphicsConfig.xml` is then rounded down to the biggest entry that is not larger in either
+  axis (`sub_140E9B190`), so 2560x1080 became 1920x1080. `SetWindowPos` does not change this: the game keeps rendering
+  at its own size and DXGI stretches it into the client area.
+- **Confirmed** (code): `with_size` replaces the entry with the closest area by `Width` x `Height` and sorts the table
+  by width then height, which the descending scan needs. The table is found from the `lea rdi, [rip+table]` of the
+  function above (AOB, unique in all four builds) and checked to be 11 sizes of 16:9 before anything is written.
+- **Confirmed** (in game, 2.7.2.0, 2560x1600 screen): with `Width = 2560`, `Height = 1080` the game renders at that
+  size, the picture is not stretched and the minimap is round. The mod that moves the HUD to the edges for 21:9
+  depends on the game's own resolution, so this is what makes it usable on a screen that has no such mode.
+- Limit: the table is patched once at start-up, before the game builds its list; a restart is needed after changing
+  `Width` / `Height`.

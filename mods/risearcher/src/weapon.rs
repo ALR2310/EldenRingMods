@@ -1,7 +1,6 @@
-//! RiseArcher's weapon buffs on the live `EquipParamWeapon` rows (bows,
-//! crossbows, ballistas, arrows, bolts), ported from `csv/RiseArcher.MASSEDIT`
-//! with every multiplier coming from the ini. Row filters, fields and the
-//! baseline snapshot: `docs/param_patching.md`.
+//! RiseArcher's weapon buffs on the live `EquipParamWeapon` rows (bows, crossbows, ballistas,
+//! arrows, bolts), ported from `RiseArcher.MASSEDIT` with every multiplier coming from the config.
+//! Row filters, fields and the baseline snapshot: `docs/param_patching.md`.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -9,11 +8,10 @@ use std::sync::Mutex;
 use eldenring::cs::{EquipParamWeapon, SoloParamRepository};
 use eldenring::param::EQUIP_PARAM_WEAPON_ST;
 
-use common::config;
+use crate::config::{self, Config};
 
-/// FromSoftware's marker for an NPC-only duplicate row (hidden from the
-/// player's menu): always excluded, like the `!prop sortId 9999999` filter on
-/// every line of the original Mass Edit.
+/// FromSoftware's marker for an NPC-only duplicate row, hidden from the player's menu. It is always
+/// excluded, like the `!prop sortId 9999999` filter on every line of the original Mass Edit.
 const NPC_ONLY_SORT_ID: i32 = 9999999;
 const WEAPON_CATEGORY_BOW: u8 = 10;
 /// Crossbow AND Ballista share this category, split by `wepType`.
@@ -23,8 +21,8 @@ const WEP_TYPE_BALLISTA: u16 = 56;
 const WEAPON_CATEGORY_ARROW: u8 = 13;
 const WEAPON_CATEGORY_BOLT: u8 = 14;
 
-/// Which of the 5 buckets a row falls into: the one place that decides both
-/// what is relevant and which multipliers apply.
+/// Which of the 5 buckets a row falls into: the one place that decides both what is relevant and
+/// which multipliers apply.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum WeaponKind {
     Bow,
@@ -37,59 +35,20 @@ enum WeaponKind {
 fn weapon_kind(category: u8, wep_type: u16) -> Option<WeaponKind> {
     match category {
         WEAPON_CATEGORY_BOW => Some(WeaponKind::Bow),
-        WEAPON_CATEGORY_CROSSBOW_FAMILY if wep_type == WEP_TYPE_CROSSBOW => Some(WeaponKind::Crossbow),
-        WEAPON_CATEGORY_CROSSBOW_FAMILY if wep_type == WEP_TYPE_BALLISTA => Some(WeaponKind::Ballista),
+        WEAPON_CATEGORY_CROSSBOW_FAMILY if wep_type == WEP_TYPE_CROSSBOW => {
+            Some(WeaponKind::Crossbow)
+        }
+        WEAPON_CATEGORY_CROSSBOW_FAMILY if wep_type == WEP_TYPE_BALLISTA => {
+            Some(WeaponKind::Ballista)
+        }
         WEAPON_CATEGORY_ARROW => Some(WeaponKind::Arrow),
         WEAPON_CATEGORY_BOLT => Some(WeaponKind::Bolt),
         _ => None,
     }
 }
 
-/// The multipliers shared by every launcher (bow, crossbow, ballista).
-#[derive(Clone, Copy)]
-struct Launcher {
-    damage: f64,
-    weight: f64,
-    sell_value: f64,
-}
-
-impl Launcher {
-    fn load(prefix: &str, default_damage: f64) -> Self {
-        Self {
-            damage: config::get_double(&format!("{prefix}.DamageMultiplier"), default_damage),
-            weight: config::get_double(&format!("{prefix}.WeightMultiplier"), 0.5),
-            sell_value: config::get_double(&format!("{prefix}.SellValueMultiplier"), 2.0),
-        }
-    }
-}
-
-struct Config {
-    bow: Launcher,
-    bow_scaling: f64,
-    bow_unlock_aow: bool,
-    crossbow: Launcher,
-    ballista: Launcher,
-    arrow_max_quantity: u8,
-    bolt_max_quantity: u8,
-}
-
-impl Config {
-    fn load() -> Self {
-        Self {
-            bow: Launcher::load("Bow", 1.5),
-            bow_scaling: config::get_double("Bow.ScalingMultiplier", 2.0),
-            bow_unlock_aow: config::get_bool("Bow.UnlockAOW", true),
-            crossbow: Launcher::load("Crossbow", 3.0),
-            ballista: Launcher::load("Ballista", 4.0),
-            arrow_max_quantity: config::get_int("Bullet.Arrow.MaxQuantity", 255).clamp(0, 255) as u8,
-            bolt_max_quantity: config::get_int("Bullet.Bolt.MaxQuantity", 255).clamp(0, 255) as u8,
-        }
-    }
-}
-
-/// The game's own original values that are scaled, by row index, captured once
-/// before any edit so every reload rescales from the true baseline instead of
-/// compounding.
+/// The game's own values that are scaled, by row index, captured once before any edit so every
+/// reload rescales from the true baseline instead of compounding.
 #[derive(Clone, Copy)]
 struct Baseline {
     attack: [u16; 5],
@@ -98,15 +57,15 @@ struct Baseline {
     sell_value: i32,
 }
 
-/// Recovered from poisoning at every lock: `apply` is retried across a
-/// `catch_unwind` (see `lib.rs`), and one panic while the lock was held must
-/// not turn every retry into a second, unrelated panic.
+/// A poisoned lock is still used: `apply` is retried across a `catch_unwind` (see `lib.rs`), and
+/// one panic while the lock was held must not turn every retry into a second panic.
 static ORIGINALS: Mutex<Option<HashMap<usize, Baseline>>> = Mutex::new(None);
 
-/// Whether `row` is one RiseArcher touches: not an NPC-only duplicate, and in
-/// the bow / crossbow / ballista / arrow / bolt family.
+/// Whether `row` is one RiseArcher touches: not an NPC-only duplicate, and a bow, crossbow, ballista,
+/// arrow or bolt.
 fn is_relevant(row: &EQUIP_PARAM_WEAPON_ST) -> bool {
-    row.sort_id() != NPC_ONLY_SORT_ID && weapon_kind(row.weapon_category(), row.wep_type()).is_some()
+    row.sort_id() != NPC_ONLY_SORT_ID
+        && weapon_kind(row.weapon_category(), row.wep_type()).is_some()
 }
 
 fn snapshot(row: &EQUIP_PARAM_WEAPON_ST) -> Baseline {
@@ -130,6 +89,11 @@ fn snapshot(row: &EQUIP_PARAM_WEAPON_ST) -> Baseline {
     }
 }
 
+/// A carry limit as the game's `u8`.
+fn max_quantity(value: i32) -> u8 {
+    value.clamp(0, 255) as u8
+}
+
 fn scale_u16(value: u16, factor: f64) -> u16 {
     (value as f64 * factor).round().clamp(0.0, u16::MAX as f64) as u16
 }
@@ -150,35 +114,45 @@ fn set_damage(row: &mut EQUIP_PARAM_WEAPON_ST, attack: [u16; 5], factor: f64) {
     row.set_attack_base_dark(scale_u16(attack[4], factor));
 }
 
-/// Damage, weight and sell value: what every launcher gets.
-fn apply_launcher(row: &mut EQUIP_PARAM_WEAPON_ST, baseline: &Baseline, launcher: &Launcher) {
-    set_damage(row, baseline.attack, launcher.damage);
-    row.set_weight(scale_f32(baseline.weight, launcher.weight));
-    row.set_sell_value(scale_i32(baseline.sell_value, launcher.sell_value));
+/// Damage, weight and sell value: what every launcher gets, as `(damage, weight, sell value)`
+/// multipliers.
+fn apply_launcher(
+    row: &mut EQUIP_PARAM_WEAPON_ST,
+    baseline: &Baseline,
+    (damage, weight, sell_value): (f64, f64, f64),
+) {
+    set_damage(row, baseline.attack, damage);
+    row.set_weight(scale_f32(baseline.weight, weight));
+    row.set_sell_value(scale_i32(baseline.sell_value, sell_value));
 }
 
 fn apply_bow(row: &mut EQUIP_PARAM_WEAPON_ST, baseline: &Baseline, cfg: &Config) {
-    apply_launcher(row, baseline, &cfg.bow);
-    row.set_correct_strength(scale_f32(baseline.correct[0], cfg.bow_scaling));
-    row.set_correct_agility(scale_f32(baseline.correct[1], cfg.bow_scaling));
-    row.set_correct_magic(scale_f32(baseline.correct[2], cfg.bow_scaling));
-    row.set_correct_faith(scale_f32(baseline.correct[3], cfg.bow_scaling));
-    row.set_correct_luck(scale_f32(baseline.correct[4], cfg.bow_scaling));
-    if cfg.bow_unlock_aow {
+    let bow = &cfg.bow;
+    apply_launcher(
+        row,
+        baseline,
+        (bow.damage_multiplier, bow.weight_multiplier, bow.sell_value_multiplier),
+    );
+    let scaling = bow.scaling_multiplier;
+    row.set_correct_strength(scale_f32(baseline.correct[0], scaling));
+    row.set_correct_agility(scale_f32(baseline.correct[1], scaling));
+    row.set_correct_magic(scale_f32(baseline.correct[2], scaling));
+    row.set_correct_faith(scale_f32(baseline.correct[3], scaling));
+    row.set_correct_luck(scale_f32(baseline.correct[4], scaling));
+    if bow.unlock_aow {
         row.set_gem_mount_type(2); // every bow accepts an Ash of War; some vanilla bows ship with 0
     }
 }
 
-/// Applies every weapon buff to the live rows, always from each row's cached
-/// original values, so it is safe to call repeatedly (reload) without
-/// compounding. Returns how many rows were touched.
+/// Applies every weapon buff to the live rows, always from each row's cached original values, so it
+/// is safe to call again on a reload without compounding. Returns the rows touched.
 pub fn apply(repo: &mut SoloParamRepository) -> usize {
-    let cfg = Config::load();
+    let cfg = config::get();
 
     let mut snapshot_guard = ORIGINALS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let originals = snapshot_guard.get_or_insert_with(|| {
         let mut map = HashMap::new();
-        common::params::for_each_row_mut::<EquipParamWeapon>(repo, |index, row| {
+        shared::params::for_each_row_mut::<EquipParamWeapon>(repo, |index, row| {
             if is_relevant(row) {
                 map.insert(index, snapshot(row));
             }
@@ -187,7 +161,7 @@ pub fn apply(repo: &mut SoloParamRepository) -> usize {
     });
 
     let mut changed = 0;
-    common::params::for_each_row_mut::<EquipParamWeapon>(repo, |index, row| {
+    shared::params::for_each_row_mut::<EquipParamWeapon>(repo, |index, row| {
         let Some(baseline) = originals.get(&index) else {
             return; // not one of RiseArcher's rows
         };
@@ -196,10 +170,28 @@ pub fn apply(repo: &mut SoloParamRepository) -> usize {
         };
         match kind {
             WeaponKind::Bow => apply_bow(row, baseline, &cfg),
-            WeaponKind::Crossbow => apply_launcher(row, baseline, &cfg.crossbow),
-            WeaponKind::Ballista => apply_launcher(row, baseline, &cfg.ballista),
-            WeaponKind::Arrow => row.set_max_arrow_quantity(cfg.arrow_max_quantity),
-            WeaponKind::Bolt => row.set_max_arrow_quantity(cfg.bolt_max_quantity),
+            WeaponKind::Crossbow => {
+                let c = &cfg.crossbow;
+                apply_launcher(
+                    row,
+                    baseline,
+                    (c.damage_multiplier, c.weight_multiplier, c.sell_value_multiplier),
+                );
+            }
+            WeaponKind::Ballista => {
+                let c = &cfg.ballista;
+                apply_launcher(
+                    row,
+                    baseline,
+                    (c.damage_multiplier, c.weight_multiplier, c.sell_value_multiplier),
+                );
+            }
+            WeaponKind::Arrow => {
+                row.set_max_arrow_quantity(max_quantity(cfg.bullet.arrow_max_quantity))
+            }
+            WeaponKind::Bolt => {
+                row.set_max_arrow_quantity(max_quantity(cfg.bullet.bolt_max_quantity))
+            }
         }
         changed += 1;
     });
@@ -233,29 +225,8 @@ mod tests {
         assert_eq!(scale_f32(10.0, 0.5), 5.0);
     }
 
-    /// The defaults in code and in the ini template are written twice; they
-    /// must agree, or a missing key and a fresh file would behave differently.
     #[test]
-    fn code_defaults_match_the_ini_template() {
-        let ini = include_str!("../RiseArcher.ini");
-        let value = |key: &str| -> f64 {
-            let line = ini.lines().find(|l| l.trim_start().starts_with(&format!("{key}="))).unwrap();
-            let text = line.split_once('=').unwrap().1.trim();
-            match text {
-                "true" => 1.0,
-                "false" => 0.0,
-                other => other.parse().unwrap(),
-            }
-        };
-        let cfg = Config::load();
-        for (prefix, launcher) in [("Bow", cfg.bow), ("Crossbow", cfg.crossbow), ("Ballista", cfg.ballista)] {
-            assert_eq!(value(&format!("{prefix}.DamageMultiplier")), launcher.damage, "{prefix} damage");
-            assert_eq!(value(&format!("{prefix}.WeightMultiplier")), launcher.weight, "{prefix} weight");
-            assert_eq!(value(&format!("{prefix}.SellValueMultiplier")), launcher.sell_value, "{prefix} sell");
-        }
-        assert_eq!(value("Bow.ScalingMultiplier"), cfg.bow_scaling);
-        assert_eq!(value("Bow.UnlockAOW"), cfg.bow_unlock_aow as u8 as f64);
-        assert_eq!(value("Bullet.Arrow.MaxQuantity"), cfg.arrow_max_quantity as f64);
-        assert_eq!(value("Bullet.Bolt.MaxQuantity"), cfg.bolt_max_quantity as f64);
+    fn carry_limits_fit_a_byte() {
+        assert_eq!((max_quantity(-5), max_quantity(99), max_quantity(1000)), (0, 99, 255));
     }
 }

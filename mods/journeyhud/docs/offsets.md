@@ -1,80 +1,85 @@
-# JourneyHUD: offset và kiểm chứng theo bản exe
+# Offsets and checks per executable build
 
-**Status 2026-10-26: đã kiểm trong IDA trên 2.6.2.0, 2.7.0.0, 2.7.1.0, 2.7.2.0 (tĩnh). Chưa kiểm trong game; +0x14 của poise chưa xác nhận được bằng IDA.**
+Status: **Confirmed** statically in IDA on 2.6.2.0, 2.7.0.0, 2.7.1.0 and 2.7.2.0; the poise maximum (+0x14) could
+not be confirmed in IDA. Conventions: [research notes](../../../docs/research/README.md). Code: `src/target.rs`,
+`src/radar/mod.rs`.
 
-Panel đọc qua struct của `fromsoftware-rs` (rev của workspace). Không dùng `rva::get()`. Các offset dưới đây
-được ép bằng `const` assert trong `src/target.rs`: một bản `fromsoftware-rs` dời field thì build dừng.
+The panel reads through the structs of fromsoftware-rs and never through `rva::get()`. The offsets below are
+enforced by `const` asserts in `src/target.rs`: if a fromsoftware-rs update moves a field the build stops.
 
-| Dữ liệu | Offset | Kiểm trong IDA |
+| Data | Offset | Checked in IDA |
 |---|---|---|
-| Handle mục tiêu khoá (`PlayerIns::locked_on_enemy`) | +0x6B0 | **Có, cả 4 bản.** |
-| Danh sách module (`ChrIns::modules`) | +0x190 | Dùng sẵn ở mod đã phát hành (AutoRegen, SpiritMultiplier). |
-| HP / max HP (`CSChrDataModule`) | +0x138 / +0x13C | Dùng sẵn ở AutoRegen (đã phát hành). |
-| Container: `data` / `super_armor` | +0x00 / +0x40 | Theo `fromsoftware-rs`, chưa kiểm riêng. |
-| Poise hiện tại (`CSChrSuperArmorModule`) | +0x10 | **Có** (hàm cập nhật dùng `a1+16` làm giá trị hiện tại). |
-| Poise tối đa | +0x14 | **Chưa.** Xem bên dưới. |
-| Hàm tra nhân vật theo handle | slot 3 của vtable ChrSet | **Có, cả 4 bản.** |
-| Thanh máu boss (`CSFeManImp::boss_health_displays`) | +0x5BF0, 3 ô x 0x20, handle ở +8 (+0x5BF8), ô trống = -1 | **Có, cả 4 bản** (xem bên dưới). |
-| Số lần chết (`GameDataMan::death_count`) | +0x94 của `GameDataMan` | **AOB duy nhất ở cả 4 bản** (xem bên dưới); giá trị khớp 341 trong game (2026-10-28, chưa đối chiếu màn thống kê). |
-| Giờ trong game (`WorldAreaTime::clock`) | +0x00 (`time64`), +0x08 giờ ở bit 34-38 của số đóng gói | **Có, cả 4 bản** (xem bên dưới). |
+| Locked target handle (`PlayerIns::locked_on_enemy`) | +0x6B0 | Yes, all 4 builds |
+| Module list (`ChrIns::modules`) | +0x190 | Already used by released mods |
+| HP / max HP (`CSChrDataModule`) | +0x138 / +0x13C | Already used by released mods |
+| Container: `data` / `super_armor` | +0x00 / +0x40 | From fromsoftware-rs, not checked separately |
+| Current poise (`CSChrSuperArmorModule`) | +0x10 | Yes (the update function uses `a1+16` as the current value) |
+| Maximum poise | +0x14 | **No**, see below |
+| Character lookup by handle | slot 3 of the ChrSet vtable | Yes, all 4 builds |
+| Boss health bars (`CSFeManImp::boss_health_displays`) | +0x5BF0, 3 entries x 0x20, handle at +8 (+0x5BF8), empty = -1 | Yes, all 4 builds |
+| Death count (`GameDataMan::death_count`) | +0x94 of `GameDataMan` | Pattern unique on all 4 builds; the value matched 341 in game, not compared with the statistics screen |
+| In-game time (`WorldAreaTime::clock`) | +0x00 (`time64`), hours at bits 34 to 38 of the packed number at +0x08 | Yes, all 4 builds |
 
-## Thanh máu boss (`Minimap.Hide.InBossFights`)
+## Boss health bars (`Minimap.Hide.InBossFights`)
 
-Hàm nhỏ tìm một handle trong 3 ô (RVA 76DA70 / 76E8F0 / 76E8F0 / 76EDA0 trên 2.6.2.0 / 2.7.0.0 / 2.7.1.0 / 2.7.2.0, cùng
-dạng cả 4 bản): `for (i = a1 + 23544; ...; i += 8 dword) { ... if (++n >= 3) return -1 }`. `23544` là 0x5BF8, tức handle của ô
-đầu (ô bắt đầu ở 0x5BF0, `fmg_id` +0, handle +8), bước 32 byte, đúng 3 ô; với handle cần tìm là `0xFFFFFFFF` nó so dword thấp
-với `0xFFFFFFFF`, nghĩa là **ô trống = handle -1**, khớp `FieldInsHandle::is_empty`. Chưa thử khi hạ boss để xem ô có
-được xoá ngay không (TODO `[verify]`).
+A small function looks for a handle in 3 entries (RVA 76DA70 / 76E8F0 / 76E8F0 / 76EDA0 on 2.6.2.0 / 2.7.0.0 /
+2.7.1.0 / 2.7.2.0, the same shape on all): `for (i = a1 + 23544; ...; i += 8 dwords) { ... if (++n >= 3) return -1 }`.
+`23544` is 0x5BF8, the handle of the first entry (entries start at 0x5BF0, `fmg_id` at +0, handle at +8), stride
+32 bytes, exactly 3 entries; for the searched handle `0xFFFFFFFF` it compares the low dword with `0xFFFFFFFF`,
+so **an empty entry has handle -1**, matching `FieldInsHandle::is_empty`. **Not tried**: whether the entry is
+cleared at once when a boss dies.
 
-## Giờ trong game (`Minimap.Clock`)
+## In-game time (`Minimap.Clock`)
 
-Singleton `WorldAreaTime` đăng ký theo tên ở `sub_14009CF30` (cùng RVA cả 4 bản) nên `WorldAreaTime::instance()` tìm theo tên,
-không dùng bảng RVA. Hàm `CS::WorldAreaTimeImp::Update` (643BC0 / 644A10 / 644A10 / 644EC0) chép `*a1` và `*(a1+8)` sang
-`+16` và `+24` (đồng hồ hiện tại sang đồng hồ tick trước), kiểm giờ-phút-giây mục tiêu ở `+40/+44/+48` (<= 23, 59, 59) và lấy
-giờ bằng `(*(a1+8) >> 34) & 0x1F`, đúng với `PackedDate::hours` (bit 34-38) của `fromsoftware-rs`. Phút nằm ngay sau (bit 39-44).
+The `WorldAreaTime` singleton is registered by name at `sub_14009CF30` (same RVA on all 4 builds), so
+`WorldAreaTime::instance()` finds it by name and no RVA table is involved. `CS::WorldAreaTimeImp::Update`
+(643BC0 / 644A10 / 644A10 / 644EC0) copies `*a1` and `*(a1+8)` to `+16` and `+24` (current clock to the previous
+tick's clock), checks the target hour, minute and second at `+40/+44/+48` (<= 23, 59, 59) and takes the hour as
+`(*(a1+8) >> 34) & 0x1F`, matching `PackedDate::hours` (bits 34 to 38) of fromsoftware-rs. Minutes follow (bits
+39 to 44).
 
-## Handle mục tiêu (+0x6B0)
+**The in-game day count is not usable**: `PackedDate` has a `day` field (bits 29 to 33), but it carries the
+machine's **real date** (a log showed the day of the test); the game only changes hours, minutes and seconds
+with game time. Whether crossing midnight in game raises `day` was not checked; if it does, it counts days
+since entering the game, and every entry restarts from the real date.
 
-Trên cả 4 bản exe, `fieldaccess 6b0` cho cùng bộ truy cập: một lần ghi `-1` (qword) và một lần ghi
-handle (`mov [r13+6B0h], rcx`) trong cùng một hàm, cộng với một hàm đọc ở `0x344DA0 / 0x344DB0`.
+## Locked target handle (+0x6B0)
 
-| Bản | Hàm ghi (RVA) |
+On all 4 builds `fieldaccess 6b0` gives the same accessors: one write of `-1` (qword) and one write of the
+handle (`mov [r13+6B0h], rcx`) in the same function, plus a reader at `0x344DA0 / 0x344DB0`.
+
+| Build | Writing function (RVA) |
 |---|---|
 | 2.6.2.0 | 716260 |
 | 2.7.0.0, 2.7.1.0 | 7170B0 |
 | 2.7.2.0 | 717560 |
 
-Decompile ở 2.7.2.0: hàm cập nhật camera khoá mục tiêu. Với nhân vật người chơi (`v8`) nó ghi `-1` vào
-`+1712` (= 0x6B0) khi bỏ khoá và ghi `*(chr_mục_tiêu + 8)`, tức **`field_ins_handle` của mục tiêu** (ChrIns +0x8),
-khi đang khoá. Vậy `locked_on_enemy` là đúng handle cần, không cần ghép theo vị trí.
+Decompiled on 2.7.2.0 it is the lock-on camera update: for the player character it writes `-1` to `+1712`
+(= 0x6B0) when the lock is dropped and `*(target chr + 8)`, the target's `field_ins_handle` (ChrIns +0x8), while
+locked. So `locked_on_enemy` is exactly the handle needed, no position match required.
 
-## Tra nhân vật theo handle (slot 3)
+## Character lookup by handle (slot 3)
 
-- `CS::ChrSet` slot 3 là hàm tra theo handle: đổi handle sang chỉ số rồi gọi slot 1 (`vtable+8`). Cùng dạng ở 2.6.2.0 (4937A0), 2.7.1.0 (493D00), 2.7.2.0 (493DE0).
-- `CS::OpenFieldChrSet` ghi đè slot 3 bằng tìm nhị phân trong bảng handle (2.7.1.0 `4EC850`, 2.7.2.0 `4EC930`, 2.6.2.0 `4EBA80`), cùng chữ ký.
-- Gọi qua vtable của chính đối tượng nên đúng cho cả hai lớp.
+- `CS::ChrSet` slot 3 looks up by handle: it turns the handle into an index and calls slot 1 (`vtable+8`). Same
+  shape on 2.6.2.0 (4937A0), 2.7.1.0 (493D00) and 2.7.2.0 (493DE0).
+- `CS::OpenFieldChrSet` overrides slot 3 with a binary search in the handle table (2.7.1.0 `4EC850`, 2.7.2.0
+  `4EC930`, 2.6.2.0 `4EBA80`), the same signature.
+- Calling through the object's own vtable is right for both classes.
 
-## Poise (chưa kiểm hết)
+## Poise (not fully checked)
 
-Hàm của game dùng `+0x10` làm giá trị hiện tại (float), `+0x18` là phần cộng thêm vào mức tối đa và `+0x1C` là
-bộ đếm hồi. Mức tối đa hiệu dụng là `vtable[2]() + [+0x18]` (ở lớp cơ sở `vtable[2]` trả 0.0). Tôi chưa tìm
-được chỗ nào trong IDA ghi `+0x14`; `souls_vision` và `fromsoftware-rs` đều đặt "max" ở đó nên có thể lớp con
-đặt giá trị này. Cách xử lý: panel chỉ hiện hàng Poise khi max > 0 và kẹp tỉ lệ 0..1; log
-`Target: ... poise (cur, max)` khi thử trong game sẽ cho biết giá trị thật, nếu sai thì đổi cách tính max.
+The game's function uses `+0x10` as the current value (float), `+0x18` as an addition to the maximum and `+0x1C`
+as the recovery counter. The effective maximum is `vtable[2]() + [+0x18]` (in the base class `vtable[2]` returns
+0.0). No write to `+0x14` was found in IDA; a third-party HUD mod and fromsoftware-rs both put "max" there, so a
+subclass may set it. The panel shows the posture row only when the maximum is above 0 and clamps the ratio to
+0..1; a `Target: ... poise (cur, max)` log line shows the real values in game. **Open**: compare the log with the
+real stagger bar (hit, wait for recovery); if `+0x14` is wrong find the real subclass of
+`CSChrSuperArmorModule`.
 
-## Việc còn lại
+## Death count (`Minimap.Deaths`)
 
-- Thử trong game, so log poise với thanh stagger thật (đánh trúng, chờ hồi).
-- Nếu max ở +0x14 không đúng, tìm lớp con thật của CSChrSuperArmorModule.
-
-## Số lần chết (`Minimap.Deaths`)
-
-`GameDataMan::instance()` đi qua bảng RVA nên panic trên 2.7.2.0, vì thế `radar.rs::death_count` tìm biến global bằng AOB
-`48 8B 05 ?? ?? ?? ?? 48 85 C0 74 05 48 8B 40 08 C3` (hàm nhỏ đọc `GameDataMan` rồi trả `[+8]`, tức `main_player_game_data`).
-`aob.py -Version all` cho `UNIQUE` ở 2.6.2.0 (8AE3A0), 2.7.0.0 và 2.7.1.0 (8AF520), 2.7.2.0 (8AF9D0). Địa chỉ biến là
-`rip + rel32` của lệnh `mov rax, [rip+..]` ở đầu hàm; `death_count` ở +0x94 (đếm theo `fromsoftware-rs`, ép bằng `const` assert).
-
-**Số ngày trong game: không dùng được.** `PackedDate` của đồng hồ có trường `day` (bit 29-33) nhưng nó mang **ngày thật của máy**
-(log 2026-10-28 đúng ngày chạy thử), game chỉ đổi giờ-phút-giây theo thời gian trong game. Chưa kiểm xem qua nửa đêm trong
-game có tăng `day` không; dù có thì nó chỉ là số ngày đã qua từ lúc vào game, mỗi lần vào lại lấy ngày thật.
-
+`GameDataMan::instance()` goes through the RVA table and panics on 2.7.2.0, so `radar/mod.rs::death_count` finds the
+global by the pattern `48 8B 05 ?? ?? ?? ?? 48 85 C0 74 05 48 8B 40 08 C3` (a small function that reads
+`GameDataMan` and returns `[+8]`, i.e. `main_player_game_data`). Unique on all builds (2.6.2.0 8AE3A0, 2.7.0.0 and
+2.7.1.0 8AF520, 2.7.2.0 8AF9D0). The variable address is `rip + rel32` of the `mov rax, [rip+..]` at the start of
+the function; `death_count` at +0x94 (per fromsoftware-rs, enforced by a `const` assert).

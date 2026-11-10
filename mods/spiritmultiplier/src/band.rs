@@ -9,13 +9,13 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
-use common::codepatch;
-use common::logger;
-use common::memscan;
+use shared::codepatch;
+use shared::logger;
+use shared::memscan;
 
 /// First slot of player 0's band (`10 * (0 + 2)`); slots below it hold
 /// each player's Torrent (slot 0 = own, 1.. = co-op partners', seen in the
-/// Seamless Co-op test 2026-09-25).
+/// a Seamless Co-op test).
 pub const BAND_START: u32 = 20;
 /// Session player indices the spawn routine accepts (`< 6`).
 const MAX_PLAYERS: u32 = 6;
@@ -39,8 +39,7 @@ pub fn band_len() -> u32 {
 /// test rax,rax; jz ..; mov edi,0x50; mov [rsi+0x10],edi; xor edx,edx;
 /// mov r8d,0x500` in the summon ChrSet init `sub_1404954B0` (0x140495534 in
 /// 2.7.1.0). Unique in 2.7.1.0.
-const CAPACITY_INIT_AOB: &str =
-    "BA 00 05 00 00 41 B8 08 00 00 00 FF 50 50 48 89 46 18 48 85 C0 74 ?? BF 50 00 00 00 89 7E 10 33 D2 41 B8 00 05 00 00";
+const CAPACITY_INIT_AOB: &str = "BA 00 05 00 00 41 B8 08 00 00 00 FF 50 50 48 89 46 18 48 85 C0 74 ?? BF 50 00 00 00 89 7E 10 33 D2 41 B8 00 05 00 00";
 /// Offsets of the three imm32s: alloc size, capacity (also the init loop
 /// count), memset size.
 const CAPACITY_ALLOC_SIZE_OFFSET: usize = 0x01;
@@ -202,14 +201,21 @@ fn build_next_cursor_patch() -> Vec<u8> {
 }
 
 fn install_next_cursor() -> bool {
-    let Some(anchor) = memscan::wait_for_pattern_in_module(NEXT_CURSOR_AOB, SCAN_RETRY_INTERVAL, SCAN_TIMEOUT) else {
-        logger::error("Band: next-cursor pattern not found. Game may have been updated - re-check NEXT_CURSOR_AOB.");
+    let Some(anchor) =
+        memscan::wait_for_pattern_in_module(NEXT_CURSOR_AOB, SCAN_RETRY_INTERVAL, SCAN_TIMEOUT)
+    else {
+        logger::error(
+            "Band: next-cursor pattern not found. Game may have been updated - re-check NEXT_CURSOR_AOB.",
+        );
         return false;
     };
+    // SAFETY: the offset stays inside the matched game code or the structure it belongs to.
     let site = unsafe { anchor.add(NEXT_CURSOR_PATCH_OFFSET) };
+    // SAFETY: `site` is code in the game image, readable for the length checked.
     if unsafe { crate::conflicts::check(site, "Spirit band (next slot)") } {
         return false;
     }
+    // SAFETY: the range is mapped code of the game image and the bytes replace whole instructions.
     if !unsafe { codepatch::overwrite_bytes(site, &build_next_cursor_patch()) } {
         logger::error("Band: next-cursor patch failed.");
         return false;
@@ -218,15 +224,22 @@ fn install_next_cursor() -> bool {
 }
 
 fn install_band_alloc() -> bool {
-    let Some(site) = memscan::wait_for_pattern_in_module(BAND_ALLOC_AOB, SCAN_RETRY_INTERVAL, SCAN_TIMEOUT) else {
-        logger::error("Band: slot-search pattern not found. Game may have been updated - re-check BAND_ALLOC_AOB.");
+    let Some(site) =
+        memscan::wait_for_pattern_in_module(BAND_ALLOC_AOB, SCAN_RETRY_INTERVAL, SCAN_TIMEOUT)
+    else {
+        logger::error(
+            "Band: slot-search pattern not found. Game may have been updated - re-check BAND_ALLOC_AOB.",
+        );
         return false;
     };
 
+    // SAFETY: `site` is code in the game image, readable for the length checked.
     if unsafe { crate::conflicts::check(site, "Spirit band (slot search)") } {
         return false;
     }
+    // SAFETY: the offset stays inside the matched game code or the structure it belongs to.
     let not_found = unsafe { std::slice::from_raw_parts(site.add(BAND_ALLOC_REPLACED_LEN), 3) };
+    // SAFETY: the offset stays inside the matched game code or the structure it belongs to.
     let found_opcode = unsafe { *site.add(BAND_ALLOC_FOUND_OFFSET) };
     if not_found != BAND_ALLOC_NOT_FOUND_BYTES || found_opcode != CALL_REL32_OPCODE {
         logger::error("Band: slot-search function layout differs from 2.7.1.0 - not patching.");
@@ -251,11 +264,11 @@ const SEAMLESS_WAIT: Duration = Duration::from_secs(10);
 /// Whether Seamless Co-op is loaded (waiting up to [SEAMLESS_WAIT] for it).
 /// It raises the same capacity itself, by scanning for the very bytes
 /// [install_capacity] rewrites: patched first, its scan fails with a fatal
-/// "No such pattern" (2026-10-18), so with Seamless the capacity is left to it.
+/// "No such pattern", so with Seamless the capacity is left to it.
 fn seamless_loaded() -> bool {
     let deadline = Instant::now() + SEAMLESS_WAIT;
     loop {
-        if common::diag::is_module_loaded("ersc.dll") {
+        if shared::diag::is_module_loaded("ersc.dll") {
             return true;
         }
         if Instant::now() >= deadline {
@@ -266,8 +279,12 @@ fn seamless_loaded() -> bool {
 }
 
 fn install_capacity(capacity: u32) -> bool {
-    let Some(site) = memscan::wait_for_pattern_in_module(CAPACITY_INIT_AOB, SCAN_RETRY_INTERVAL, SCAN_TIMEOUT) else {
-        logger::error("Band: ChrSet init pattern not found. Game may have been updated - re-check CAPACITY_INIT_AOB.");
+    let Some(site) =
+        memscan::wait_for_pattern_in_module(CAPACITY_INIT_AOB, SCAN_RETRY_INTERVAL, SCAN_TIMEOUT)
+    else {
+        logger::error(
+            "Band: ChrSet init pattern not found. Game may have been updated - re-check CAPACITY_INIT_AOB.",
+        );
         return false;
     };
     let bytes = capacity * CHR_SET_ENTRY_SIZE;
@@ -276,6 +293,7 @@ fn install_capacity(capacity: u32) -> bool {
         (CAPACITY_COUNT_OFFSET, capacity),
         (CAPACITY_MEMSET_SIZE_OFFSET, bytes),
     ] {
+        // SAFETY: the range is mapped code of the game image and the bytes replace whole instructions.
         if !unsafe { codepatch::overwrite_bytes(site.add(offset), &value.to_le_bytes()) } {
             logger::error("Band: ChrSet capacity patch failed.");
             return false;
@@ -291,7 +309,7 @@ fn install_capacity(capacity: u32) -> bool {
 /// [DEFAULT_MAX_SPIRITS]..=[MAX_MAX_SPIRITS]). At the default 60 the
 /// game's own 80-slot ChrSet is left exactly as vanilla builds it - the
 /// capacity patch only runs when the user raises `MaxSpirits` past 60, at
-/// their own risk (user decision, 2026-09-25). The capacity patch goes
+/// their own risk. The capacity patch goes
 /// first (it must beat the world's creation), then the cursor patch
 /// (harmless on its own: vanilla's search still does `cursor % 10`), then
 /// the widened search. If the capacity patch fails, the band falls back
@@ -317,14 +335,12 @@ pub fn install(max_spirits: u32) -> bool {
 mod tests {
     use super::*;
 
-    /// Prints the stub bytes for manual disassembly (capstone) - run with
-    /// `cargo test -p spiritmultiplier -- --nocapture`.
     #[test]
-    fn dump_stubs() {
-        let hex = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
-        println!("BAND_STUB={}", hex(&build_band_stub(DEFAULT_MAX_SPIRITS, 0x1404933AF + BAND_ALLOC_FOUND_OFFSET as u64)));
-        println!("CURSOR_PATCH={}", hex(&build_next_cursor_patch()));
+    fn the_patch_lengths_are_the_ones_the_game_code_has() {
         assert_eq!(build_next_cursor_patch().len(), NEXT_CURSOR_PATCH_LEN);
+        let stub =
+            build_band_stub(DEFAULT_MAX_SPIRITS, 0x1404933AF + BAND_ALLOC_FOUND_OFFSET as u64);
+        assert!(stub.len() < 256, "the band stub grew to {} bytes", stub.len());
     }
 
     #[test]
@@ -340,6 +356,5 @@ mod tests {
         }
         let last = bands.last().unwrap();
         assert!(last.0 + last.1 <= 1000);
-        println!("seamless bands: {bands:?}");
     }
 }

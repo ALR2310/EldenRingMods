@@ -1,87 +1,65 @@
-# DropMultiplier: nhân số lượng nguyên liệu (`[Materials]`)
+# Material amounts
 
-**Status 2026-09-28: PHÁT HÀNH trong 1.1.0, người dùng xác nhận chạy ổn trong
-game.** Code: `mods/dropmultiplier/src/materials.rs`.
+Status: **Confirmed** in game. Conventions: [research notes](../../../docs/research/README.md).
+Code: `src/materials.rs`.
 
-Đã dừng (2026-10-15): đề xuất nhân cả đồ hái như Erdleaf Flower, Trina's Lily (LordSoulOfNito, 2026-10-02) không được làm, vì người báo không phản hồi thêm; chưa kiểm goodsType của chúng.
+## Question
 
-## Vì sao có tính năng này
+How can the number of materials from a pickup or a drop be multiplied without touching weapons, key items
+or the materials that balance the game?
 
-Đề xuất từ người báo lỗi Convergence trên Nexus (sau khi 1.0.2 sửa xong): cho
-multiplier ảnh hưởng cả nguyên liệu craft và đồ hái ngoài thế giới mở. Trên
-Nexus không có mod DLL nào làm việc này; các mod tương tự (#2238 "Reasonable
-Material Drop rate and Amount Increase", #537 "Better Gathering and Hunting")
-đều thay nguyên `regulation.bin` và sửa tay từng món, nên xung đột với overhaul
-và không hỗ trợ DLC.
+## Why it exists
 
-## Thiết kế ini
+A player asked for the multiplier to cover crafting materials and the things gathered in the open world
+as well. No DLL mod did that. The third-party mods that do replace `regulation.bin` and edit item by item,
+so they conflict with overhauls and do not cover the expansion.
 
-```ini
-[Materials]
-Crafting=1   ; nguyên liệu craft farm được
-Upgrade=1    ; nguyên liệu nâng cấp farm được
-Unique=1     ; mọi nguyên liệu chỉ nhặt được 1 lần
-```
+## Config design
 
-Chốt cùng người dùng sau vài vòng. Chọn 3 key vì tách được nhóm ảnh hưởng cân
-bằng nhiều nhất (Scadutree Fragment, Sacred Tear, Smithing Stone trên xác - đều
-nằm ở `Unique`) khỏi nhóm farm vô hại.
+Three keys in `[Materials]`: `Crafting`, `Upgrade` and `Unique`. Three, because that separates the items
+that affect balance the most (Scadutree Fragments, Sacred Tears, Smithing Stones on corpses, all in
+`Unique`) from harmless farming.
 
-Đã thử và bỏ:
-- chia 2 key theo nguồn `Farmable`/`Unique` (không tách craft và nâng cấp);
-- 1 key duy nhất cho mọi nguyên liệu;
-- tên `Repeatable`/`OneTime`: `Multiplier` trong tên key dễ nhầm với tỉ lệ rơi;
-  "Unique" dùng được vì section `[Materials]` đã giới hạn ngữ cảnh (không bị
-  hiểu là vũ khí độc nhất).
+Rejected: two keys by source (`Farmable` and `Unique`) that do not separate crafting from upgrade
+materials; one key for all materials; the names `Repeatable` and `OneTime`. "Unique" is clear because the
+`[Materials]` section already limits the context, and `Multiplier` in a key name is easily confused with
+the drop rate.
 
-## Phân loại từng ô
+## Classifying a slot
 
-Dựa trên export vanilla 1.17 của `ItemLotParam_map` và `EquipParamGoods` (CSV
-trích bằng Smithbox, để trong `tmp/csv/`, tạo lại được). Mỗi ô của 1 dòng lot rơi
-vào đúng một nhóm, hoặc không nhóm nào:
+Based on the vanilla 1.17 exports of `ItemLotParam_map` and `EquipParamGoods`. Each slot of a lot row
+falls into exactly one group, or none:
 
-1. **Không đụng**: ô không phải Goods (`lotItemCategory0N != 1`), hoặc Goods có
-   `EquipParamGoods.goodsType` khác 2 (nguyên liệu craft, 106 món) và 14 (nâng
-   cấp: Smithing/Somber Stone, Glovewort, Golden Seed, Sacred Tear, Scadutree
-   Fragment, Revered Spirit Ash). Nhờ vậy vũ khí, key item, đồ tiêu hao (Flask,
-   Kukri, Golden Rune: đều `goodsType 0`) và các dòng lạ như `ItemLotParam_map`
-   ID `2` (quay ngẫu nhiên bình Crimson Tears, không cờ, 60% trắng tay) bị loại.
-   Bài học: "không có cờ" không đồng nghĩa "điểm hái"; phải lọc theo
-   `goodsType` trước.
-2. **`Unique`**: có cờ nhặt (`getItemFlagId` của dòng hoặc `getItemFlagId0N`
-   của ô khác 0), tức chỉ nhận được một lần.
-3. **`Crafting` / `Upgrade`**: còn lại, hồi lại sau khi nghỉ ở grace, tách theo
-   `goodsType`.
+1. **Untouched:** the slot is not Goods (`lotItemCategory0N != 1`), or its `EquipParamGoods.goodsType` is
+   not 2 (crafting material, 106 items) or 14 (upgrade material: Smithing and Somber Stones, Gloveworts,
+   Golden Seeds, Sacred Tears, Scadutree Fragments, Revered Spirit Ash). Weapons, key items,
+   consumables (Flask, Kukri and Golden Rune are all `goodsType 0`) and odd rows such as
+   `ItemLotParam_map` id 2 (a random Crimson Tears flask roll with no flag and a 60% empty result) stay
+   out. "No flag" does not mean "gathering point": filter by `goodsType` first.
+2. **`Unique`:** the row's `getItemFlagId` or the slot's `getItemFlagId0N` is non-zero, so it can be
+   obtained once.
+3. **`Crafting` or `Upgrade`:** the rest, which come back after resting at a grace, split by `goodsType`.
 
-Điểm hái là các dòng `ItemLotParam_map` không cờ, ID `9965xx`-`9993xx` (base
-game) và `463xxxx` (DLC), vd. `997200` Rowa Fruit ra 1/2/3/5. Smithing Stone
-farm được đến từ quái hồi sinh (thợ mỏ, golem, lính, trong `ItemLotParam_enemy`);
-không có "mạch quặng" hồi lại. Mô phỏng trên CSV vanilla: 1602 ô crafting, 1046
-ô upgrade, 1659 ô unique.
+Gathering points are the `ItemLotParam_map` rows without a flag, ids `9965xx` to `9993xx` (base game) and
+`463xxxx` (expansion); `997200`, for one, gives Rowa Fruit as 1, 2, 3 or 5. Farmable Smithing Stones come
+from respawning enemies (miners, golems, soldiers, in `ItemLotParam_enemy`); there is no vein that
+respawns. A simulation on the vanilla CSVs gives 1602 crafting, 1046 upgrade and 1659 unique slots.
 
-`goodsType` đọc từ `EquipParamGoods` lúc chạy (không hardcode ID) để overhaul
-như Convergence tự phân loại đúng đồ của nó. Tra theo ID đi qua
-`common::params::row_ids::<P>()` chứ không qua `repo.get()`, vì `repo.get()`
-binary search trên chính lookup table gây panic (xem
-`convergence_panic.md`).
+`goodsType` is read from `EquipParamGoods` at run time, with no hard-coded ids, so an overhaul classifies
+its own items correctly. Lookup by id goes through `shared::params::row_ids`, not `repo.get()`, which
+binary-searches the lookup table that panics on some regulations ([params.md](../../../shared/docs/params.md)).
 
-## Công thức và thứ tự áp
+## Formula and order
 
-- Nhân `lotItemNum0N` (`u8`): làm tròn, tối thiểu 1, tối đa 255; ô số lượng 0
-  giữ nguyên.
-- Snapshot số lượng gốc và nhóm của từng ô một lần, mỗi lần áp/reload tính lại
-  từ snapshot (cùng pattern baseline với `drop_rate`, để reload không cộng dồn).
-- Áp cho cả `ItemLotParam_map` (điểm hái, đồ đặt trong thế giới) lẫn
-  `ItemLotParam_enemy` (rơi từ quái/thú), sau `drop_rate::apply`, cả lúc khởi
-  động lẫn khi bấm ReloadKey. Hai tính năng ghi hai cột khác nhau
-  (`lotItemBasePoint` so với `lotItemNum`) nên độc lập.
+- `lotItemNum0N` (`u8`) is multiplied, rounded, with a minimum of 1 and a maximum of 255; a slot with a
+  count of 0 is kept.
+- The original counts and the group of every slot are captured once; every apply and reload recomputes
+  from that snapshot, the same baseline pattern as [drop_rate.md](drop_rate.md).
+- It applies to `ItemLotParam_map` (gathering points and items placed in the world) and
+  `ItemLotParam_enemy` (drops from enemies and animals), after the drop rate, at start-up and on reload.
+  The two features write different columns (`lotItemBasePoint` and `lotItemNum`), so they are independent.
 
-## Đổi tên ini đi kèm (cùng ngày)
+## Not done
 
-Người dùng đổi template: `[Settings]` thành `[Drop]`, `ChancePercent` thành
-`Percentage`. `common::config` bỏ qua section nên chỉ đổi tên key mới có ảnh
-hưởng: trước đây migrate sẽ đẩy `ChancePercent` cũ vào `[Legacy]` và đặt
-`Percentage` về mặc định, làm mất giá trị đã chỉnh. Thêm
-`common::config::load_or_create_default_with_renames` (có unit test): key cũ có
-mà key mới chưa có thì chuyển giá trị sang key mới và bỏ key cũ. `lib.rs` truyền
-`("ChancePercent", "Percentage")`.
+Multiplying gathered goods such as Erdleaf Flower and Trina's Lily was suggested and dropped: the person
+asking did not follow up, and their `goodsType` was never checked.

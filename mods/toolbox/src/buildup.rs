@@ -31,11 +31,11 @@
 
 use std::sync::Mutex;
 
-use common::input::{is_key_pressed, parse_virtual_key};
-use common::task;
-use common::{logger, overlay, player};
 use eldenring::cs::CSTaskGroupIndex;
 use eldenring::fd4::FD4TaskData;
+use shared::input::{is_key_pressed, parse_virtual_key};
+use shared::task;
+use shared::{logger, overlay, player};
 
 use crate::{config, patch, speffect};
 
@@ -59,13 +59,62 @@ pub struct Bar {
 }
 
 pub const BARS: [Bar; 7] = [
-    Bar { name: "Poison", label: "Poison", current: 0x10, max: 0x2C, apply_speffect: 6500, clear_speffect: 103 },
-    Bar { name: "ScarletRot", label: "Scarlet Rot", current: 0x14, max: 0x30, apply_speffect: 6600, clear_speffect: 104 },
-    Bar { name: "Bleed", label: "Hemorrhage (Bleed)", current: 0x18, max: 0x34, apply_speffect: 6400, clear_speffect: 102 },
-    Bar { name: "Deathblight", label: "Death Blight", current: 0x1C, max: 0x38, apply_speffect: 6800, clear_speffect: 109 },
-    Bar { name: "Frost", label: "Frostbite", current: 0x20, max: 0x3C, apply_speffect: 6700, clear_speffect: 105 },
-    Bar { name: "Sleep", label: "Sleep", current: 0x24, max: 0x40, apply_speffect: 6450, clear_speffect: 108 },
-    Bar { name: "Madness", label: "Madness", current: 0x28, max: 0x44, apply_speffect: 6750, clear_speffect: 107 },
+    Bar {
+        name: "Poison",
+        label: "Poison",
+        current: 0x10,
+        max: 0x2C,
+        apply_speffect: 6500,
+        clear_speffect: 103,
+    },
+    Bar {
+        name: "ScarletRot",
+        label: "Scarlet Rot",
+        current: 0x14,
+        max: 0x30,
+        apply_speffect: 6600,
+        clear_speffect: 104,
+    },
+    Bar {
+        name: "Bleed",
+        label: "Hemorrhage (Bleed)",
+        current: 0x18,
+        max: 0x34,
+        apply_speffect: 6400,
+        clear_speffect: 102,
+    },
+    Bar {
+        name: "Deathblight",
+        label: "Death Blight",
+        current: 0x1C,
+        max: 0x38,
+        apply_speffect: 6800,
+        clear_speffect: 109,
+    },
+    Bar {
+        name: "Frost",
+        label: "Frostbite",
+        current: 0x20,
+        max: 0x3C,
+        apply_speffect: 6700,
+        clear_speffect: 105,
+    },
+    Bar {
+        name: "Sleep",
+        label: "Sleep",
+        current: 0x24,
+        max: 0x40,
+        apply_speffect: 6450,
+        clear_speffect: 108,
+    },
+    Bar {
+        name: "Madness",
+        label: "Madness",
+        current: 0x28,
+        max: 0x44,
+        apply_speffect: 6750,
+        clear_speffect: 107,
+    },
 ];
 
 #[derive(Clone, Copy)]
@@ -80,28 +129,15 @@ pub enum GuiAction {
 
 /// Snapshot of the player's 7 bars (current remaining resistance, max) plus the
 /// last status message, updated every frame on `FrameBegin` for the GUI.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Snapshot {
     pub in_game: bool,
     pub bars: [(i32, i32); 7],
     pub status: String,
 }
 
-impl Default for Snapshot {
-    fn default() -> Self {
-        Self {
-            in_game: false,
-            bars: [(0, 0); 7],
-            status: String::new(),
-        }
-    }
-}
-
-static SNAPSHOT: Mutex<Snapshot> = Mutex::new(Snapshot {
-    in_game: false,
-    bars: [(0, 0); 7],
-    status: String::new(),
-});
+static SNAPSHOT: Mutex<Snapshot> =
+    Mutex::new(Snapshot { in_game: false, bars: [(0, 0); 7], status: String::new() });
 
 static PENDING: Mutex<Vec<GuiAction>> = Mutex::new(Vec::new());
 
@@ -121,10 +157,12 @@ pub fn set_status(msg: impl Into<String>) {
 }
 
 unsafe fn resist_module(player: *const u8) -> Option<*mut u8> {
+    // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
     let container = unsafe { *(player.add(MODULE_CONTAINER_OFFSET) as *const usize) };
     if container == 0 {
         return None;
     }
+    // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
     let module = unsafe { *((container + RESIST_MODULE_SLOT) as *const usize) };
     (module != 0).then_some(module as *mut u8)
 }
@@ -133,31 +171,41 @@ fn apply_bar(player: *const u8, index: usize) {
     let Some(bar) = BARS.get(index) else {
         return;
     };
+    // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
     let Some(module) = (unsafe { resist_module(player) }) else {
         logger::warn("Buildup: resist module not resolved, nothing applied.");
         set_status("Player resist module not ready.");
         return;
     };
+    // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
     let cur = unsafe { module.add(bar.current) } as *mut i32;
+    // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
     let max_ptr = unsafe { module.add(bar.max) } as *mut i32;
+    // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
     let max = unsafe { std::ptr::read_volatile(max_ptr) };
+    // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
     let before = unsafe { std::ptr::read_volatile(cur) };
     let amount = config::get().buildup.amount;
     let after = if amount <= 0 { 0 } else { (before - amount).max(0) };
 
     if after == 0 {
         // Full bar -> proc the status effect natively via ChrIns::ApplySpEffect.
+        // SAFETY: `player` is the live main player's ChrIns and the function was found by its pattern.
         unsafe { std::ptr::write_volatile(cur, 1) };
+        // SAFETY: `player` is the live main player's ChrIns and the function was found by its pattern.
         unsafe { speffect::apply(player as *mut u8, bar.apply_speffect, true) };
         // If `cur` is still 1, the status was already active on the player
         // (`sub_1404FAE40` blocked buildup); cure active status and re-apply.
+        // SAFETY: `player` is the live main player's ChrIns and the function was found by its pattern.
         if unsafe { std::ptr::read_volatile(cur) } == 1 {
+            // SAFETY: `player` is the live main player's ChrIns and the function was found by its pattern.
             unsafe {
                 speffect::apply(player as *mut u8, SPEFFECT_CURE_ALL_ACTIVE, true);
                 std::ptr::write_volatile(cur, 1);
                 speffect::apply(player as *mut u8, bar.apply_speffect, true);
             }
         }
+        // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
         let new_max = unsafe { std::ptr::read_volatile(max_ptr) };
         let line = format!("Proc'd {} (bar 100%, max {max} -> {new_max})", bar.label);
         logger::log(&line);
@@ -166,6 +214,7 @@ fn apply_bar(player: *const u8, index: usize) {
         // Partial buildup -> notify HUD gauge via ApplySpEffect without proc'ing,
         // then set exact remaining resistance `after`.
         let safe_cap = max.max(200);
+        // SAFETY: `player` is the live main player's ChrIns and the function was found by its pattern.
         unsafe {
             std::ptr::write_volatile(max_ptr, safe_cap);
             std::ptr::write_volatile(cur, safe_cap);
@@ -189,12 +238,17 @@ fn clear_bar(player: *const u8, index: usize) {
     let Some(bar) = BARS.get(index) else {
         return;
     };
+    // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
     let Some(module) = (unsafe { resist_module(player) }) else {
         return;
     };
+    // SAFETY: `player` is the live main player's ChrIns and the function was found by its pattern.
     unsafe { speffect::apply(player as *mut u8, bar.clear_speffect, true) };
+    // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
     let cur = unsafe { module.add(bar.current) } as *mut i32;
+    // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
     let max = unsafe { *(module.add(bar.max) as *const i32) };
+    // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
     unsafe { std::ptr::write_volatile(cur, max) };
     let line = format!("Cleared {} (0 / {max})", bar.label);
     logger::log(&line);
@@ -202,14 +256,20 @@ fn clear_bar(player: *const u8, index: usize) {
 }
 
 fn clear_all(player: *const u8) {
+    // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
     let Some(module) = (unsafe { resist_module(player) }) else {
         return;
     };
+    // SAFETY: `player` is the live main player's ChrIns and the function was found by its pattern.
     unsafe { speffect::apply(player as *mut u8, SPEFFECT_CURE_ALL_ACTIVE, true) };
     for bar in &BARS {
+        // SAFETY: `player` is the live main player's ChrIns and the function was found by its pattern.
         unsafe { speffect::apply(player as *mut u8, bar.clear_speffect, true) };
+        // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
         let cur = unsafe { module.add(bar.current) } as *mut i32;
+        // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
         let max = unsafe { *(module.add(bar.max) as *const i32) };
+        // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
         unsafe { std::ptr::write_volatile(cur, max) };
     }
     logger::log("Buildup: cured active statuses and cleared all bars to max.");
@@ -222,13 +282,16 @@ fn refresh_snapshot(player: Option<*const u8>) {
         snap.in_game = false;
         return;
     };
+    // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
     let Some(module) = (unsafe { resist_module(p) }) else {
         snap.in_game = false;
         return;
     };
     snap.in_game = true;
     for (i, bar) in BARS.iter().enumerate() {
+        // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
         let cur = unsafe { *(module.add(bar.current) as *const i32) };
+        // SAFETY: `module` is the player's resist module, reached through checked pointers, and the offsets are the bar's own fields.
         let max = unsafe { *(module.add(bar.max) as *const i32) };
         snap.bars[i] = (cur, max);
     }
@@ -236,35 +299,40 @@ fn refresh_snapshot(player: Option<*const u8>) {
 
 pub fn run() {
     let cs_task = task::wait_for_cs_task();
-    task::run_recurring_safe(cs_task, "Buildup", CSTaskGroupIndex::FrameBegin, move |_: &FD4TaskData| {
-        // Menu toggle hotkey (default F8).
-        let menu_vk = parse_virtual_key(&config::get().menu.key, VK_F8);
-        if is_key_pressed(menu_vk) {
-            overlay::toggle();
-        }
-
-        let player_ptr = player::main_player_chr_ins_ptr();
-
-        // Drain GUI button actions first.
-        let actions: Vec<GuiAction> = std::mem::take(&mut *PENDING.lock().unwrap());
-        if !actions.is_empty() {
-            if let Some(p) = player_ptr {
-                for act in actions {
-                    match act {
-                        GuiAction::Apply(i) => apply_bar(p, i),
-                        GuiAction::ClearOne(i) => clear_bar(p, i),
-                        GuiAction::ClearAll => clear_all(p),
-                    }
-                }
-            } else {
-                set_status("Not in the game world yet.");
+    task::run_recurring_safe(
+        cs_task,
+        "Buildup",
+        CSTaskGroupIndex::FrameBegin,
+        move |_: &FD4TaskData| {
+            // Menu toggle hotkey (default F8).
+            let menu_vk = parse_virtual_key(&config::get().menu.key, VK_F8);
+            if is_key_pressed(menu_vk) {
+                overlay::toggle();
             }
-        }
 
-        if overlay::is_open() {
-            refresh_snapshot(player_ptr);
-        }
-    });
+            let player_ptr = player::main_player_chr_ins_ptr();
+
+            // Drain GUI button actions first.
+            let actions: Vec<GuiAction> = std::mem::take(&mut *PENDING.lock().unwrap());
+            if !actions.is_empty() {
+                if let Some(p) = player_ptr {
+                    for act in actions {
+                        match act {
+                            GuiAction::Apply(i) => apply_bar(p, i),
+                            GuiAction::ClearOne(i) => clear_bar(p, i),
+                            GuiAction::ClearAll => clear_all(p),
+                        }
+                    }
+                } else {
+                    set_status("Not in the game world yet.");
+                }
+            }
+
+            if overlay::is_open() {
+                refresh_snapshot(player_ptr);
+            }
+        },
+    );
 
     patch::park();
 }

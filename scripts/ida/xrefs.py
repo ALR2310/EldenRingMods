@@ -1,13 +1,13 @@
-"""Tìm nơi gọi / tham chiếu dữ liệu tới 1 hay nhiều địa chỉ, nhiều tầng.
+"""Find callers and data references to one or more addresses, over several levels.
 
-Dùng:
+Usage:
     run.ps1 xrefs <ea>... [--depth=N] [--decompile]
 
-    --depth=N     đi ngược N tầng caller (mặc định 1)
-    --decompile   ghi decompile của từng hàm caller vào xrefs/sub_<RVA>.c
+    --depth=N     walk back N levels of callers (default 1)
+    --decompile   write the decompiled code of each caller to xrefs/sub_<RVA>.c
 
-Ghi xrefs.txt: mỗi dòng `d<tầng> <đích> <- <nơi gọi> (hàm ...)` cho code ref,
-và `<-data` cho tham chiếu dữ liệu (vtable, bảng con trỏ). Địa chỉ in dạng RVA.
+Writes xrefs.txt: one line `d<level> <target> <- <call site> (func ...)` per code reference,
+and `<-data` lines for data references (vtables, pointer tables). Addresses are RVAs.
 """
 import os
 import sys
@@ -25,7 +25,7 @@ import common
 def main():
     pos, flags = common.parse_args()
     if not pos:
-        common.die("thiếu địa chỉ; xem docstring")
+        common.die("missing address; see the docstring")
     depth = int(flags.get("depth", 1))
     want_c = "decompile" in flags
     sub = os.path.join(common.OUT_DIR, "xrefs")

@@ -1,12 +1,12 @@
 #![allow(non_snake_case)] // crate name is "JourneyHUD" to control the output DLL's filename
 
+mod boss_list;
 mod config;
 mod drag;
-mod enemies;
 mod map;
 mod menu;
 mod radar;
-mod radar_ui;
+mod rune_counter;
 mod settings;
 mod state_icons;
 mod target;
@@ -14,7 +14,7 @@ mod text;
 mod textures;
 mod ui;
 
-use common::{dll_dir, logger};
+use shared::{dll_dir, logger};
 
 /// # Safety
 /// This is exposed this way so the library loader can call it. Do not call it
@@ -30,7 +30,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         let dir = dll_dir(hmodule);
         let report = config::init(&format!("{dir}\\JourneyHUD.toml"));
 
-        // `LogFile` gates the log file entirely, see common::logger.
+        // `LogFile` gates the log file entirely, see shared::logger.
         logger::set_enabled(config::get().logging.log_file);
         logger::init(&dir, "JourneyHUD.log");
         logger::install_panic_hook();
@@ -40,7 +40,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         // Early: the menu host only takes registrations in the first seconds.
         menu::start(hmodule);
         std::thread::spawn(|| {
-            common::reload::run_with(
+            shared::reload::run(
                 || config::get().general.reload_key.clone(),
                 || config::get().general.reload_banner,
                 || {
@@ -55,6 +55,8 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         });
         state_icons::install();
         state_icons::install_gauge();
+        boss_list::install();
+        rune_counter::install();
         // The overlay hooks the game's DX12 swap chain; other mods and overlays hook it too, so
         // `LoadDelay` can hold this back (its own thread: the rest of the mod does not wait).
         match config::get().general.load_delay {
@@ -67,7 +69,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
                 });
             }
         }
-        common::diag::log_environment_when_game_ready();
+        shared::diag::log_environment_when_game_ready();
         target::run();
     });
 

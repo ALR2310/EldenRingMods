@@ -1,4 +1,4 @@
-//! `JourneyHUD.toml`, loaded through `common::toml_config`. Defaults live only in
+//! `JourneyHUD.toml`, loaded through `shared::toml_config`. Defaults live only in
 //! the embedded template: `Default` on these structs is the derived zero value the
 //! loader needs while parsing, never a config in use (see the test
 //! `template_sets_every_field`).
@@ -7,14 +7,34 @@ use std::sync::{Arc, OnceLock};
 
 use serde::{Deserialize, Serialize};
 
-use common::toml_config::{LoadReport, Migration, Step, TomlConfig};
+use toml_edit::DocumentMut;
+
+use shared::toml_config::{LoadReport, Migration, Step, TomlConfig, rename_key};
 
 /// Embedded verbatim at compile time - single source of truth for the default file.
 pub const TEMPLATE: &str = include_str!("../JourneyHUD.toml");
 
-/// Format migration steps for `General.ConfigVersion`; none yet (1 is the first
-/// format). Append only - a released step must never change.
-const STEPS: &[Step] = &[];
+/// Format migration steps for `General.ConfigVersion`. Append only - a released step must
+/// never change.
+const STEPS: &[Step] = &[v1_to_v2, v2_to_v3];
+
+/// 2 -> 3: `Player.Effects` is `Player.EffectTimer`, apart from `Target.Effects`.
+fn v2_to_v3(doc: &mut DocumentMut, template: &DocumentMut) {
+    rename_key(doc, template, "Player.Effects", "Player.EffectTimer");
+}
+
+/// 1 -> 2: the `[Layout]` section went away; its offsets moved to the minimap and the target
+/// panel, and the rune counter has its own section.
+fn v1_to_v2(doc: &mut DocumentMut, template: &DocumentMut) {
+    for (old, new) in [
+        ("Layout.OffsetX", "Minimap.OffsetX"),
+        ("Layout.OffsetY", "Minimap.OffsetY"),
+        ("Layout.TargetOffsetX", "Target.OffsetX"),
+        ("Layout.TargetOffsetY", "Target.OffsetY"),
+    ] {
+        rename_key(doc, template, old, new);
+    }
+}
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
@@ -22,7 +42,8 @@ pub struct Config {
     pub general: General,
     pub target: Target,
     pub player: Player,
-    pub layout: Layout,
+    #[serde(rename = "HUD")]
+    pub hud: Hud,
     pub minimap: Minimap,
     pub rendering: Rendering,
     pub logging: Logging,
@@ -33,13 +54,13 @@ pub struct Config {
 pub struct General {
     /// File format version, managed by the mod.
     pub config_version: u32,
-    #[serde(deserialize_with = "common::toml_config::key_name")]
+    #[serde(deserialize_with = "shared::toml_config::key_name")]
     pub reload_key: String,
     pub reload_banner: bool,
-    #[serde(deserialize_with = "common::toml_config::key_name")]
+    #[serde(deserialize_with = "shared::toml_config::key_name")]
     pub toggle_key: String,
     pub load_delay: u32,
-    #[serde(deserialize_with = "common::toml_config::key_name")]
+    #[serde(deserialize_with = "shared::toml_config::key_name")]
     pub drag_key: String,
 }
 
@@ -52,29 +73,40 @@ pub struct Target {
     pub numbers: bool,
     pub buildup: bool,
     pub effects: bool,
+    pub boss_bar: bool,
+    pub offset_x: i32,
+    pub offset_y: i32,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct Player {
-    pub effects: bool,
+    pub effect_timer: bool,
     pub buildup: bool,
     pub scale: f64,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
-pub struct Layout {
+pub struct Hud {
+    pub rune_counter: RuneCounter,
+}
+
+#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
+#[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
+pub struct RuneCounter {
+    pub enabled: bool,
+    pub scale: f64,
     pub offset_x: i32,
     pub offset_y: i32,
-    pub target_offset_x: i32,
-    pub target_offset_y: i32,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct Minimap {
     pub enabled: bool,
+    pub offset_x: i32,
+    pub offset_y: i32,
     pub size: i32,
     pub scale: f64,
     pub range: i32,
@@ -93,7 +125,7 @@ pub struct Minimap {
 }
 
 /// A hotkey field that takes one key or a list of them: `"0xBB"`, `116` or `["0xBB", "0x6B"]`,
-/// each a key name or a virtual-key code (see `common::toml_config::key_name`).
+/// each a key name or a virtual-key code (see `shared::toml_config::key_name`).
 fn key_list<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
     #[derive(Deserialize)]
     #[serde(untagged)]
@@ -160,7 +192,8 @@ pub struct Logging {
     pub enemy_probe: bool,
 }
 
-const MIGRATION: Migration = Migration { version_key: "General.ConfigVersion", steps: STEPS, keep: &[] };
+const MIGRATION: Migration =
+    Migration { version_key: "General.ConfigVersion", steps: STEPS, keep: &[] };
 
 static CONFIG: OnceLock<TomlConfig<Config>> = OnceLock::new();
 
@@ -182,7 +215,7 @@ pub fn get() -> Arc<Config> {
 
 /// The template's values - the defaults.
 pub fn template() -> Config {
-    common::toml_config::defaults(TEMPLATE)
+    shared::toml_config::defaults(TEMPLATE)
 }
 
 pub fn reload() -> Result<(), String> {
@@ -207,7 +240,7 @@ mod tests {
 
     #[test]
     fn template_sets_every_field() {
-        let missing = common::toml_config::template_missing_keys::<Config>(TEMPLATE, &[]);
+        let missing = shared::toml_config::template_missing_keys::<Config>(TEMPLATE, &[]);
         assert!(missing.is_empty(), "template lacks {missing:?}");
     }
 
@@ -218,9 +251,58 @@ mod tests {
         assert_eq!(STEPS.len() as i64, current - 1);
     }
 
+    /// A version 1 file keeps the places the player dragged the minimap and the panel to.
+    #[test]
+    fn version_1_offsets_move_to_the_minimap_and_the_target() {
+        let old = "[General]
+ConfigVersion = 1
+
+[Layout]
+OffsetX = 300
+OffsetY = 90
+TargetOffsetX = 5
+TargetOffsetY = -7
+";
+        let path =
+            std::env::temp_dir().join(format!("journeyhud_migrate_{}.toml", std::process::id()));
+        std::fs::write(&path, old).unwrap();
+        let (loaded, report) =
+            TomlConfig::<Config>::load_or_create(&path.to_string_lossy(), TEMPLATE, MIGRATION);
+        let config = loaded.get();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(report.migrated, Some((1, 3)));
+        assert!(report.unknown.is_empty(), "{:?}", report.unknown);
+        assert_eq!((config.minimap.offset_x, config.minimap.offset_y), (300, 90));
+        assert_eq!((config.target.offset_x, config.target.offset_y), (5, -7));
+        assert!(!text.contains("[Layout]"), "{text}");
+    }
+
+    /// A version 2 file keeps the player's choice for the effect timer.
+    #[test]
+    fn version_2_player_effects_become_the_effect_timer() {
+        let old = "[General]
+ConfigVersion = 2
+
+[Player]
+Effects = false
+";
+        let path =
+            std::env::temp_dir().join(format!("journeyhud_migrate2_{}.toml", std::process::id()));
+        std::fs::write(&path, old).unwrap();
+        let (loaded, report) =
+            TomlConfig::<Config>::load_or_create(&path.to_string_lossy(), TEMPLATE, MIGRATION);
+        let config = loaded.get();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(report.migrated, Some((2, 3)));
+        assert!(report.unknown.is_empty(), "{:?}", report.unknown);
+        assert!(!config.player.effect_timer);
+    }
+
     #[test]
     fn missing_keys_fall_back_to_the_template() {
-        let parsed: Config = common::toml_config::parse("[Minimap]\nRange = 50\n", TEMPLATE).unwrap();
+        let parsed: Config =
+            shared::toml_config::parse("[Minimap]\nRange = 50\n", TEMPLATE).unwrap();
         assert_eq!(parsed.minimap.range, 50);
         assert_eq!(parsed.minimap.size, template().minimap.size);
         assert!(parsed.minimap.layers.map);
@@ -228,7 +310,8 @@ mod tests {
 
     #[test]
     fn misspelled_key_is_an_error_with_its_line() {
-        let err = common::toml_config::parse::<Config>("[Minimap.Layers]\nMapp = true\n", TEMPLATE).unwrap_err();
+        let err = shared::toml_config::parse::<Config>("[Minimap.Layers]\nMapp = true\n", TEMPLATE)
+            .unwrap_err();
         assert!(err.contains("Mapp") && err.contains("line 2"), "{err}");
     }
 
@@ -236,7 +319,8 @@ mod tests {
     /// still in the file afterwards, nested tables included.
     #[test]
     fn menu_save_keeps_every_comment() {
-        let path = std::env::temp_dir().join(format!("journeyhud_menu_save_{}.toml", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("journeyhud_menu_save_{}.toml", std::process::id()));
         let path_text = path.to_string_lossy().to_string();
         let _ = std::fs::remove_file(&path);
         init(&path_text);
@@ -248,11 +332,17 @@ mod tests {
             ("Target.Scale", "1.5".to_string()),
         ]));
         let config = get();
-        assert!(!config.minimap.layers.map && config.minimap.hide.in_caves && config.minimap.hide.at_roundtable);
+        assert!(
+            !config.minimap.layers.map
+                && config.minimap.hide.in_caves
+                && config.minimap.hide.at_roundtable
+        );
         assert_eq!((config.minimap.range, config.target.scale), (50, 1.5));
         let text = std::fs::read_to_string(&path).unwrap();
         let comments = |text: &str| -> Vec<String> {
-            text.lines().filter_map(|line| line.find('#').map(|i| line[i..].trim_end().to_string())).collect()
+            text.lines()
+                .filter_map(|line| line.find('#').map(|i| line[i..].trim_end().to_string()))
+                .collect()
         };
         assert_eq!(comments(&text), comments(TEMPLATE));
         assert_eq!(text.lines().count(), TEMPLATE.lines().count());
@@ -270,31 +360,39 @@ mod tests {
     #[test]
     fn the_drag_key_is_f7_and_the_target_starts_under_the_minimap() {
         let template = template();
-        assert_eq!(common::input::parse_virtual_key(&template.general.drag_key, 0), 0x76);
-        assert_eq!((template.layout.target_offset_x, template.layout.target_offset_y), (0, 0));
+        assert_eq!(shared::input::parse_virtual_key(&template.general.drag_key, 0), 0x76);
+        assert_eq!((template.target.offset_x, template.target.offset_y), (0, 0));
     }
 
     #[test]
     fn the_toggle_key_is_f6_and_can_be_left_empty() {
-        assert_eq!(common::input::parse_virtual_key(&template().general.toggle_key, 0), 0x75);
-        let parsed: Config = common::toml_config::parse("[General]
+        assert_eq!(shared::input::parse_virtual_key(&template().general.toggle_key, 0), 0x75);
+        let parsed: Config = shared::toml_config::parse(
+            "[General]
 ToggleKey = \"\"
-", TEMPLATE).unwrap();
-        assert_eq!(common::input::parse_virtual_key(&parsed.general.toggle_key, 0), 0);
+",
+            TEMPLATE,
+        )
+        .unwrap();
+        assert_eq!(shared::input::parse_virtual_key(&parsed.general.toggle_key, 0), 0);
     }
 
     #[test]
     fn zoom_keys_take_a_name_or_a_number() {
-        let parsed: Config =
-            common::toml_config::parse("[Minimap]\nZoomInKey = \"F8\"\nZoomOutKey = 0xBD\n", TEMPLATE).unwrap();
+        let parsed: Config = shared::toml_config::parse(
+            "[Minimap]\nZoomInKey = \"F8\"\nZoomOutKey = 0xBD\n",
+            TEMPLATE,
+        )
+        .unwrap();
         assert_eq!(parsed.minimap.zoom_in_key, ["F8"]);
-        assert_eq!(common::input::parse_virtual_key(&parsed.minimap.zoom_out_key[0], 0), 0xBD);
+        assert_eq!(shared::input::parse_virtual_key(&parsed.minimap.zoom_out_key[0], 0), 0xBD);
     }
 
     #[test]
     fn a_zoom_key_can_be_a_list_of_keys() {
         let parsed: Config =
-            common::toml_config::parse("[Minimap]\nZoomInKey = [\"0xBB\", 107]\n", TEMPLATE).unwrap();
+            shared::toml_config::parse("[Minimap]\nZoomInKey = [\"0xBB\", 107]\n", TEMPLATE)
+                .unwrap();
         assert_eq!(parsed.minimap.zoom_in_key, ["0xBB", "107"]);
         // The template gives the numpad keys too.
         assert_eq!(template().minimap.zoom_out_key, ["0xBD", "0x6D"]);
