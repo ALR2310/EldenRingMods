@@ -49,7 +49,7 @@ static EFFECTS_TARGET: Setting = Setting {
     apply: Some(settings::set_effects_target),
 };
 static EFFECTS_PLAYER: Setting = Setting {
-    key: "Player.Effects",
+    key: "Player.EffectTimer",
     format: menu::format_bool,
     apply: Some(settings::set_effects_player),
 };
@@ -216,7 +216,7 @@ fn build(b: &mut MenuBuilder) -> Result<(), String> {
         &t("effects_player.label"),
         &t("effects_player.help"),
         &EFFECTS_PLAYER,
-        || config::get().player.effects as u8,
+        || config::get().player.effect_timer as u8,
     )?;
     b.toggle(
         target,

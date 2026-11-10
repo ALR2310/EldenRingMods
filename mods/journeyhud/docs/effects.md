@@ -88,7 +88,7 @@ permanent), `enableLifeTime`, `stateInfo`, `dispIconNonactive`.
   **42 cells in rows of 14** (cell i at x = 10 + 42 * (i mod 14), y = 15 + 41 * (i div 14) in 1080p units), each
   only an `Icon` clip, no text field. `ui::draw_icon_times` draws the time text just under each icon of the game
   (slot k centred at x = 155.5 + 42 * k, y 142, measured on a screenshot): for the icon of a slot it takes the
-  effect with that icon that has the **most time left**; a permanent one has no text. Key `Player.Effects`. Limit:
+  effect with that icon that has the **most time left**; a permanent one has no text. Key `Player.EffectTimer`. Limit:
   the position follows the default HUD layout (a different HUD size in the game options shifts the text); not
   tried.
 - **Fading with the game's row**: the game hides the row (and the HP/FP bars) outside fights; the update function

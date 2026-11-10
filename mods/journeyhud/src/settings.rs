@@ -90,7 +90,7 @@ pub fn load(config: &Config) {
     set_rune_offset_x(f64::from(rune.offset_x));
     set_rune_offset_y(f64::from(rune.offset_y));
     set_effects_target(target.effects as u8);
-    set_effects_player(config.player.effects as u8);
+    set_effects_player(config.player.effect_timer as u8);
     set_player_buildup(config.player.buildup as u8);
     set_player_scale(config.player.scale);
     set_width(f64::from(target.width));
