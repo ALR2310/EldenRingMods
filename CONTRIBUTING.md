@@ -78,6 +78,9 @@ local user or toolchain path. The zip holds the DLL plus `files` from `[package.
 file keeping its relative path. Every mod declares it, for example `files = ["<Mod>.toml", "THIRD-PARTY-NOTICES.txt"]`;
 `files = []` ships the DLL alone (a mod that creates its config on first run).
 
+Each mod has a build task in `.vscode/tasks.json` (`Build <Mod>`, with `<Mod>` the `[lib] name`) and
+is listed in the `dependsOn` of `Cargo: Build All`; add, rename or remove it together with the mod.
+
 Scripts in `scripts/` are PowerShell for simple build and packaging steps. Use Python (3.10+,
 standard library only where possible) when a script needs real logic, such as parsing JSON or
 calling an API.
@@ -157,6 +160,8 @@ PascalCase so the DLL gets the right file name (`#![allow(non_snake_case)]` in `
   example); otherwise write "a third-party mod".
 - README and CHANGELOG are English. Add a Vietnamese README (`README.vi.md`) for each mod and
   keep it in sync.
+- Features on `nexus_page.bbcode`: one idea per bullet, one short sentence; no figures, defaults or
+  "(adjustable)" in the line.
 - CHANGELOG follows [Keep a Changelog](https://keepachangelog.com): one short line per change,
   such as `Added X option.` or `Fixed crash when Y.` Only user-facing features and fixes belong
   there: leave out log, debug, build and other development changes. Versions follow
