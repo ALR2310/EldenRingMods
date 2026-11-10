@@ -9,6 +9,7 @@
 ![Rust](https://img.shields.io/badge/Rust-2024_edition-orange?logo=rust)
 ![Platform](https://img.shields.io/badge/platform-Windows_x64-blue)
 ![Game](https://img.shields.io/badge/game-Elden_Ring-8a6d3b)
+[![CI](https://github.com/ALR2310/ERMods/actions/workflows/ci.yml/badge.svg)](https://github.com/ALR2310/ERMods/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
 </div>
