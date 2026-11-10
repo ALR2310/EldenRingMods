@@ -7,9 +7,8 @@ without focusing it (`PrintWindow`). Needs the `mcp` and `pillow` packages.
 
     python mods/toolbox/mcp/server.py
 
-Configuration: the game's `mod` folder (where Toolbox.dll lives) comes from the
-`ER_MOD_DIR` environment variable, or from an `ER_MOD_DIR=` line in the repo's `.env`
-(git-ignored, see `.env.example`). There is no default: it is specific to each machine.
+No configuration: the folder of Toolbox.dll is read from the module list of the running
+eldenring.exe, so the game has to be started with the mod loaded.
 """
 
 from __future__ import annotations
@@ -29,20 +28,75 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import ImageContent, TextContent
 
 
-def _mod_dir() -> Path | None:
-    value = os.environ.get("ER_MOD_DIR", "")
-    if not value:
-        env_file = Path(__file__).resolve().parents[3] / ".env"
-        if env_file.is_file():
-            for line in env_file.read_text(encoding="utf-8").splitlines():
-                key, _, raw = line.partition("=")
-                if key.strip() == "ER_MOD_DIR":
-                    value = raw.strip().strip('"').strip("'")
-    return Path(value) if value else None
-
-
-MOD_DIR = _mod_dir()
+GAME_PROCESS = "eldenring.exe"
+MOD_MODULE = "Toolbox.dll"
 WINDOW_TITLE = "ELDEN RING"
+
+TH32CS_SNAPPROCESS, TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32 = 0x2, 0x8, 0x10
+
+
+class _ProcessEntry(ctypes.Structure):
+    _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD),
+                ("th32ProcessID", wintypes.DWORD), ("th32DefaultHeapID", ctypes.c_size_t),
+                ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+                ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", wintypes.LONG),
+                ("dwFlags", wintypes.DWORD), ("szExeFile", ctypes.c_wchar * 260)]
+
+
+class _ModuleEntry(ctypes.Structure):
+    _fields_ = [("dwSize", wintypes.DWORD), ("th32ModuleID", wintypes.DWORD),
+                ("th32ProcessID", wintypes.DWORD), ("GlblcntUsage", wintypes.DWORD),
+                ("ProccntUsage", wintypes.DWORD), ("modBaseAddr", ctypes.c_void_p),
+                ("modBaseSize", wintypes.DWORD), ("hModule", ctypes.c_void_p),
+                ("szModule", ctypes.c_wchar * 256), ("szExePath", ctypes.c_wchar * 260)]
+
+
+def _snapshot_entries(entry_type, flags: int, pid: int, first: str, next_: str):
+    kernel32 = ctypes.windll.kernel32
+    kernel32.CreateToolhelp32Snapshot.restype = ctypes.c_void_p
+    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    handle = kernel32.CreateToolhelp32Snapshot(flags, pid)
+    if handle in (None, ctypes.c_void_p(-1).value):
+        return
+    try:
+        entry = entry_type()
+        entry.dwSize = ctypes.sizeof(entry_type)
+        step = getattr(kernel32, first)
+        step.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        advance = getattr(kernel32, next_)
+        advance.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        more = step(handle, ctypes.byref(entry))
+        while more:
+            yield entry
+            more = advance(handle, ctypes.byref(entry))
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _loaded_module_dir(process: str, module: str) -> Path | None:
+    """Folder of `module` as loaded in the running `process`; None if either is missing."""
+    for proc in _snapshot_entries(_ProcessEntry, TH32CS_SNAPPROCESS, 0,
+                                  "Process32FirstW", "Process32NextW"):
+        if proc.szExeFile.lower() != process.lower():
+            continue
+        flags = TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32
+        for mod in _snapshot_entries(_ModuleEntry, flags, proc.th32ProcessID,
+                                     "Module32FirstW", "Module32NextW"):
+            if mod.szModule.lower() == module.lower():
+                return Path(mod.szExePath).parent
+    return None
+
+
+_mod_dir_cache: Path | None = None
+
+
+def _mod_dir() -> Path | None:
+    """The folder the game loaded Toolbox.dll from; looked up again when it disappears."""
+    global _mod_dir_cache
+    if _mod_dir_cache is None or not _mod_dir_cache.is_dir():
+        _mod_dir_cache = _loaded_module_dir(GAME_PROCESS, MOD_MODULE)
+    return _mod_dir_cache
 
 # Key names the mod understands: the same file the mod is built from (src/input/keys.txt).
 KEYS = {
@@ -80,13 +134,14 @@ and mouse never reach the game, only the commands you send here do.
 def _send(*lines: str) -> str:
     """Hands command lines to the mod. Waits for the previous file to be consumed
     first, otherwise the rename would overwrite a command the mod has not read."""
-    if MOD_DIR is None or not MOD_DIR.is_dir():
-        return f"error: mod folder not found ({MOD_DIR}); set ER_MOD_DIR to the game's mod folder"
-    cmd = MOD_DIR / "Toolbox.cmd"
+    mod_dir = _mod_dir()
+    if mod_dir is None:
+        return f"error: {MOD_MODULE} is not loaded in a running {GAME_PROCESS}; start the game with the mod"
+    cmd = mod_dir / "Toolbox.cmd"
     deadline = time.monotonic() + 2.0
     while cmd.exists() and time.monotonic() < deadline:
         time.sleep(0.01)
-    tmp = MOD_DIR / "Toolbox.tmp"
+    tmp = mod_dir / "Toolbox.tmp"
     tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
     os.replace(tmp, cmd)
     return "ok: " + "; ".join(lines)
