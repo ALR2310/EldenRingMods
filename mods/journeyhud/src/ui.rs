@@ -659,16 +659,40 @@ fn anchor_gauges(edge: f32) {
     // The gauge has its own size setting, not the target panel's, as a fraction of the game's own
     // (the game scales it with the resolution itself).
     let scale = crate::settings::player_scale();
-    let left = GAME_ICONS_CENTER_X - GAME_ICONS_PITCH / 2.0 - edge;
-    // Under the last row the game's icons fill (and the time text below it, when shown).
+    let [left, top] = gauge_origin(edge);
+    crate::state_icons::place_gauges(left + crate::state_icons::GAUGE_WIDTH * scale, top, scale);
+}
+
+/// The gauge's top-left corner in 1080p pixels from the picture's corner: under the last row the
+/// game's icons fill (and the time text below it, when shown), then moved by `HUD.Buildup.OffsetX/Y`.
+fn gauge_origin(edge: f32) -> [f32; 2] {
     let used = (0..crate::state_icons::SLOTS)
         .take_while(|&slot| crate::state_icons::icon(slot).is_some())
         .count();
     let last_row = used.saturating_sub(1) / GAME_ICONS_PER_ROW;
     let times = if crate::settings::effects_player() { GAME_ICON_TIME * 1.5 } else { 0.0 };
-    let top =
-        GAME_ICONS_BOTTOM + last_row as f32 * GAME_ICONS_ROW_PITCH + times + GAUGE_UNDER_ICONS_GAP;
-    crate::state_icons::place_gauges(left + crate::state_icons::GAUGE_WIDTH * scale, top, scale);
+    let [offset_x, offset_y] = crate::settings::player_offset();
+    [
+        GAME_ICONS_CENTER_X - GAME_ICONS_PITCH / 2.0 - edge + offset_x,
+        GAME_ICONS_BOTTOM
+            + last_row as f32 * GAME_ICONS_ROW_PITCH
+            + times
+            + GAUGE_UNDER_ICONS_GAP
+            + offset_y,
+    ]
+}
+
+/// The player's buildup gauge on screen (`[x, y, w, h]`), for the drag mode's frame.
+pub fn gauge_rect(area: &[f32; 4], edge: f32) -> [f32; 4] {
+    let res = area[3] / BASE_HEIGHT;
+    let scale = crate::settings::player_scale();
+    let [left, top] = gauge_origin(edge);
+    [
+        area[0] + left * res,
+        area[1] + top * res,
+        crate::state_icons::GAUGE_WIDTH * scale * res,
+        2.0 * crate::state_icons::GAUGE_HALF_HEIGHT * scale * res,
+    ]
 }
 
 /// The time left as `24s`, or `1:30` from a minute on.

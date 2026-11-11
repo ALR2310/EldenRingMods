@@ -81,6 +81,9 @@ once drifted left).
   -900..900), which covers the whole picture.
 - The rune counter (`HUD.RuneCounter.Enabled`) is a third part with its own offsets `HUD.RuneCounter.OffsetX/Y`, saved with
   the others (`docs/rune_counter.md`).
+- The player's buildup gauge is a fourth part: `HUD.Buildup.OffsetX/Y` move it from where it sits under the status icons
+  (right and down, -2000..4000 across and -1000..1000 down), so it follows the icons and the edge shift
+  (`ui::gauge_origin`).
 
 The `[Layout]` section is gone: the minimap's offsets are `Minimap.OffsetX/OffsetY`, the panel's `Target.OffsetX/OffsetY`
 (still added to the minimap's, so the panel follows the minimap until it is moved apart on purpose). Config format 2

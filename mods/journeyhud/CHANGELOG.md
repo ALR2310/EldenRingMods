@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 - Added compatibility with the Ultrawide UI Fixes mod.
+- Added dragging your own buildup gauge in the drag mode.
+- Added an option to hide the health bars and damage numbers above enemies.
 
 ## [1.4.0] - 2026-11-08
 

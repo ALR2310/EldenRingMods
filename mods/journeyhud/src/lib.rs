@@ -3,6 +3,8 @@
 mod boss_list;
 mod config;
 mod drag;
+mod enemy_tags;
+mod hud_movie;
 mod map;
 mod menu;
 mod radar;
@@ -55,7 +57,7 @@ pub unsafe extern "C" fn DllMain(hmodule: u64, reason: u32) -> bool {
         });
         state_icons::install();
         state_icons::install_gauge();
-        boss_list::install();
+        hud_movie::install();
         rune_counter::install();
         // The overlay hooks the game's DX12 swap chain; other mods and overlays hook it too, so
         // `LoadDelay` can hold this back (its own thread: the rest of the mod does not wait).

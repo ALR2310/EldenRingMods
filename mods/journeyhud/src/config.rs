@@ -18,9 +18,16 @@ pub const TEMPLATE: &str = include_str!("../JourneyHUD.toml");
 /// never change.
 const STEPS: &[Step] = &[v1_to_v2, v2_to_v3];
 
-/// 2 -> 3: `Player.Effects` is `Player.EffectTimer`, apart from `Target.Effects`.
+/// 2 -> 3: `Player.Effects` is `Player.EffectTimer`, apart from `Target.Effects`; the buildup
+/// gauge has its own section.
 fn v2_to_v3(doc: &mut DocumentMut, template: &DocumentMut) {
-    rename_key(doc, template, "Player.Effects", "Player.EffectTimer");
+    for (old, new) in [
+        ("Player.Effects", "Player.EffectTimer"),
+        ("Player.Buildup", "HUD.Buildup.Enabled"),
+        ("Player.Scale", "HUD.Buildup.Scale"),
+    ] {
+        rename_key(doc, template, old, new);
+    }
 }
 
 /// 1 -> 2: the `[Layout]` section went away; its offsets moved to the minimap and the target
@@ -82,14 +89,24 @@ pub struct Target {
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct Player {
     pub effect_timer: bool,
-    pub buildup: bool,
-    pub scale: f64,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
 pub struct Hud {
+    #[serde(rename = "EnemyHPBar")]
+    pub enemy_hp_bar: bool,
+    pub buildup: Buildup,
     pub rune_counter: RuneCounter,
+}
+
+#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
+#[serde(default, deny_unknown_fields, rename_all = "PascalCase")]
+pub struct Buildup {
+    pub enabled: bool,
+    pub scale: f64,
+    pub offset_x: i32,
+    pub offset_y: i32,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
@@ -278,14 +295,16 @@ TargetOffsetY = -7
         assert!(!text.contains("[Layout]"), "{text}");
     }
 
-    /// A version 2 file keeps the player's choice for the effect timer.
+    /// A version 2 file keeps the player's choices for the effect timer and the buildup gauge.
     #[test]
-    fn version_2_player_effects_become_the_effect_timer() {
+    fn version_2_player_keys_move_to_the_effect_timer_and_the_buildup_section() {
         let old = "[General]
 ConfigVersion = 2
 
 [Player]
 Effects = false
+Buildup = false
+Scale = 1.5
 ";
         let path =
             std::env::temp_dir().join(format!("journeyhud_migrate2_{}.toml", std::process::id()));
@@ -297,6 +316,8 @@ Effects = false
         assert_eq!(report.migrated, Some((2, 3)));
         assert!(report.unknown.is_empty(), "{:?}", report.unknown);
         assert!(!config.player.effect_timer);
+        assert!(!config.hud.buildup.enabled);
+        assert_eq!(config.hud.buildup.scale, 1.5);
     }
 
     #[test]
@@ -362,6 +383,8 @@ Effects = false
         let template = template();
         assert_eq!(shared::input::parse_virtual_key(&template.general.drag_key, 0), 0x76);
         assert_eq!((template.target.offset_x, template.target.offset_y), (0, 0));
+        let buildup = &template.hud.buildup;
+        assert_eq!((buildup.offset_x, buildup.offset_y), (0, 0));
     }
 
     #[test]

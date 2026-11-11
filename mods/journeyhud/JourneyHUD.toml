@@ -33,10 +33,8 @@ BossBar = true          # Move the boss health bars down, with posture and effec
 
 
 [Player]
-# Your own status icons and buildup bars at the top-left.
-Scale = 0.7             # Size of the buildup gauge, 1 = the game's own (0.5 - 3.0).
+# Your own status icons at the top-left.
 EffectTimer = true      # Time left under each of the game's status icons.
-Buildup = true          # Move your buildup gauge to the top-left, under the status icons.
 
 
 [Minimap]
@@ -72,6 +70,18 @@ Enemies = false         # hostile enemies near you, as red dots
 InCaves = false         # caves, catacombs and tunnels
 AtRoundtable = true     # Roundtable Hold
 InBossFights = false    # while a boss health bar is on screen
+
+
+[HUD]
+EnemyHPBar = true       # false hides the health bars and damage numbers the game floats above ordinary enemies (restart needed).
+
+
+[HUD.Buildup]
+# Your own buildup gauge, moved to the top-left, under the status icons.
+Enabled = true
+Scale = 0.7             # Size, 1 = the game's own (0.5 - 3.0).
+OffsetX = 0             # Moves the gauge from there, to the right (pixels at 1080p).
+OffsetY = 0             # Same, down.
 
 
 [HUD.RuneCounter]

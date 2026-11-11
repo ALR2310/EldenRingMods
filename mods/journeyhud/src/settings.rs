@@ -21,6 +21,7 @@ static ENABLED: AtomicBool = AtomicBool::new(true);
 static SHOW_NUMBERS: AtomicBool = AtomicBool::new(true);
 static BUILDUP: AtomicBool = AtomicBool::new(true);
 static BOSS_BAR: AtomicBool = AtomicBool::new(true);
+static ENEMY_HP_BAR: AtomicBool = AtomicBool::new(true);
 static RUNE_COUNTER: AtomicBool = AtomicBool::new(false);
 static RUNE_COUNTER_SCALE: AtomicU32 = AtomicU32::new(0x3F33_3333);
 static RUNE_OFFSET_X: AtomicI32 = AtomicI32::new(48);
@@ -34,6 +35,8 @@ static WIDTH: AtomicI32 = AtomicI32::new(250);
 static OFFSET_X: AtomicI32 = AtomicI32::new(48);
 static OFFSET_Y: AtomicI32 = AtomicI32::new(47);
 /// Where the target bar is moved from its place under the minimap, same directions as the offsets.
+static PLAYER_OFFSET_X: AtomicI32 = AtomicI32::new(0);
+static PLAYER_OFFSET_Y: AtomicI32 = AtomicI32::new(0);
 static TARGET_OFFSET_X: AtomicI32 = AtomicI32::new(0);
 static TARGET_OFFSET_Y: AtomicI32 = AtomicI32::new(0);
 /// The key that starts and ends the drag mode (0: none), and whether the mode is on (`drag.rs`).
@@ -84,6 +87,7 @@ pub fn load(config: &Config) {
     set_show_numbers(target.numbers as u8);
     set_buildup(target.buildup as u8);
     set_boss_bar(target.boss_bar as u8);
+    set_enemy_hp_bar(config.hud.enemy_hp_bar as u8);
     let rune = &config.hud.rune_counter;
     set_rune_counter(rune.enabled as u8);
     set_rune_counter_scale(rune.scale);
@@ -91,8 +95,11 @@ pub fn load(config: &Config) {
     set_rune_offset_y(f64::from(rune.offset_y));
     set_effects_target(target.effects as u8);
     set_effects_player(config.player.effect_timer as u8);
-    set_player_buildup(config.player.buildup as u8);
-    set_player_scale(config.player.scale);
+    let buildup = &config.hud.buildup;
+    set_player_buildup(buildup.enabled as u8);
+    set_player_scale(buildup.scale);
+    set_player_offset_x(f64::from(buildup.offset_x));
+    set_player_offset_y(f64::from(buildup.offset_y));
     set_width(f64::from(target.width));
     set_offset_x(f64::from(minimap.offset_x));
     set_offset_y(f64::from(minimap.offset_y));
@@ -152,6 +159,10 @@ pub fn player_scale() -> f32 {
     f32::from_bits(PLAYER_SCALE.load(Ordering::Relaxed))
 }
 
+pub fn player_offset() -> [f32; 2] {
+    [PLAYER_OFFSET_X.load(Ordering::Relaxed) as f32, PLAYER_OFFSET_Y.load(Ordering::Relaxed) as f32]
+}
+
 /// Whether the game's rune counter is moved to the top right.
 pub fn rune_counter() -> bool {
     RUNE_COUNTER.load(Ordering::Relaxed)
@@ -160,6 +171,10 @@ pub fn rune_counter() -> bool {
 /// Whether a boss gets its bars under the game's boss health bar.
 pub fn boss_bar() -> bool {
     BOSS_BAR.load(Ordering::Relaxed)
+}
+
+pub fn enemy_hp_bar() -> bool {
+    ENEMY_HP_BAR.load(Ordering::Relaxed)
 }
 
 /// Whether the status buildup bars of the target are shown.
@@ -424,6 +439,14 @@ pub fn set_player_scale(value: f64) {
     PLAYER_SCALE.store((value as f32).clamp(0.5, 3.0).to_bits(), Ordering::Relaxed);
 }
 
+pub fn set_player_offset_x(value: f64) {
+    PLAYER_OFFSET_X.store(value.round().clamp(-2000.0, 4000.0) as i32, Ordering::Relaxed);
+}
+
+pub fn set_player_offset_y(value: f64) {
+    PLAYER_OFFSET_Y.store(value.round().clamp(-1000.0, 1000.0) as i32, Ordering::Relaxed);
+}
+
 pub fn set_rune_offset_x(value: f64) {
     RUNE_OFFSET_X.store(value.round().clamp(-400.0, 1800.0) as i32, Ordering::Relaxed);
 }
@@ -442,6 +465,10 @@ pub fn set_rune_counter(value: u8) {
 
 pub fn set_boss_bar(value: u8) {
     BOSS_BAR.store(value != 0, Ordering::Relaxed);
+}
+
+pub fn set_enemy_hp_bar(value: u8) {
+    ENEMY_HP_BAR.store(value != 0, Ordering::Relaxed);
 }
 
 pub fn set_buildup(value: u8) {

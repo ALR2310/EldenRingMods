@@ -121,7 +121,7 @@ const STEP: f32 = 48.85;
 /// The bar ends this far right of the origin (294.5; the first measure, 308, left the gauge 10 px
 /// short of the panel's edge once scaled).
 const GAUGE_RIGHT: f32 = 294.5;
-const GAUGE_HALF_HEIGHT: f32 = 21.0;
+pub const GAUGE_HALF_HEIGHT: f32 = 21.0;
 /// The width of a gauge at full size: the icon (42), the bar (292).
 pub const GAUGE_WIDTH: f32 = 334.0;
 
@@ -151,7 +151,7 @@ static ROOT_Y: AtomicU32 = AtomicU32::new(0);
 static ROOT_KNOWN: AtomicBool = AtomicBool::new(false);
 static ROOT_UNKNOWN_LOGGED: AtomicBool = AtomicBool::new(false);
 /// What each gauge clip had before the mod moved it (x, y, scales in percent), as `f64` bits, to put
-/// it back when `Player.Buildup` goes off.
+/// it back when `HUD.Buildup.Enabled` goes off.
 static CLIP_BEFORE: [[AtomicU64; 5]; GAUGES] = [const { [const { AtomicU64::new(0) }; 5] }; GAUGES];
 /// What was last set on each gauge: the view and the position bits, so a clip is only set when it
 /// changes (or when the game rebuilt the view).
@@ -175,7 +175,7 @@ pub fn place_gauges(right: f32, top: f32, scale: f32) {
 }
 
 /// Runs the game's gauge update, then puts the clip where the mod wants it (or back where the
-/// game has it while `Player.Buildup` is off).
+/// game has it while `HUD.Buildup.Enabled` is off).
 unsafe extern "system" fn gauge_update(view: *mut u8, index: i64, model: *const u8) {
     // SAFETY: `GAUGE_ORIGINAL` is the call's destination, stored before the redirect.
     let original: GaugeFn = unsafe { std::mem::transmute(GAUGE_ORIGINAL.load(Ordering::Acquire)) };

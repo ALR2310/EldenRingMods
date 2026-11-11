@@ -38,6 +38,11 @@ static BOSS_BAR: Setting = Setting {
     format: menu::format_bool,
     apply: Some(settings::set_boss_bar),
 };
+static ENEMY_HP_BAR: Setting = Setting {
+    key: "HUD.EnemyHPBar",
+    format: menu::format_bool,
+    apply: Some(settings::set_enemy_hp_bar),
+};
 static RUNE_COUNTER: Setting = Setting {
     key: "HUD.RuneCounter.Enabled",
     format: menu::format_bool,
@@ -54,7 +59,7 @@ static EFFECTS_PLAYER: Setting = Setting {
     apply: Some(settings::set_effects_player),
 };
 static PLAYER_BUILDUP: Setting = Setting {
-    key: "Player.Buildup",
+    key: "HUD.Buildup.Enabled",
     format: menu::format_bool,
     apply: Some(settings::set_player_buildup),
 };
@@ -64,7 +69,8 @@ static BUILDUP: Setting = Setting {
     apply: Some(settings::set_buildup),
 };
 static PLAYER_SCALE: NumberSetting =
-    NumberSetting::new("Player.Scale", 0.5, 3.0, Some(settings::set_player_scale)).stepped(0.1);
+    NumberSetting::new("HUD.Buildup.Scale", 0.5, 3.0, Some(settings::set_player_scale))
+        .stepped(0.1);
 static RUNE_COUNTER_SCALE: NumberSetting =
     NumberSetting::new("HUD.RuneCounter.Scale", 0.3, 1.5, Some(settings::set_rune_counter_scale))
         .stepped(0.1);
@@ -208,6 +214,9 @@ fn build(b: &mut MenuBuilder) -> Result<(), String> {
     b.toggle(target, &t("boss_bar.label"), &t("boss_bar.help"), &BOSS_BAR, || {
         config::get().target.boss_bar as u8
     })?;
+    b.toggle(target, &t("enemy_hp_bar.label"), &t("enemy_hp_bar.help"), &ENEMY_HP_BAR, || {
+        config::get().hud.enemy_hp_bar as u8
+    })?;
     b.toggle(target, &t("effects.label"), &t("effects.help"), &EFFECTS_TARGET, || {
         config::get().target.effects as u8
     })?;
@@ -223,10 +232,10 @@ fn build(b: &mut MenuBuilder) -> Result<(), String> {
         &t("player_buildup.label"),
         &t("player_buildup.help"),
         &PLAYER_BUILDUP,
-        || config::get().player.buildup as u8,
+        || config::get().hud.buildup.enabled as u8,
     )?;
     b.number(target, &t("player_scale.label"), &t("player_scale.help"), &PLAYER_SCALE, || {
-        config::get().player.scale
+        config::get().hud.buildup.scale
     })?;
     b.number(target, &t("width.label"), &t("width.help"), &WIDTH, || {
         f64::from(config::get().target.width)
@@ -398,6 +407,7 @@ mod tests {
             &SHOW_NUMBERS,
             &BUILDUP,
             &BOSS_BAR,
+            &ENEMY_HP_BAR,
             &RUNE_COUNTER,
             &EFFECTS_TARGET,
             &EFFECTS_PLAYER,

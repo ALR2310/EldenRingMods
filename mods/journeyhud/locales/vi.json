@@ -38,6 +38,10 @@
     "label": "Thanh của boss",
     "help": "Dời thanh máu boss của game xuống thấp, thêm posture và hiệu ứng của boss bên dưới. Cần khởi động lại."
   },
+  "enemy_hp_bar": {
+    "label": "Thanh máu và sát thương kẻ địch",
+    "help": "Hiện thanh máu và số sát thương nổi trên đầu kẻ địch thường của game; tắt thì ẩn đi. Cần khởi động lại."
+  },
   "rune_counter": {
     "label": "Bộ đếm rune ở góc trên phải",
     "help": "Dời bộ đếm rune của game lên góc trên bên phải. Kéo bằng phím kéo thả."

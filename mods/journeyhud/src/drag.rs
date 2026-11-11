@@ -41,6 +41,7 @@ enum Part {
     Minimap,
     Target,
     Rune,
+    Gauge,
 }
 
 /// Puts `part` back to the offsets of the config template (the defaults).
@@ -58,6 +59,10 @@ fn reset(part: Part) {
         Part::Rune => {
             settings::set_rune_offset_x(f64::from(defaults.hud.rune_counter.offset_x));
             settings::set_rune_offset_y(f64::from(defaults.hud.rune_counter.offset_y));
+        }
+        Part::Gauge => {
+            settings::set_player_offset_x(f64::from(defaults.hud.buildup.offset_x));
+            settings::set_player_offset_y(f64::from(defaults.hud.buildup.offset_y));
         }
     }
 }
@@ -146,6 +151,13 @@ impl Drag {
                 && p[1] >= target[1]
                 && p[1] <= target[1] + target[3]
         };
+        let gauge = crate::ui::gauge_rect(&area, edge);
+        let over_gauge = |p: [f32; 2]| {
+            p[0] >= gauge[0]
+                && p[0] <= gauge[0] + gauge[2]
+                && p[1] >= gauge[1]
+                && p[1] <= gauge[1] + gauge[3]
+        };
 
         // A right click on a part puts it back where the config template has it.
         if capture && self.grab.is_none() && ui.is_mouse_clicked(MouseButton::Right) {
@@ -153,6 +165,8 @@ impl Drag {
                 Some(Part::Rune)
             } else if over_target(mouse) {
                 Some(Part::Target)
+            } else if over_gauge(mouse) {
+                Some(Part::Gauge)
             } else if over_minimap(mouse) {
                 Some(Part::Minimap)
             } else {
@@ -169,6 +183,8 @@ impl Drag {
                 Some(Grab { part: Part::Rune, mouse, start: settings::rune_offset() })
             } else if over_target(mouse) {
                 Some(Grab { part: Part::Target, mouse, start: settings::target_offset() })
+            } else if over_gauge(mouse) {
+                Some(Grab { part: Part::Gauge, mouse, start: settings::player_offset() })
             } else if over_minimap(mouse) {
                 Some(Grab { part: Part::Minimap, mouse, start: settings::offset() })
             } else {
@@ -177,11 +193,17 @@ impl Drag {
         }
         if let Some(grab) = &self.grab {
             if ui.is_mouse_down(MouseButton::Left) {
-                // The offsets count from the right and the top edge.
-                let x = f64::from(grab.start[0] - (mouse[0] - grab.mouse[0]) / res);
+                // The offsets count from the right and the top edge, the gauge's from where it sits
+                // at the left.
+                let side = if grab.part == Part::Gauge { 1.0 } else { -1.0 };
+                let x = f64::from(grab.start[0] + side * (mouse[0] - grab.mouse[0]) / res);
                 let y = f64::from(grab.start[1] + (mouse[1] - grab.mouse[1]) / res);
                 self.dirty = true;
                 match grab.part {
+                    Part::Gauge => {
+                        settings::set_player_offset_x(x);
+                        settings::set_player_offset_y(y);
+                    }
                     Part::Minimap => {
                         settings::set_offset_x(x);
                         settings::set_offset_y(y);
@@ -209,7 +231,18 @@ impl Drag {
         let minimap_lit = lit(Part::Minimap, over_minimap(mouse));
         let target_lit = lit(Part::Target, over_target(mouse));
         let rune_lit = lit(Part::Rune, over_rune(mouse));
+        let gauge_lit = lit(Part::Gauge, over_gauge(mouse));
         let line = 2.0 * res.max(0.75);
+        let gauge_far = [gauge[0] + gauge[2], gauge[1] + gauge[3]];
+        draw.add_rect([gauge[0], gauge[1]], gauge_far, FRAME_FILL).filled(true).build();
+        draw.add_rect([gauge[0], gauge[1]], gauge_far, FRAME)
+            .thickness(if gauge_lit { line * 2.0 } else { line })
+            .build();
+        draw.add_text(
+            [gauge[0] + 6.0 * res, gauge[1] + gauge[3] * 0.5 - 8.0 * res],
+            HINT,
+            "Buildup",
+        );
         draw.add_circle(center, radius, FRAME_FILL).filled(true).num_segments(64).build();
         draw.add_circle(center, radius, FRAME)
             .thickness(if minimap_lit { line * 2.0 } else { line })
@@ -236,7 +269,7 @@ impl Drag {
             "Target",
         );
         let hint = if capture {
-            "Drag the minimap, the target bar or the rune counter; right-click one to reset it. Press the drag key again to finish."
+            "Drag the minimap, the target bar, the rune counter or the buildup gauge; right-click one to reset it. Press the drag key again to finish."
         } else {
             "Drag mode: getting ready..."
         };
@@ -252,7 +285,10 @@ impl Drag {
         let [x, y] = settings::offset();
         let [tx, ty] = settings::target_offset();
         let [rx, ry] = settings::rune_offset();
+        let [px, py] = settings::player_offset();
         let saved = config::save(&[
+            ("HUD.Buildup.OffsetX", format!("{}", px as i32)),
+            ("HUD.Buildup.OffsetY", format!("{}", py as i32)),
             ("Minimap.OffsetX", format!("{}", x as i32)),
             ("Minimap.OffsetY", format!("{}", y as i32)),
             ("Target.OffsetX", format!("{}", tx as i32)),

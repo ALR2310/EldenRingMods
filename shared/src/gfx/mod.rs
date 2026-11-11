@@ -422,6 +422,47 @@ pub fn shift_placements(
     with_sprite_body(movie, sprite, &body)
 }
 
+/// Moves placements of the sprite at `path` picked by depth, for the ones the game leaves without a
+/// name: each of `shifts` is `(depth, dx, dy)` in twips added to the PlaceObject2 at that depth (it
+/// must have a matrix). Every depth must be found, or `PathNotFound`. Returns the whole new movie.
+pub fn shift_depths(
+    movie: &[u8],
+    path: &[&str],
+    shifts: &[(u16, i32, i32)],
+) -> Result<Vec<u8>, GfxError> {
+    let top = parse_tags(movie, first_tag_offset(movie)?, movie.len())?;
+    let (sprite, scope) = sprite_at(movie, &top, path)?;
+    let mut body = Vec::new();
+    let mut at = sprite.body.start;
+    let mut moved = 0;
+    for tag in scope.iter().filter(|t| t.code == TAG_PLACE_OBJECT2) {
+        let bytes = &movie[tag.body.clone()];
+        let flags = *bytes.first().ok_or(GfxError::Truncated)?;
+        let depth = read_u16(bytes, 1)?;
+        let Some(&(_, dx, dy)) = shifts.iter().find(|(d, _, _)| *d == depth) else { continue };
+        if flags & 4 == 0 {
+            return Err(GfxError::Unsupported);
+        }
+        let matrix_at = if flags & 2 != 0 { 5 } else { 3 };
+        let (mut matrix, matrix_end) = Matrix::parse(bytes, matrix_at)?;
+        matrix.tx += dx;
+        matrix.ty += dy;
+        let mut moved_body = bytes[..matrix_at].to_vec();
+        moved_body.extend(matrix.write());
+        moved_body.extend_from_slice(&bytes[matrix_end..]);
+        body.extend_from_slice(&movie[at..tag.header]);
+        body.extend(tag_header(TAG_PLACE_OBJECT2, moved_body.len()));
+        body.extend(moved_body);
+        at = tag.body.end;
+        moved += 1;
+    }
+    if moved != shifts.len() {
+        return Err(GfxError::PathNotFound);
+    }
+    body.extend_from_slice(&movie[at..sprite.body.end]);
+    with_sprite_body(movie, sprite, &body)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -497,6 +538,40 @@ mod tests {
             .map(|t| Placement::parse(&movie[t.body.clone()]).unwrap())
             .map(|p| (p.name, p.depth, p.matrix.ty))
             .collect()
+    }
+
+    /// A PlaceObject2 without a name, as the game authors the bars' backgrounds.
+    fn place_unnamed(depth: u16, char_id: u16) -> Vec<u8> {
+        let mut body = vec![0x06];
+        body.extend_from_slice(&depth.to_le_bytes());
+        body.extend_from_slice(&char_id.to_le_bytes());
+        body.extend(Matrix { scale: None, rotate: None, tx: 40, ty: 0 }.write());
+        tag(TAG_PLACE_OBJECT2, &body)
+    }
+
+    #[test]
+    fn shifts_an_unnamed_placement_by_its_depth() {
+        let mut m = b"GFX".to_vec();
+        m.extend_from_slice(&[0; 4]);
+        m.extend_from_slice(&[0x78, 0x00, 0x05, 0x5F, 0x00, 0x00, 0x0F, 0xA0, 0x00]);
+        m.extend_from_slice(&[0x00, 0x18, 0x01, 0x00]);
+        m.extend(sprite(2, &[place_unnamed(1, 9), place(2, 8, "Other")]));
+        m.extend(place(1, 2, "Root"));
+        m.extend(tag(TAG_SHOW_FRAME, &[]));
+        m.extend(tag(TAG_END, &[]));
+        let declared = (m.len() - 8) as u32;
+        m[4..8].copy_from_slice(&declared.to_le_bytes());
+
+        let moved = shift_depths(&m, &["Root"], &[(1, 100, 6000)]).unwrap();
+        let top = parse_tags(&moved, first_tag_offset(&moved).unwrap(), moved.len()).unwrap();
+        let (_, scope) = sprite_at(&moved, &top, &["Root"]).unwrap();
+        let first = &moved[scope[0].body.clone()];
+        let (matrix, _) = Matrix::parse(first, 5).unwrap();
+        assert_eq!((matrix.tx, matrix.ty), (140, 6000));
+        let other = Placement::parse(&moved[scope[1].body.clone()]).unwrap();
+        assert_eq!((other.name.as_str(), other.matrix.tx), ("Other", 0));
+        assert_eq!(read_u32(&moved, 4).unwrap() as usize, moved.len() - 8);
+        assert_eq!(shift_depths(&m, &["Root"], &[(7, 0, 0)]), Err(GfxError::PathNotFound));
     }
 
     #[test]

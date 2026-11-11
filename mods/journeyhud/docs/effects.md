@@ -136,8 +136,8 @@ status (same order as `BUILDUP`); it shows both the built-up part and the remain
 - **Where it ends up (final)**: top left, its left edge on the left edge of the game's icon row
   (`GAME_ICONS_CENTER_X - GAME_ICONS_PITCH / 2`) and its top under the time texts
   (`GAME_ICONS_BOTTOM + text size * 1.5 + 6`); separate from the target panel because the player's gauge next to
-  an enemy's buildup bars was easy to confuse. Size `Player.Scale` (1 = the game's size, 334 px wide at 1080p).
-  Key `Player.Buildup`.
+  an enemy's buildup bars was easy to confuse. Size `HUD.Buildup.Scale` (1 = the game's size, 334 px wide at 1080p).
+  Key `HUD.Buildup.Enabled`.
 - **Layouts**: the game's own: `ConditionGaugeList` at (960, 520) of the 1080p frame, item k at (-150, 197.25 -
   48.85 * k) relative to it (stacked bottom-up); icon 42 px wide, 26 px left of the origin, bar ending 308 px
   right of it. The **Convergence** pack replaces `01_000_fe.gfx`: `ConditionGaugeList` at (557.5, 222.45), items
@@ -150,7 +150,7 @@ status (same order as `BUILDUP`); it shows both the built-up part and the remain
   520)), 1260.15 is Convergence (root (557.5, 222.45)). Target = the 1080p target minus the root; then it sets
   `_x/_y`, the scale and rotation 0 (rotation through slot +224 with flag 0x04, reading the struct with
   `GetDisplayInfo` first). An unknown layout logs `Gauge: unknown layout` and is left alone.
-- **With `Player.Buildup` off** the mod writes nothing, and puts the clip back to the saved position, rotation
+- **With `HUD.Buildup.Enabled` off** the mod writes nothing, and puts the clip back to the saved position, rotation
   and scale (`CLIP_BEFORE`) if it had moved it; it never touches the game's or another pack's position.
 - Measured: the bar is 291 px long in the game's layout and 296 px in Convergence, 16 px high in both; icons 42
   px and 29 px (the length differs by the interface file, the icon by the `Icon` clip).
