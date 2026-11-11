@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Renamed the config key `Player.Effects` to `Player.EffectTimer`; existing configs are converted.
+- Added compatibility with the Ultrawide UI Fixes mod.
 
 ## [1.4.0] - 2026-11-08
 

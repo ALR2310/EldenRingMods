@@ -85,3 +85,19 @@ once drifted left).
 The `[Layout]` section is gone: the minimap's offsets are `Minimap.OffsetX/OffsetY`, the panel's `Target.OffsetX/OffsetY`
 (still added to the minimap's, so the panel follows the minimap until it is moved apart on purpose). Config format 2
 migrates a version 1 file (`config::v1_to_v2`).
+
+## Wide screens with the HUD moved to the edges
+
+A third-party mod that fixes the game's HUD on 21:9 and wider screens leaves the stage of the HUD movies at
+1920x1080 and moves each element out of it, to the screen's edges. The overlay still places everything in the
+16:9 picture centered in the screen, which is right for the stage but not for where that mod put the game's own HUD:
+the minimap, the target bar and the player's buildup gauge sat about 320 px inside at 2560x1080.
+
+- **Confirmed** (in game, 2.7.2.0, 2560x1080): the rune counter's own clip is at x 1762.0 on the game's layout, at any
+  resolution, and at 2081.8 with that mod: 319.8 px more, which is (2560 - 1920) / 2.
+- `rune_counter::edge_shift` reads that difference (the clip's place is read before the mod moves it) and clamps it
+  to what the screen leaves beyond the 16:9 picture on each side, so a 16:9 screen always gets 0. The right-hand group
+  (the minimap and the target bar, the drag frames) moves right by it; the left-hand group (the times under the
+  status icons and the player's buildup gauge) moves left by the same.
+- **Inferred**: both sides move out by the same amount (the left side was only measured on one screenshot, about 308
+  against 320) and the shift is the same for the other layouts of that mod; the boss bars stay centered.

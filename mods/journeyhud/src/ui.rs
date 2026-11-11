@@ -160,6 +160,8 @@ struct HudRenderLoop {
     area: [f32; 4],
     /// Height of the area over 1080 x the `Scale` setting, set each frame.
     s: f32,
+    /// How far the game has moved its HUD out to the screen's edges, in pixels of the 1080p picture.
+    edge: f32,
     trail: Trail,
     /// The same for the posture bar.
     poise_trail: Trail,
@@ -242,6 +244,9 @@ impl ImguiRenderLoop for HudRenderLoop {
         let [w, h] = ctx.io().display_size;
         self.area = game_area(w, h);
         self.s = self.area[3] / BASE_HEIGHT * settings::scale();
+        let beyond =
+            if w / h > ASPECT { (w / h * BASE_HEIGHT - ASPECT * BASE_HEIGHT) / 2.0 } else { 0.0 };
+        self.edge = crate::rune_counter::edge_shift(beyond);
         // Every text of the overlay sets its own size (`text.rs`), so the target's `Scale` does not
         // resize the minimap's letters and clock.
         ctx.io_mut().font_global_scale = (self.area[3] / BASE_HEIGHT * FONT_SCALE).max(0.85);
@@ -303,7 +308,7 @@ impl ImguiRenderLoop for HudRenderLoop {
             self.radar.draw(
                 ui,
                 snapshot.as_ref(),
-                &Placement { area: self.area },
+                &Placement { area: right_group(&self.area, self.edge) },
                 self.map.as_ref(),
                 show_map,
             );
@@ -316,6 +321,7 @@ impl ImguiRenderLoop for HudRenderLoop {
         self.icons_alpha += (icons_wanted - self.icons_alpha) * (dt * FADE_RATE).min(1.0);
         let layout = Layout {
             area: self.area,
+            edge: self.edge,
             width: settings::width(),
             s: self.s,
             show_numbers: settings::show_numbers(),
@@ -326,7 +332,8 @@ impl ImguiRenderLoop for HudRenderLoop {
             draw_icon_times(ui, &target::own_effects_now(), self.icons_alpha, &layout);
         }
         if self.drag.on() {
-            self.drag.render(ui, self.area, target_rect(&self.area, self.s, layout.width));
+            let target = target_rect(&right_group(&self.area, self.edge), self.s, layout.width);
+            self.drag.render(ui, self.area, self.edge, target);
         }
         // The posture of each boss bar, locked on or not.
         let bosses =
@@ -346,7 +353,7 @@ impl ImguiRenderLoop for HudRenderLoop {
         let Some(target) = target::current() else {
             self.trail.id = 0;
             self.poise_trail.id = 0;
-            anchor_gauges();
+            anchor_gauges(self.edge);
             return;
         };
         self.trail.update(target.id, target.hp as f32, target.max_hp as f32, dt);
@@ -412,6 +419,12 @@ fn boss_rect(area: &[f32; 4], slot: usize) -> [f32; 3] {
     ]
 }
 
+/// The 16:9 `area` moved right by the game's HUD `edge` shift: where the right-hand HUD sits (the
+/// minimap's column, the rune counter).
+pub fn right_group(area: &[f32; 4], edge: f32) -> [f32; 4] {
+    [area[0] + edge * area[3] / BASE_HEIGHT, area[1], area[2], area[3]]
+}
+
 /// The largest 16:9 rectangle centered in a `w` x `h` display: `[x, y, w, h]`.
 fn game_area(w: f32, h: f32) -> [f32; 4] {
     if w / h > ASPECT {
@@ -425,6 +438,8 @@ fn game_area(w: f32, h: f32) -> [f32; 4] {
 
 struct Layout<'a> {
     area: [f32; 4],
+    /// See `HudRenderLoop::edge`.
+    edge: f32,
     width: f32,
     s: f32,
     show_numbers: bool,
@@ -455,7 +470,7 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
     let s = layout.s;
     // The column's offsets follow the screen only; `s` also holds the player's
     // size setting, which resizes the bar, not where it sits.
-    let [left, y, width, _] = target_rect(&layout.area, s, layout.width);
+    let [left, y, width, _] = target_rect(&right_group(&layout.area, layout.edge), s, layout.width);
     let right = left + width;
 
     let draw = ui.get_foreground_draw_list();
@@ -487,7 +502,7 @@ fn draw_target(ui: &Ui, target: &Target, [trail, poise_trail]: [&Trail; 2], layo
         draw_buildup(ui, &draw, buildup, [left, row_top, right], layout);
         row_top += BUILDUP_ROW * s;
     }
-    anchor_gauges();
+    anchor_gauges(layout.edge);
 }
 
 /// The health and posture bars of the panel with their frames, from `[left, y, width]`; returns
@@ -640,11 +655,11 @@ fn draw_boss(ui: &Ui, boss: &Boss, trail: &Trail, layout: &Layout) {
 /// Tells the game's buildup gauge of the player where it goes: at the left, under the game's row of
 /// status icons and their times, at the game's own size. Far from the target's panel, so
 /// the player's buildup is not taken for the enemy's.
-fn anchor_gauges() {
+fn anchor_gauges(edge: f32) {
     // The gauge has its own size setting, not the target panel's, as a fraction of the game's own
     // (the game scales it with the resolution itself).
     let scale = crate::settings::player_scale();
-    let left = GAME_ICONS_CENTER_X - GAME_ICONS_PITCH / 2.0;
+    let left = GAME_ICONS_CENTER_X - GAME_ICONS_PITCH / 2.0 - edge;
     // Under the last row the game's icons fill (and the time text below it, when shown).
     let used = (0..crate::state_icons::SLOTS)
         .take_while(|&slot| crate::state_icons::icon(slot).is_some())
@@ -675,7 +690,9 @@ fn draw_icon_times(ui: &Ui, effects: &[Effect], alpha: f32, layout: &Layout) {
     let em = GAME_ICON_TIME * res;
     let centered = |slot: usize| {
         layout.area[0]
-            + (GAME_ICONS_CENTER_X + (slot % GAME_ICONS_PER_ROW) as f32 * GAME_ICONS_PITCH) * res
+            + (GAME_ICONS_CENTER_X - layout.edge
+                + (slot % GAME_ICONS_PER_ROW) as f32 * GAME_ICONS_PITCH)
+                * res
     };
     let time_below = |label: &str, center: f32, row: usize, alpha: f32| {
         let size = text::measure(ui, label, em);
@@ -1086,7 +1103,7 @@ mod tests {
         assert_eq!(effect_time(-1.0), "0s");
     }
 
-    use super::{Trail, effect_time, game_area};
+    use super::{Trail, effect_time, game_area, right_group};
 
     /// hudhook compiles its pixel shader when the pipeline is built and panics on an error,
     /// in the game: every conversion must compile.
@@ -1131,6 +1148,17 @@ mod tests {
 {src}"
             );
         }
+    }
+
+    #[test]
+    fn the_right_group_moves_out_by_the_edge_shift() {
+        let area = game_area(2560.0, 1080.0);
+        let moved = right_group(&area, 320.0);
+        assert_eq!(moved[0] + moved[2], 2560.0);
+        assert_eq!(right_group(&area, 0.0), area);
+        // 3440x1440 leaves (3440 / 1440 * 1080 - 1920) / 2 = 330 stage pixels on each side.
+        let big = right_group(&game_area(3440.0, 1440.0), 330.0);
+        assert!((big[0] + big[2] - 3440.0).abs() < 0.01);
     }
 
     #[test]

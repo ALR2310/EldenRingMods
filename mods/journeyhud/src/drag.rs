@@ -119,19 +119,21 @@ impl Drag {
     }
 
     /// Draws a frame around the minimap and the target bar and moves whichever is dragged.
-    /// `area` is the game's 16:9 picture, `target` the bar's rectangle (`[x, y, w, h]`).
-    pub fn render(&mut self, ui: &Ui, area: [f32; 4], target: [f32; 4]) {
+    /// `area` is the game's 16:9 picture, `edge` how far the game's HUD is moved out of it (the minimap
+    /// and the rune counter follow), `target` the bar's rectangle (`[x, y, w, h]`).
+    pub fn render(&mut self, ui: &Ui, area: [f32; 4], edge: f32, target: [f32; 4]) {
         let capture = hooks_ready();
         let mouse = ui.io().mouse_pos;
         let res = area[3] / 1080.0;
-        let (center, radius) = radar_ui::circle(&area);
+        let right = crate::ui::right_group(&area, edge);
+        let (center, radius) = radar_ui::circle(&right);
         let over_minimap = |p: [f32; 2]| (p[0] - center[0]).hypot(p[1] - center[1]) <= radius;
         // The rune counter's box, once it is moved (the game draws it; the frame goes over it).
         let rune = settings::rune_counter().then(|| {
             let scale = settings::rune_counter_scale() * res;
             let [x, y] = settings::rune_offset();
             let [w, h] = [settings::RUNE_BOX[0] * scale, settings::RUNE_BOX[1] * scale];
-            [area[0] + area[2] - x * res - w, area[1] + y * res, w, h]
+            [right[0] + right[2] - x * res - w, right[1] + y * res, w, h]
         });
         let over_rune = |p: [f32; 2]| {
             rune.is_some_and(|r| {

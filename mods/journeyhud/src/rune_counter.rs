@@ -29,6 +29,8 @@ const BOX_ABOVE_ORIGIN: f32 = 20.0;
 /// Calls between two sets of the position even when nothing changed: the game may rebuild its HUD
 /// (another save loaded) and a new view has the default place. About 5 seconds.
 const REFRESH_EVERY: u32 = 300;
+/// The clip's x on the game's own HUD (2.7.2.0, any resolution).
+const VANILLA_X: f32 = 1762.0;
 
 type UpdateFn = unsafe extern "system" fn(*mut u8, f32, *const u8);
 
@@ -43,6 +45,17 @@ static MOVED_SCALE: AtomicU32 = AtomicU32::new(0);
 static BEFORE_X: AtomicU32 = AtomicU32::new(0);
 static BEFORE_Y: AtomicU32 = AtomicU32::new(0);
 static BEFORE_KNOWN: AtomicBool = AtomicBool::new(false);
+
+/// How far the game has moved its HUD out to the edges of a wide screen, in pixels of the 1080p
+/// picture, read off the counter's own place (0 on the game's own layout); at most `max`, what the
+/// screen leaves beyond the 16:9 picture on each side. The right group moves out by this much, the
+/// left group by the same.
+pub fn edge_shift(max: f32) -> f32 {
+    if !BEFORE_KNOWN.load(Ordering::Acquire) {
+        return 0.0;
+    }
+    (f32::from_bits(BEFORE_X.load(Ordering::Relaxed)) - VANILLA_X).clamp(0.0, max.max(0.0))
+}
 
 /// Runs the game's update, then puts the clip where the mod wants it.
 unsafe extern "system" fn update(view: *mut u8, dt: f32, model: *const u8) {
